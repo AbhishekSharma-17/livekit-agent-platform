@@ -50,11 +50,16 @@ function sectionsOf(config: unknown): NotebookSectionConfigLike[] {
   const sections: NotebookSectionConfigLike[] = [];
   for (const entry of list) {
     if (typeof entry !== "object" || entry === null) continue;
-    const { id, title, kind } = entry as Record<string, unknown>;
+    const { id, title, kind, canvas_block_id: canvasBlockId } = entry as Record<string, unknown>;
     if (typeof id !== "string") continue;
-    sections.push({ id, title: typeof title === "string" ? title : "", kind: isSectionKind(kind) ? kind : "text" });
+    sections.push({
+      id,
+      title: typeof title === "string" ? title : "",
+      kind: isSectionKind(kind) ? kind : "text",
+      canvasBlockId: typeof canvasBlockId === "string" ? canvasBlockId : null,
+    });
   }
-  return sections.length > 0 ? sections : [{ id: "notes", title: "Notes", kind: "text" }];
+  return sections.length > 0 ? sections : [{ id: "notes", title: "Notes", kind: "text", canvasBlockId: null }];
 }
 
 function paperOf(config: unknown): string {
@@ -134,7 +139,9 @@ export function NotebookBlock({ spec, data, panel, title, highlighted }: Noteboo
                   perform={panel.perform}
                 />
               )}
-              {section.kind === "ink" && <InkSectionView callerCanDraw={callerCanDraw} />}
+              {section.kind === "ink" && (
+                <InkSectionView canvasBlockId={section.canvasBlockId} callerCanDraw={callerCanDraw} panel={panel} />
+              )}
             </section>
           ))}
         </div>

@@ -41,6 +41,7 @@
       },
       "order": 23
     },
-    { "id": "tabs", "type": "layout", "title": null, "config": { "kind": "tabs", "children": [{ "block_id": "claim", "label": "Claim" }, { "block_id": "recap", "label": "Recap" }] }, "order": 24 }
+    { "id": "tabs", "type": "layout", "title": null, "config": { "kind": "tabs", "children": [{ "block_id": "claim", "label": "Claim" }, { "block_id": "recap", "label": "Recap" }] }, "order": 24 },
+    { "id": "board", "type": "canvas", "title": "Drawing board", "config": { "caller_can_draw": true }, "order": 25 }
   ]
 }

@@ -36,8 +36,14 @@ import type {
   NotebookTextSection,
 } from "@/contracts/lkap-contracts";
 import { cn } from "@/lib/utils";
+import { panelLayoutOf } from "@/panels/composite/layout";
 import type { PanelProps } from "@/panels/registry";
 
+// `Block` back from `../index` (`blocks/index.tsx`) — safe: `notebook.tsx` (this file's
+// only importer) is itself reached from `index.tsx` through a dynamic `import()`
+// (`React.lazy`), so `index.tsx` has already finished evaluating by the time this
+// module runs, exactly like `blocks/layout.tsx`'s own back-reference (see its docblock).
+import { Block } from "../index";
 import { MAX_CALLER_EDIT_CHARS, useCallerEdit } from "./use-caller-edit";
 
 export type NotebookSectionKind = "text" | "checklist" | "details" | "ink";
@@ -46,6 +52,8 @@ export interface NotebookSectionConfigLike {
   id: string;
   title: string;
   kind: NotebookSectionKind;
+  /** An `ink` section's drawing board (V6-12, D-V6-16); `null` while it has none yet. */
+  canvasBlockId: string | null;
 }
 
 export type NotebookSectionContent =
@@ -478,7 +486,28 @@ export function DetailsSectionView({
 /* ink (V6-12 placeholder)                                                     */
 /* -------------------------------------------------------------------------- */
 
-export function InkSectionView({ callerCanDraw }: { callerCanDraw: boolean }) {
+/**
+ * (V6-12, D-V6-16, ask #93): a section whose config names a board
+ * (`canvas_block_id`) renders it inside the section — never in the panel's
+ * own top-level flow (`composite/index.tsx` hides it there, the same way a
+ * `layout` hides its children). Until V6-14 ships the drawing board,
+ * `<Block>` resolves a `canvas` spec to its own stub (`NotRenderedYetBlock`,
+ * "This block is not shown here yet."); a section with no board yet keeps
+ * "Drawing board coming soon."
+ */
+export function InkSectionView({
+  canvasBlockId,
+  callerCanDraw,
+  panel,
+}: {
+  canvasBlockId: string | null;
+  callerCanDraw: boolean;
+  panel: PanelProps;
+}) {
+  if (canvasBlockId) {
+    const canvasSpec = panelLayoutOf(panel.agent).blocks.find((spec) => spec.id === canvasBlockId && spec.type === "canvas");
+    if (canvasSpec) return <Block spec={canvasSpec} {...panel} />;
+  }
   return (
     <div data-slot="notebook-section-ink" className="border-border bg-muted/30 flex flex-col items-center gap-1 rounded-md border border-dashed px-4 py-6 text-center">
       <p className="text-muted-foreground text-sm">Drawing board coming soon.</p>

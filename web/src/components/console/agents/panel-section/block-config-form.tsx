@@ -45,6 +45,9 @@ const DETAILS_TYPE_LABEL: Record<(typeof DETAILS_FIELD_TYPES)[number], string> =
 /** `key`/`id` fields read as identifiers: no spaces. Everything else is free text. */
 const IDENTIFIER_ITEM_KEYS = new Set(["key", "id"]);
 
+/** Radix `Select` needs a non-empty value; this stands for "no board chosen yet" (V6-12). */
+const NO_CANVAS_BOARD = "__none__";
+
 function isColumns(value: unknown): value is TableColumn[] {
   return Array.isArray(value) && value.every((c) => typeof c === "object" && c !== null && "key" in c);
 }
@@ -345,13 +348,25 @@ function NotebookSectionsEditor({
   idBase,
   value,
   onChange,
+  canvasBlocks,
 }: {
   idBase: string;
   value: Record<string, unknown>[];
   onChange: (next: Record<string, unknown>[]) => void;
+  /** `canvas`-type blocks of the same panel, for an `ink` section's board picker (V6-12). */
+  canvasBlocks: readonly BlockSpecForm[];
 }) {
   function patch(index: number, key: string, next: unknown) {
-    onChange(value.map((item, i) => (i === index ? { ...item, [key]: next } : item)));
+    onChange(
+      value.map((item, i) => {
+        if (i !== index) return item;
+        const patched = { ...item, [key]: next };
+        // A board only ever shows on an ink section (the api's own rule): changing away
+        // from ink drops it, so the row never saves an invalid combination.
+        if (key === "kind" && next !== "ink") delete patched.canvas_block_id;
+        return patched;
+      }),
+    );
   }
   return (
     <div className="flex flex-col gap-2" data-slot="notebook-sections-editor">
@@ -359,6 +374,7 @@ function NotebookSectionsEditor({
         const id = typeof section.id === "string" ? section.id : "";
         const sectionTitle = typeof section.title === "string" ? section.title : "";
         const kind = typeof section.kind === "string" ? section.kind : "text";
+        const canvasBlockId = typeof section.canvas_block_id === "string" ? section.canvas_block_id : "";
         return (
           <div key={index} className="flex flex-wrap items-center gap-2">
             <Input
@@ -387,6 +403,21 @@ function NotebookSectionsEditor({
                 ))}
               </SelectContent>
             </Select>
+            {kind === "ink" && (
+              <Select value={canvasBlockId || NO_CANVAS_BOARD} onValueChange={(next) => patch(index, "canvas_block_id", next === NO_CANVAS_BOARD ? "" : next)}>
+                <SelectTrigger aria-label={`Section ${index + 1} board`} className="w-44">
+                  <SelectValue placeholder="No board yet" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_CANVAS_BOARD}>No board yet</SelectItem>
+                  {canvasBlocks.map((block) => (
+                    <SelectItem key={block.id} value={block.id}>
+                      {block.title || BLOCK_CATALOG.canvas.label} · {block.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Button
               type="button"
               variant="ghost"
@@ -691,6 +722,7 @@ export function BlockConfigForm({
           );
         }
         if (field.kind === "sections") {
+          const canvasBlocks = panel.blocks.filter((other) => other.type === "canvas");
           return (
             <fieldset key={field.key} className="flex flex-col gap-1.5" aria-describedby={`${id}-hint`}>
               <legend className="mb-1.5 text-sm leading-5 font-medium">{field.label}</legend>
@@ -698,6 +730,7 @@ export function BlockConfigForm({
                 idBase={id}
                 value={isRecordArray(value) ? value : []}
                 onChange={(next) => onChange(setBlockConfig(panel, index, field, next))}
+                canvasBlocks={canvasBlocks}
               />
               {field.hint ? (
                 <p id={`${id}-hint`} className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">

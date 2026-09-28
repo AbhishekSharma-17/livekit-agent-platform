@@ -75,6 +75,7 @@ from lkap_contracts.api_models import (
     ValidationResult,
     connection_rerank_id,
 )
+from lkap_contracts.blocks import canvas_caller_can_draw
 from lkap_contracts.compliance import (
     COMPLIANCE_KEY,
     COMPLIANCE_PRESETS,
@@ -539,6 +540,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(agent_test_issues(ctx))
     findings.extend(amd_and_transfer_issues(ctx))
     findings.extend(guardrails_issues(ctx))
+    findings.extend(canvas_vision_issues(ctx))  # V6-12
     findings.extend(extraction_rules_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
@@ -746,6 +748,63 @@ def _vision_suggestion(spec: ProviderSpec, model: str) -> str:
         "if it does accept images, run Test model with the vision probe or declare its capabilities; "
         "otherwise pick a vision model"
     )
+
+
+#: V6-12: a drawing board on a realtime or half-cascade pipeline (`read_canvas` cannot read it).
+CANVAS_NEEDS_CASCADED_MESSAGE: Final[str] = (
+    "the agent reads what the caller draws with its own language model, which only works on a "
+    "cascaded pipeline whose model can see pictures; with a realtime model the caller can still draw, "
+    "but the agent cannot read the board"
+)
+
+
+def canvas_vision_issues(ctx: ValidationContext) -> list[Issue]:
+    """V6-12 (D-V6-16): a board the caller draws on needs a model that can see pictures.
+
+    ``read_canvas`` reads handwriting from a picture of the board with the agent's own
+    cascaded LLM. Each ``canvas`` the caller may draw on (its own ``caller_can_draw``, or a
+    notebook's for a board in an ``ink`` section) gets a warning when the pipeline is realtime
+    or half-cascade, or when the cascaded LLM is known not to see images (the LiveKit Cloud
+    default ``google/gemma-4-31b-it`` is text-only; the message names vision models of the same
+    provider), and a tip when nobody knows. Nothing when ``read_canvas`` is switched off.
+    """
+    config = ctx.config
+    blocks = config.panel.blocks
+    boards = [
+        index
+        for index, block in enumerate(blocks)
+        if block.type == "canvas" and canvas_caller_can_draw(block.id, blocks)
+    ]
+    if not boards or "read_canvas" in config.tools.builtin_disabled:
+        return []
+    pipeline = config.pipeline
+    message: str | None = None
+    severity: Severity = "warning"
+    if pipeline.mode != "cascaded":
+        message = CANVAS_NEEDS_CASCADED_MESSAGE
+    elif pipeline.llm is not None:
+        spec = _spec_or_none(pipeline.llm.provider_id)
+        model = pipeline.llm.model or (spec.default_model if spec is not None else None)
+        if spec is None or spec.kind != "llm" or not model or validate_model_id(model) is not None:
+            return []
+        caps = resolve_capabilities(
+            spec, model, ctx.record_for(spec, model), ctx.catalog_item(spec.id, model)
+        )
+        listed = {m.id for m in spec.models}
+        name = f"'{model}'" if model in listed or model == spec.default_model else "this model"
+        if caps.vision is False:
+            message = (
+                f"{name} cannot see pictures, so the agent cannot read what the caller draws on this "
+                f"board — {_vision_suggestion(spec, model)}"
+            )
+        elif caps.vision is None:
+            message = (
+                f"Tip: whether {name} can see pictures is unknown; the agent reads what the caller draws "
+                "only with a model that can, so run Test model with the vision probe to be sure"
+            )
+    if message is None:
+        return []
+    return [Issue(path=f"panel.blocks[{index}]", message=message, severity=severity) for index in boards]
 
 
 def _validate_credential(

@@ -672,6 +672,7 @@ export const BLOCK_TYPE_VALUES = [
   "cards",
   "notebook",
   "layout",
+  "canvas",
 ] as const;
 
 /** Block ids key `UiState.blocks` and appear in patch paths: no `/`, no spaces. */

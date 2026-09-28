@@ -47,6 +47,7 @@ export const BLOCK_TYPES: readonly BlockType[] = [
   "cards",
   "notebook",
   "layout",
+  "canvas",
 ];
 
 /** Types whose state is the envelope (`status`, `notes`, …) and hold `{}`. */
@@ -80,7 +81,10 @@ export type BlockToolName =
   | "set_checklist"
   | "check_item"
   | "notebook_write"
-  | "notebook_check";
+  | "notebook_check"
+  | "draw_on_canvas"
+  | "clear_canvas"
+  | "read_canvas";
 
 /** Block types `update_block` may write (agent `UPDATABLE_BLOCK_TYPES`). */
 export const UPDATABLE_BLOCK_TYPES: ReadonlySet<BlockType> = new Set<BlockType>([
@@ -132,6 +136,10 @@ export const BLOCK_TOOL_TYPES: Record<BlockToolName, ReadonlySet<BlockType>> = {
   // V6-08
   notebook_write: new Set<BlockType>(["notebook"]),
   notebook_check: new Set<BlockType>(["notebook"]),
+  // V6-12
+  draw_on_canvas: new Set<BlockType>(["canvas"]),
+  clear_canvas: new Set<BlockType>(["canvas"]),
+  read_canvas: new Set<BlockType>(["canvas"]),
 };
 
 /** One field of a block's config form. */
@@ -342,6 +350,22 @@ export const NOTEBOOK_PAPERS = [
 export const NOTEBOOK_FONTS = [
   { value: "print", label: "Print" },
   { value: "handwritten", label: "Handwriting" },
+] as const;
+
+/** `canvas.background` values (V6-12): what the drawing board starts on. */
+export const CANVAS_BACKGROUNDS = [
+  { value: "none", label: "Blank" },
+  { value: "asset", label: "A picture the agent puts on it" },
+  { value: "live_camera", label: "The caller's camera" },
+] as const;
+
+/** `canvas.tools` the caller may be offered (V6-12; `text` is reserved and not offered). */
+export const CANVAS_TOOL_OPTIONS = [
+  { value: "pen", label: "Pen" },
+  { value: "highlighter", label: "Highlighter" },
+  { value: "eraser", label: "Eraser" },
+  { value: "box", label: "Box" },
+  { value: "arrow", label: "Arrow" },
 ] as const;
 
 /** `layout.kind` values (V6-08). */
@@ -756,9 +780,8 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
         key: "caller_can_draw",
         label: "The caller can draw",
         kind: "boolean",
-        hint: "Drawing is not available yet.",
+        hint: "The caller can draw on the boards of the drawing sections.",
         default: false,
-        disabled: true,
       },
     ],
     filledBy: "notebook_write",
@@ -781,6 +804,48 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
       { key: "columns", label: "Columns", kind: "integer", hint: "Used when shown side by side.", default: 2, min: 2 },
     ],
     filledBy: "the blocks you put in it",
+  },
+  // V6-12: a minimal entry (PLAN-V5 §0.1, R-V5-7); the drawing board itself, the tools picker
+  // and previews come with V6-14.
+  canvas: {
+    type: "canvas",
+    label: "Drawing board",
+    description: "A board the caller can write or sketch on by hand, and the agent can mark up and read.",
+    defaultTitle: "Drawing board",
+    idStem: "board",
+    configFields: [
+      {
+        key: "caller_can_draw",
+        label: "The caller can draw",
+        kind: "boolean",
+        hint: "The caller can write and sketch on the board. The agent can read what they wrote.",
+        default: false,
+      },
+      {
+        key: "tools",
+        label: "Tools",
+        kind: "multiselect",
+        default: ["pen", "highlighter", "eraser"],
+        options: CANVAS_TOOL_OPTIONS,
+      },
+      { key: "background", label: "Starts on", kind: "select", default: "none", options: CANVAS_BACKGROUNDS },
+      {
+        key: "max_strokes",
+        label: "Most strokes",
+        kind: "integer",
+        hint: "The board says it is full after this many strokes (up to 2,000).",
+        default: 500,
+        min: 1,
+      },
+      {
+        key: "signature_mode",
+        label: "Signature board",
+        kind: "boolean",
+        hint: "Kept for signatures; not used yet.",
+        default: false,
+      },
+    ],
+    filledBy: "draw_on_canvas",
   },
 };
 
@@ -822,33 +887,64 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** A notebook section's empty content by kind (mirrors the worker's `ui.blocks._empty_section`). */
-function emptyNotebookSection(kind: unknown): Record<string, unknown> {
+/**
+ * A `canvas`'s pre-call state (V6-12, ask #93(c)): mirrors the worker's
+ * `initial_block_state` — every `CanvasBlockState` field at its model default
+ * except `background`, which starts on `"live_camera"` only when the config
+ * asks for it; a config `background: "asset"` still starts blank (`"none"`)
+ * — the picture is a per-session value the agent puts on later, never a
+ * per-agent config value.
+ */
+function canvasInitialState(spec: BlockSpec): Record<string, unknown> {
+  const config = isRecord(spec.config) ? spec.config : {};
+  const background = config.background === "live_camera" ? "live_camera" : "none";
+  return {
+    width: 1600,
+    height: 1200,
+    background,
+    strokes: [],
+    shapes: [],
+    snapshot_asset_id: null,
+    limit_reached: false,
+    updated_at: null,
+  };
+}
+
+/**
+ * A notebook section's empty content by kind (mirrors the worker's
+ * `ui.blocks._empty_section`). `canvasBlockId` (V6-12): an `ink` section's
+ * board, carried straight from its config — `null` while it has none yet.
+ */
+function emptyNotebookSection(kind: unknown, canvasBlockId: string | null): Record<string, unknown> {
   switch (kind) {
     case "checklist":
       return { kind: "checklist", items: [] };
     case "details":
       return { kind: "details", items: [] };
     case "ink":
-      return { kind: "ink", canvas_block_id: null };
+      return { kind: "ink", canvas_block_id: canvasBlockId };
     default:
       return { kind: "text", entries: [] };
   }
 }
 
 /**
- * `config.sections` as `{id, kind}` pairs, one `notes` text section when the
- * config carries none (ask #60, mirrors `NotebookBlockConfig.sections`'
- * own default of one `notes` text section).
+ * `config.sections` as `{id, kind, canvasBlockId}` triples, one `notes` text
+ * section when the config carries none (ask #60, mirrors
+ * `NotebookBlockConfig.sections`'s own default of one `notes` text section).
  */
-function notebookSectionIds(config: Record<string, unknown>): { id: string; kind: unknown }[] {
+function notebookSectionIds(config: Record<string, unknown>): { id: string; kind: unknown; canvasBlockId: string | null }[] {
   const sections = config.sections;
   if (Array.isArray(sections) && sections.length > 0) {
     return sections
       .filter((section): section is Record<string, unknown> => isRecord(section) && typeof section.id === "string")
-      .map((section) => ({ id: section.id as string, kind: section.kind }));
+      .map((section) => ({
+        id: section.id as string,
+        kind: section.kind,
+        canvasBlockId: typeof section.canvas_block_id === "string" ? section.canvas_block_id : null,
+      }));
   }
-  return [{ id: "notes", kind: "text" }];
+  return [{ id: "notes", kind: "text", canvasBlockId: null }];
 }
 
 /**
@@ -861,7 +957,7 @@ function notebookSectionIds(config: Record<string, unknown>): { id: string; kind
 function notebookInitialState(spec: BlockSpec): Record<string, unknown> {
   const config = isRecord(spec.config) ? spec.config : {};
   const sections: Record<string, unknown> = {};
-  for (const { id, kind } of notebookSectionIds(config)) sections[id] = emptyNotebookSection(kind);
+  for (const { id, kind, canvasBlockId } of notebookSectionIds(config)) sections[id] = emptyNotebookSection(kind, canvasBlockId);
   return { sections, updated_at: null };
 }
 
@@ -870,11 +966,13 @@ function notebookInitialState(spec: BlockSpec): Record<string, unknown> {
  * connecting, the console preview): the type's defaults, seeded by any
  * `BlockSpec.config` key that names a state field — the same rule as the
  * worker's `initial_block_state`. Envelope, `layout` and custom blocks are
- * `{}` (a `layout` has no state of its own, D-V6-18); `notebook` (V6-08) has
- * its own rule (`notebookInitialState`).
+ * `{}` (a `layout` has no state of its own, D-V6-18); `notebook` (V6-08) and
+ * `canvas` (V6-12) have their own rules (`notebookInitialState`,
+ * `canvasInitialState`) — a plain key copy would be wrong for both.
  */
 export function initialBlockState(spec: BlockSpec): Record<string, unknown> {
   if (spec.type === "notebook") return notebookInitialState(spec);
+  if (spec.type === "canvas") return canvasInitialState(spec);
   const factory = STATE_DEFAULTS[spec.type as keyof BlockStateByType];
   if (!factory) return {};
   const state: Record<string, unknown> = { ...factory() };

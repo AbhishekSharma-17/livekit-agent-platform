@@ -49,13 +49,15 @@ def _spec(block_id: str, block_type: str, config: dict[str, Any] | None = None) 
 
 
 def test_the_two_block_types_are_appended() -> None:
-    assert get_args(BlockType)[-2:] == ("notebook", "layout")
+    # V6-12 appends `canvas` after them.
+    assert get_args(BlockType)[-3:-1] == ("notebook", "layout")
     assert BLOCK_CONFIG_MODELS["notebook"] is NotebookBlockConfig
     assert BLOCK_CONFIG_MODELS["layout"] is LayoutBlockConfig
 
 
 def test_the_notebook_tools_are_block_writes_that_never_run_in_the_background() -> None:
-    assert tools.BLOCK_TOOL_NAMES[-2:] == ("notebook_write", "notebook_check")
+    # V6-12 appends the three canvas tools after them.
+    assert tools.BLOCK_TOOL_NAMES[-5:-3] == ("notebook_write", "notebook_check")
     for name in ("notebook_write", "notebook_check"):
         assert name not in tools.BUILTIN_TOOL_NAMES
         assert tools.BLOCK_TOOL_TYPES[name] == {"notebook"}

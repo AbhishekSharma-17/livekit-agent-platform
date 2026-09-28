@@ -87,6 +87,15 @@ const NotebookBlock = lazy(() => import("./notebook"));
 // see that file's docblock for why it safely imports `Block` back from here.
 const LayoutBlock = lazy(() => import("./layout"));
 
+/** A block type this web build has no renderer for yet (V6-12's `canvas`; its renderer comes with V6-14). */
+function NotRenderedYetBlock({ spec, title, highlighted }: BlockRenderProps) {
+  return (
+    <BlockFrame spec={spec} title={title} highlighted={highlighted}>
+      <PanelEmpty>This block is not shown here yet.</PanelEmpty>
+    </BlockFrame>
+  );
+}
+
 /** Block type → component. Every `BlockType` has one (`tests/panel-blocks.test.tsx`). */
 export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   status: StatusBlock,
@@ -115,6 +124,8 @@ export const BLOCK_COMPONENTS: Record<BlockType, AnyBlockComponent> = {
   // V6-10 (D-V6-15, D-V6-18): both lazy (see above).
   notebook: NotebookBlock as AnyBlockComponent,
   layout: LayoutBlock as AnyBlockComponent,
+  // V6-12 added the drawing board to the contract; its renderer comes with V6-14.
+  canvas: NotRenderedYetBlock,
 };
 
 /** Lazily-loaded block types (they suspend on first render). */

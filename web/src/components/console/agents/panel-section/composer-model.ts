@@ -158,6 +158,9 @@ const TOOL_NEEDS: Record<BlockToolName, string> = {
   check_item: "Add a checklist block first",
   notebook_write: "Add a notebook block first",
   notebook_check: "Add a notebook block first",
+  draw_on_canvas: "Add a drawing board first",
+  clear_canvas: "Add a drawing board first",
+  read_canvas: "Add a drawing board first",
 };
 
 /**

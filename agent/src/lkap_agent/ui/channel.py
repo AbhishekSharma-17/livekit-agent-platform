@@ -61,6 +61,26 @@ block's `files` and, for an image, to every gallery; a refused one becomes a
 memory for `describe_asset` and reads older ones back from the api. The file's
 name and content never reach a log line.
 
+Ink (V6-12, D-V6-16): the caller's pen strokes arrive on the ``lkap.ui.ink`` text stream,
+one `InkMessage` JSON per message. `receive_ink` drops, and counts, a message from anyone but
+the caller (before reading it), one over the rate (20 a second, taken before reading), one
+over 2 KiB (declared or read), one that does not validate (its content is never logged),
+one for a block that is not a canvas or that the caller may not draw on
+(`lkap_contracts.blocks.canvas_caller_can_draw`), and one over the board's limits
+(`lkap_agent.ui.ink.apply_ink`). The first drop of each kind is recorded
+(`block_update`, `op: "ink_dropped"`); `close` records the totals (`op: "ink_summary"`).
+Accepted strokes are applied to the state at once and sent together, one patch per
+:data:`INK_FLUSH_INTERVAL_S` at most (so a fast pen does not force a snapshot every few
+seconds); any other patch sends the waiting strokes first, so the page sees the same order.
+A full board sets `limit_reached` and posts one "drawing board full" line in the team feed.
+
+Canvas snapshots (V6-12): `request_canvas_snapshot` asks the page for a PNG of the board
+(`lkap.ui.request {method: "snapshot"}`) and waits for it on ``lkap.ui.upload``. The file is
+taken only while that snapshot is awaited, only for a board the caller may draw on, only as
+a PNG of at most 5 MiB; it is stored as a session asset of kind `frame` with
+`meta.source="ink"` (set here, never by the page), shown in no gallery, and named in the
+board's `snapshot_asset_id`.
+
 Live captions (V5-31): while the panel has a ``captions`` block, both sides of
 the conversation stream on ``lkap.captions`` as `CaptionSegment` JSON (one
 message per update; an utterance keeps its ``id`` from its first interim to
@@ -92,20 +112,31 @@ from typing import Any, Final, Literal
 from livekit import rtc
 from livekit.agents.voice.io import TextOutput
 from lkap_contracts.api_models import KbHit, SessionAssetOut
-from lkap_contracts.blocks import UploadBlockConfig, accept_allows, safe_filename, sniff_mime
+from lkap_contracts.blocks import (
+    UploadBlockConfig,
+    accept_allows,
+    canvas_caller_can_draw,
+    safe_filename,
+    sniff_mime,
+)
 from lkap_contracts.tools import UPDATABLE_BLOCK_TYPES
 from lkap_contracts.ui_agui import AguiPatchError, agui_delta_to_patch
 from lkap_contracts.ui_protocol import (
     ACTIVITY_RING_SIZE,
     BLOCK_EDIT_ACTION,
+    CANVAS_SNAPSHOT_SOURCE,
     FORM_UPLOAD_KEY,
     FORM_WIDGET_KEY,
+    MAX_CANVAS_SNAPSHOT_BYTES,
+    MAX_INK_MESSAGE_BYTES,
+    MAX_SESSION_INK_POINTS,
     RPC_AGENT_ACTION,
     RPC_UI_REQUEST,
     SNAPSHOT_EVERY_N_PATCHES,
     TOPIC_UI_ACTIVITY,
     TOPIC_UI_ASSET,
     TOPIC_UI_CAPTIONS,
+    TOPIC_UI_INK,
     TOPIC_UI_STATE,
     TOPIC_UI_UPLOAD,
     ActivityEvent,
@@ -120,6 +151,7 @@ from lkap_contracts.ui_protocol import (
     ChecklistItem,
     FormBlockState,
     FormUploadSpec,
+    InkMessage,
     KbCitation,
     LinkOutcome,
     Note,
@@ -150,6 +182,7 @@ from lkap_agent.ui.blocks import (
     CallerEdit,
     block_path,
     caller_edit_refusal,
+    canvas_config,
     card_action_error,
     check_caller_edit,
     choice_selection_error,
@@ -160,11 +193,14 @@ from lkap_agent.ui.blocks import (
     slot_selection_error,
     validate_block_state,
 )
+from lkap_agent.ui.ink import InkBudget, apply_ink
 
 __all__ = [
     "ASSET_CACHE_BYTES",
     "BARGE_IN",
+    "CANVAS_SNAPSHOT_TIMEOUT_S",
     "CAPTION_INTERIM_INTERVAL_S",
+    "INK_FLUSH_INTERVAL_S",
     "CaptionStream",
     "CaptionsTextOutput",
     "caption_tap_for",
@@ -213,6 +249,13 @@ SHOW_BLOCK_TIMEOUT_S: Final[float] = 10.0
 ASSET_CACHE_BYTES: Final[int] = 48 * 1024 * 1024
 #: How many refused files an upload block lists (the newest).
 _MAX_REJECTIONS: Final[int] = 10
+#: V6-12: the longest wait for accepted strokes before they are sent to the page (and the
+#: console mirror) in one patch.
+INK_FLUSH_INTERVAL_S: Final[float] = 0.1
+#: V6-12: how long `request_canvas_snapshot` waits for the page's PNG.
+CANVAS_SNAPSHOT_TIMEOUT_S: Final[float] = 20.0
+#: The display kind of a drawing snapshot in `UiState.assets`.
+CANVAS_SNAPSHOT_KIND: Final[str] = "drawing"
 
 #: The state fields a browser answer may write, per requestable block type (S5-3). A
 #: `form` answer lands in `values` (its keys limited to the schema's properties); an
@@ -261,6 +304,8 @@ class _UploadTarget:
     accept: list[str]
     max_files: int
     max_bytes: int
+    #: V6-12: a drawing snapshot of this canvas that `request_canvas_snapshot` awaits.
+    canvas: bool = False
 
 
 def _segments(path: str) -> list[str]:
@@ -521,12 +566,22 @@ class UiChannel:
         # V5-43, ruling on ask #309: `state_delta` from the page is opt-in per agent.
         self._accept_state_delta = False
         self._state_delta_refusal_logged = False
+        # V6-12: the caller's ink (rate, totals, strokes applied but not sent yet) and the
+        # drawing snapshots `request_canvas_snapshot` awaits, by canvas id.
+        self._ink_handler_registered = False
+        self._ink_budget = InkBudget()
+        self._ink_points = 0
+        self._ink_accepted = 0
+        self._ink_drops: dict[str, int] = {}
+        self._ink_ops: list[UiPatchOp] = []
+        self._ink_flush_scheduled = False
+        self._snapshot_waiters: dict[str, asyncio.Future[tuple[str, bytes] | None]] = {}
 
     def start(self) -> None:
-        """Register the `lkap.agent.action` RPC handler and the `lkap.ui.upload` byte-stream handler.
+        """Register the `lkap.agent.action` RPC handler and the `lkap.ui.upload` / `lkap.ui.ink` streams.
 
-        The byte-stream registration is guarded: minimal room doubles do not
-        implement it, and a room that already has an upload handler keeps it.
+        The stream registrations are guarded: minimal room doubles do not
+        implement them, and a room that already has a handler for a topic keeps it.
         """
         self._room.local_participant.register_rpc_method(RPC_AGENT_ACTION, self._handle_agent_action)
         register = getattr(self._room, "register_byte_stream_handler", None)
@@ -536,6 +591,15 @@ class UiChannel:
                 self._upload_handler_registered = True
             except ValueError:
                 self._log.warning("an lkap.ui.upload handler is already registered on this room")
+        # V6-12: `Room.register_text_stream_handler(topic, handler(reader, participant_identity))`
+        # (livekit 1.1.18); RoomIO registers only `lk.chat`, so the topic is free.
+        register_text = getattr(self._room, "register_text_stream_handler", None)
+        if callable(register_text):
+            try:
+                register_text(TOPIC_UI_INK, self._on_ink_stream)
+                self._ink_handler_registered = True
+            except ValueError:
+                self._log.warning("an lkap.ui.ink handler is already registered on this room")
 
     def close(self) -> None:
         """Unregister the handlers and release every pending request with `None`.
@@ -549,6 +613,21 @@ class UiChannel:
             if not entry.future.done():
                 entry.future.set_result(None)
         self._pending.clear()
+        for waiter in self._snapshot_waiters.values():
+            if not waiter.done():
+                waiter.set_result(None)
+        self._snapshot_waiters.clear()
+        self._ink_ops = []
+        if self._ink_accepted or self._ink_drops:
+            self._record(
+                "block_update",
+                {"op": "ink_summary", "accepted": self._ink_accepted, "dropped": dict(self._ink_drops)},
+            )
+        if self._ink_handler_registered:
+            unregister_text = getattr(self._room, "unregister_text_stream_handler", None)
+            if callable(unregister_text):
+                unregister_text(TOPIC_UI_INK)
+            self._ink_handler_registered = False
         for task in list(self._tasks):
             task.cancel()
         unregister = getattr(self._room.local_participant, "unregister_rpc_method", None)
@@ -628,10 +707,16 @@ class UiChannel:
     # --- packs.base.UiChannel -------------------------------------------------
 
     async def patch(self, ops: list[UiPatchOp]) -> None:
-        """Send a `UiPatch` with `ops`, applying them to `state` and bumping `seq`."""
+        """Send a `UiPatch` with `ops`, applying them to `state` and bumping `seq`.
+
+        V6-12: strokes the ink handler already applied but has not sent yet go first, in
+        the same patch, so the page applies everything in the order the agent did.
+        """
         ops = [_normalize_block_op(op) for op in ops]
         for op in ops:
             apply_patch_op(self.state, op)
+        ink, self._ink_ops = self._ink_ops, []
+        ops = ink + ops
         self.seq += 1
         message = UiPatch(seq=self.seq, session_id=self._session_id, ops=ops)
         await self._room.local_participant.send_text(message.model_dump_json(), topic=TOPIC_UI_STATE)
@@ -644,6 +729,8 @@ class UiChannel:
         """Send a full `UiSnapshot` of the current `state`."""
         if self.seq == 0:
             self.seq = 1
+        # V6-12: the state already holds any strokes waiting to be sent; the snapshot carries them.
+        self._ink_ops = []
         message = UiSnapshot(seq=self.seq, session_id=self._session_id, state=self.state)
         await self._room.local_participant.send_text(message.model_dump_json(), topic=TOPIC_UI_STATE)
         self._patches_since_snapshot = 0
@@ -893,7 +980,16 @@ class UiChannel:
             return False
 
     def _upload_target(self, block_id: str, field: str | None) -> _UploadTarget | None:
-        """The requested `upload` block (or form `file` field) a stream may fill, with its limits."""
+        """The requested `upload` block (or form `file` field) a stream may fill, with its limits.
+
+        V6-12: also a canvas whose drawing snapshot is awaited (`request_canvas_snapshot`),
+        when the caller may draw on it: one PNG of at most 5 MiB.
+        """
+        if block_id and self._block_type(block_id) == "canvas":
+            waiter = self._snapshot_waiters.get(block_id)
+            if waiter is None or waiter.done() or not self._caller_can_draw(block_id):
+                return None
+            return _UploadTarget(block_id, None, ["image/png"], 1, MAX_CANVAS_SNAPSHOT_BYTES, canvas=True)
         state = self.state.blocks.get(block_id) if block_id else None
         if not isinstance(state, dict) or state.get("status") != "requested":
             return None
@@ -917,6 +1013,8 @@ class UiChannel:
         return None
 
     def _received(self, target: _UploadTarget) -> int:
+        if target.canvas:
+            return 0  # one snapshot per request: the waiter is released by the first file
         if target.field is not None:
             return len(self._form_uploads.get((target.block_id, target.field), []))
         files = (self.state.blocks.get(target.block_id) or {}).get("files")
@@ -925,7 +1023,14 @@ class UiChannel:
     async def _reject_upload(
         self, block_id: str, name: str, reason: UploadRejectReason, *, target: _UploadTarget | None = None
     ) -> None:
-        """Show why a file was refused (on an `upload` block) and record it (no filename in the event)."""
+        """Show why a file was refused (on an `upload` block) and record it (no filename in the event).
+
+        V6-12: a refused drawing snapshot releases `request_canvas_snapshot` with `None`.
+        """
+        if target is not None and target.canvas:
+            waiter = self._snapshot_waiters.pop(block_id, None)
+            if waiter is not None and not waiter.done():
+                waiter.set_result(None)
         if self._block_type(block_id) == "upload" and block_id in self.state.blocks:
             rejection = UploadRejection(
                 name=name,
@@ -957,7 +1062,12 @@ class UiChannel:
             if total > target.max_bytes:
                 return None
             chunks.append(chunk)
-            if target.field is None and declared > 0 and (reached := min(3, total * 4 // declared)) > quarter:
+            if (
+                target.field is None
+                and not target.canvas
+                and declared > 0
+                and (reached := min(3, total * 4 // declared)) > quarter
+            ):
                 quarter = reached
                 await self.patch(
                     [UiPatchOp(op="set", path=block_path(target.block_id, "progress"), value=quarter / 4)]
@@ -1039,6 +1149,8 @@ class UiChannel:
         if api is None:
             await self._reject_upload(target.block_id, name, "failed", target=target)
             return None
+        if target.canvas:
+            return await self._store_snapshot(api, target, mime, data)
         meta = {"block_id": target.block_id, **({"field": target.field} if target.field else {})}
         try:
             stored = await api.post_asset(
@@ -1087,6 +1199,243 @@ class UiChannel:
             },
         )
         return file
+
+    # --- drawing boards (V6-12) -------------------------------------------------------
+
+    def _caller_can_draw(self, block_id: str) -> bool:
+        """The one rule (`lkap_contracts.blocks.canvas_caller_can_draw`) over this session's blocks."""
+        return canvas_caller_can_draw(block_id, list(self._block_specs.values()))
+
+    async def request_canvas_snapshot(
+        self, block_id: str, *, timeout_s: float = CANVAS_SNAPSHOT_TIMEOUT_S
+    ) -> tuple[str, bytes] | None:
+        """Ask the page for a PNG of the canvas `block_id` and wait for it (V6-12, D-V6-16).
+
+        Sends `lkap.ui.request {method: "snapshot", payload: {block_id}}`; the page answers by
+        streaming the PNG on `lkap.ui.upload` with the canvas's `block_id`, which
+        `receive_upload` stores (kind `frame`, `meta.source="ink"`) and names in the board's
+        `snapshot_asset_id`. A newer request for the same board releases an older one.
+
+        Returns:
+            `(asset_id, png_bytes)`, or `None` when the page did not answer, refused, sent
+            something that is not a PNG, timed out, or the session closed.
+
+        Raises:
+            ValueError: When `block_id` is not a canvas the caller may draw on.
+        """
+        if self._block_type(block_id) != "canvas":
+            raise ValueError(f"block {block_id!r} is not a drawing board")
+        if not self._caller_can_draw(block_id):
+            raise ValueError(f"the caller cannot draw on {block_id!r}")
+        earlier = self._snapshot_waiters.pop(block_id, None)
+        if earlier is not None and not earlier.done():
+            earlier.set_result(None)
+        waiter: asyncio.Future[tuple[str, bytes] | None] = asyncio.get_running_loop().create_future()
+        self._snapshot_waiters[block_id] = waiter
+        request = UiRequest(method="snapshot", payload={"block_id": block_id})
+        try:
+            answer = await self._room.local_participant.perform_rpc(
+                destination_identity=self._remote_identity(),
+                method=RPC_UI_REQUEST,
+                payload=request.model_dump_json(),
+                response_timeout=REQUEST_ACK_TIMEOUT_S,
+            )
+            refused = not UiRequestResult.model_validate_json(answer).ok
+        except Exception as exc:  # noqa: BLE001 - no page, or it did not answer
+            self._log.debug("canvas snapshot request failed", block_id=block_id, error=type(exc).__name__)
+            refused = True
+        if refused and not waiter.done():
+            # A page without a drawing board answers `ok: false`: do not wait for a file.
+            waiter.set_result(None)
+        try:
+            return await asyncio.wait_for(asyncio.shield(waiter), timeout=timeout_s)
+        except TimeoutError:
+            return None
+        finally:
+            if self._snapshot_waiters.get(block_id) is waiter:
+                del self._snapshot_waiters[block_id]
+
+    async def _store_snapshot(
+        self, api: AssetApi, target: _UploadTarget, mime: str, data: bytes
+    ) -> UploadedFile | None:
+        """Store an awaited drawing snapshot and hand it to `request_canvas_snapshot` (V6-12)."""
+        block_id = target.block_id
+        try:
+            stored = await api.post_asset(
+                self._session_id,
+                data,
+                name=f"{block_id}.png",
+                mime=mime,
+                kind="frame",
+                meta={"block_id": block_id, "source": CANVAS_SNAPSHOT_SOURCE},
+            )
+        except AssetRejectedError as exc:
+            reason: UploadRejectReason = "too_large" if exc.status == 413 else "failed"
+            await self._reject_upload(block_id, "drawing", reason, target=target)
+            return None
+        asset_id = await self._publish_asset(
+            data,
+            stored.mime,
+            kind=CANVAS_SNAPSHOT_KIND,
+            meta={"block_id": block_id, "source": CANVAS_SNAPSHOT_SOURCE},
+            asset_id=stored.id,
+            stored=True,
+            name=stored.name,
+            extra_ops=[UiPatchOp(op="set", path=block_path(block_id, "snapshot_asset_id"), value=stored.id)],
+            galleries=(),
+        )
+        self._record(
+            "block_update",
+            {
+                "block_id": block_id,
+                "block_type": "canvas",
+                "op": "snapshot_received",
+                "asset_id": asset_id,
+                "size": stored.size,
+            },
+        )
+        waiter = self._snapshot_waiters.pop(block_id, None)
+        if waiter is not None and not waiter.done():
+            waiter.set_result((asset_id, data))
+        return UploadedFile(
+            asset_id=stored.id, name=stored.name, mime=stored.mime, size=stored.size, sha256=stored.sha256
+        )
+
+    def _on_ink_stream(self, reader: Any, participant_identity: str) -> None:
+        """`lkap.ui.ink` text-stream handler (synchronous, as the SDK calls it)."""
+        self._spawn(self.receive_ink(reader, participant_identity))
+
+    def _drop_ink(self, reason: str) -> None:
+        """Count a dropped ink message; record the first of each kind (never its content)."""
+        count = self._ink_drops.get(reason, 0) + 1
+        self._ink_drops[reason] = count
+        if count == 1:
+            self._log.info("ink message dropped", reason=reason)
+            self._record("block_update", {"op": "ink_dropped", "reason": reason})
+
+    @property
+    def ink_stats(self) -> dict[str, Any]:
+        """How many ink messages were taken and dropped (by reason), and the points taken."""
+        return {"accepted": self._ink_accepted, "dropped": dict(self._ink_drops), "points": self._ink_points}
+
+    async def _read_ink(self, reader: Any) -> str | None:
+        """The message's text, or `None` as soon as it passes `MAX_INK_MESSAGE_BYTES`."""
+        parts: list[str] = []
+        size = 0
+        async for chunk in reader:
+            size += len(chunk.encode("utf-8"))
+            if size > MAX_INK_MESSAGE_BYTES:
+                return None
+            parts.append(chunk)
+        return "".join(parts)
+
+    async def receive_ink(self, reader: Any, sender_identity: str) -> bool:
+        """Take one message from `lkap.ui.ink` (V6-12, D-V6-16); whether it changed the board.
+
+        Dropped and counted (see the module notes): a sender that is not the caller and a
+        message over the rate, before a byte is read; one over 2 KiB; one that does not
+        validate; one for a block that is not a canvas the caller may draw on; one over the
+        board's limits. The reader is always closed.
+        """
+        info = getattr(reader, "info", None)
+        try:
+            if not self._is_caller(sender_identity):
+                self._drop_ink("not_caller")
+                return False
+            if not self._ink_budget.take():
+                self._drop_ink("rate")
+                return False
+            if int(getattr(info, "size", 0) or 0) > MAX_INK_MESSAGE_BYTES:
+                self._drop_ink("too_large")
+                return False
+            try:
+                text = await self._read_ink(reader)
+            except Exception:  # noqa: BLE001 - an aborted stream (rtc.StreamError) is dropped
+                self._drop_ink("failed")
+                return False
+            if text is None:
+                self._drop_ink("too_large")
+                return False
+            try:
+                message = InkMessage.model_validate_json(text)
+            except ValidationError:
+                self._drop_ink("malformed")
+                return False
+            return await self._accept_ink(message)
+        finally:
+            close = getattr(reader, "close", None)
+            if callable(close):
+                close()
+
+    async def _accept_ink(self, message: InkMessage) -> bool:
+        block_id = message.block_id
+        spec = self._block_specs.get(block_id)
+        if spec is None or spec.type != "canvas" or block_id not in self.state.blocks:
+            self._drop_ink("not_a_canvas")
+            return False
+        if not self._caller_can_draw(block_id):
+            self._drop_ink("drawing_off")
+            return False
+        state = self.state.blocks.get(block_id)
+        state = state if isinstance(state, dict) else {}
+        outcome = apply_ink(
+            message,
+            state,
+            canvas_config(spec),
+            session_points_left=MAX_SESSION_INK_POINTS - self._ink_points,
+            now=time.time(),
+        )
+        if outcome.limit_hit and outcome.ops:
+            # The first time the board is full: the page says so, and the team feed gets one line.
+            self._queue_ink(block_id, outcome.ops)
+            await self.activity(
+                ActivityEvent(
+                    id=f"canvas_stroke_limit:{block_id}",
+                    ts=time.time(),
+                    source="canvas_stroke_limit",
+                    label="Drawing board",
+                    phase="done",
+                    headline="The drawing board is full: clear it to draw more.",
+                )
+            )
+        if outcome.drop is not None:
+            self._drop_ink(outcome.drop)
+            return False
+        self._queue_ink(block_id, outcome.ops)
+        self._ink_points += outcome.points
+        self._ink_accepted += 1
+        return True
+
+    def _queue_ink(self, block_id: str, ops: list[UiPatchOp]) -> None:
+        """Apply block-relative `ops` to the state now; send them with the next patch (at most 0.1 s away)."""
+        for op in ops:
+            absolute = _normalize_block_op(op.model_copy(update={"path": block_path(block_id, op.path)}))
+            apply_patch_op(self.state, absolute)
+            if absolute.op == "upsert" and absolute.key is not None:
+                # A long stroke arrives in pieces: only its latest copy needs to travel.
+                self._ink_ops = [
+                    queued
+                    for queued in self._ink_ops
+                    if not (
+                        queued.op == "upsert" and queued.path == absolute.path and queued.key == absolute.key
+                    )
+                ]
+            self._ink_ops.append(absolute)
+        if self._ink_ops and not self._ink_flush_scheduled and not self._closed:
+            self._ink_flush_scheduled = True
+            self._spawn(self._flush_ink_soon())
+
+    async def _flush_ink_soon(self) -> None:
+        try:
+            await asyncio.sleep(INK_FLUSH_INTERVAL_S)
+        finally:
+            self._ink_flush_scheduled = False
+        await self.flush_ink()
+
+    async def flush_ink(self) -> None:
+        """Send the strokes waiting to go (nothing when none are)."""
+        if self._ink_ops and not self._closed:
+            await self.patch([])
 
     def _verified_form_values(self, block_id: str, values: dict[str, Any]) -> dict[str, Any]:
         """A form answer limited to the schema's fields, whose `file` fields keep only stored asset ids.

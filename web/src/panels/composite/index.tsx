@@ -21,7 +21,10 @@
  *   `LayoutBlock`, which resolves and renders them itself). The `show_block`
  *   highlight still needs to reach a claimed child, so it travels down
  *   through `BlockHighlightProvider` rather than the top-level `highlighted`
- *   prop those children never receive.
+ *   prop those children never receive. A `canvas` a `notebook` `ink` section
+ *   claims (`canvas_block_id`, V6-12, ask #93) is claimed the same way —
+ *   `blocks/notebook/sections.tsx`'s `InkSectionView` renders it inside the
+ *   section, not here.
  */
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -53,21 +56,32 @@ import { handleCompositeRequest, subscribeCompositeRequests, type CompositeReque
 const WIDE_SPAN: ReadonlySet<BlockType> = new Set<BlockType>(["status", "document", "table", "transcript", "video", "form", "layout"]);
 
 /**
- * Every block id any `layout` block on the panel claims as a child (V6-10,
- * D-V6-18) — shown only inside that layout, never in the flat flow too. Over-
- * inclusive on purpose: it trusts the raw config rather than replaying the
- * api's full `layout_issues` validator (a child claimed twice, say), so a
- * block is still hidden from the top level even under a config the api would
- * flag — "shown in one place" matters more here than "shown correctly".
+ * Every block id any `layout` block claims as a child (V6-10, D-V6-18), plus
+ * every `canvas` a `notebook`'s `ink` section claims (`canvas_block_id`,
+ * V6-12, ask #93) — shown only inside that layout/section, never in the flat
+ * flow too. Over-inclusive on purpose: it trusts the raw config rather than
+ * replaying the api's full `layout_issues`/`canvas_claim_issues` validators
+ * (a child or board claimed twice, say), so a block is still hidden from the
+ * top level even under a config the api would flag — "shown in one place"
+ * matters more here than "shown correctly".
  */
 function claimedChildIds(blocks: readonly BlockSpec[]): ReadonlySet<string> {
   const claimed = new Set<string>();
   for (const spec of blocks) {
-    if (spec.type !== "layout") continue;
-    const children = (spec.config as { children?: { block_id?: unknown }[] } | null)?.children;
-    if (!Array.isArray(children)) continue;
-    for (const child of children) {
-      if (child && typeof child.block_id === "string") claimed.add(child.block_id);
+    if (spec.type === "layout") {
+      const children = (spec.config as { children?: { block_id?: unknown }[] } | null)?.children;
+      if (Array.isArray(children)) {
+        for (const child of children) {
+          if (child && typeof child.block_id === "string") claimed.add(child.block_id);
+        }
+      }
+    } else if (spec.type === "notebook") {
+      const sections = (spec.config as { sections?: { kind?: unknown; canvas_block_id?: unknown }[] } | null)?.sections;
+      if (Array.isArray(sections)) {
+        for (const section of sections) {
+          if (section?.kind === "ink" && typeof section.canvas_block_id === "string") claimed.add(section.canvas_block_id);
+        }
+      }
     }
   }
   return claimed;

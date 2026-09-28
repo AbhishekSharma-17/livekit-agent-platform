@@ -376,8 +376,8 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 
 | ID | Owner | Wave | Status | Commit | Live | Open asks |
 |---|---|---|---|---|---|---|
-| V6-01 | Opus | 1 | planned | | | |
-| V6-02 | Opus | 1 | planned | | | |
+| V6-01 | Opus | 1 | merged | 69728e6 | | |
+| V6-02 | Opus | 1 | merged | 69728e6 | | |
 | V6-03 | Sonnet | 1 | planned | | | |
 | V6-04 | Opus + Fable | 1 | deferred (user runs later, U-V6-1) | | | |
 | V6-05 | Opus | 2 | planned (gated on R-V6-1) | | | |

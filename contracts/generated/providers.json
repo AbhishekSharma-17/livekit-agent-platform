@@ -25,6 +25,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": true,
         "detect_languages": [
           "en",
@@ -235,6 +237,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": true,
         "detect_languages": [],
         "end_of_turn": false,
@@ -392,6 +396,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": true,
         "detect_languages": [],
         "end_of_turn": false,
@@ -557,6 +563,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -841,6 +849,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -978,6 +988,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [
           "en",
@@ -1156,6 +1168,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -1298,6 +1312,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -1424,6 +1440,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -1554,6 +1572,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -1713,6 +1733,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -1824,6 +1846,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -1922,6 +1946,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -2038,6 +2064,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -2153,6 +2181,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -2254,6 +2284,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -2365,6 +2397,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -2427,6 +2461,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -2520,6 +2556,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -2574,6 +2612,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -2776,6 +2816,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -2985,6 +3027,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -3154,6 +3198,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -3260,6 +3306,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -3402,6 +3450,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -3543,6 +3593,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -3733,6 +3785,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -3857,6 +3911,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -3963,6 +4019,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -4141,6 +4199,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -4231,6 +4291,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -4321,6 +4383,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -4411,6 +4475,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": true,
@@ -4550,6 +4616,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -4653,6 +4721,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -4760,6 +4830,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -4888,6 +4960,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -4988,6 +5062,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -5076,6 +5152,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -5166,6 +5244,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -5281,6 +5361,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -5387,6 +5469,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -5475,6 +5559,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -5616,6 +5702,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -5744,6 +5832,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -5832,6 +5922,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -5939,6 +6031,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": "landscape",
+        "avatar_aspect_note": "Output dimensions are optional and per-persona-model; left unset, Anam's default is landscape (Cara 3: 720x480, Cara 4: 1152x768) per anam.ai/docs/personas/session/video. Overridable per session (Cara 4 also offers a 768x1152 portrait size) — a persona configured for portrait output is not reflected by this registry entry.",
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -6055,6 +6149,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -6203,6 +6299,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -6323,6 +6421,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -6403,6 +6503,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": true,
         "detect_languages": [],
         "end_of_turn": false,
@@ -6465,6 +6567,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -6537,6 +6641,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": true,
         "detect_languages": [],
         "end_of_turn": false,
@@ -6629,6 +6735,8 @@
       "availability": "deferred",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": true,
         "detect_languages": [],
         "end_of_turn": false,
@@ -6741,6 +6849,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -6831,6 +6941,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -6941,6 +7053,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -7031,6 +7145,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -7138,6 +7254,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": "portrait",
+        "avatar_aspect_note": "LemonSlice avatars render as 368x560 pixel videos (~9:16 portrait); the vendor center-crops the source image to that aspect if it doesn't already match (docs.livekit.io/agents/integrations/avatar/lemonslice/).",
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -7262,6 +7380,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -7352,6 +7472,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -7459,6 +7581,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -7566,6 +7690,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -7656,6 +7782,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -7746,6 +7874,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -7918,6 +8048,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -8025,6 +8157,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -8153,6 +8287,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -8262,6 +8398,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -8349,6 +8487,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -8442,6 +8582,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -8540,6 +8682,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -8628,6 +8772,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -8739,6 +8885,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -8849,6 +8997,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -8939,6 +9089,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -9011,6 +9163,8 @@
       "availability": "removed",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -9101,6 +9255,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -9191,6 +9347,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -9281,6 +9439,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -9371,6 +9531,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -9502,6 +9664,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -9592,6 +9756,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -9682,6 +9848,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -9772,6 +9940,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -9879,6 +10049,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -9969,6 +10141,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -10059,6 +10233,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -10149,6 +10325,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -10239,6 +10417,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -10329,6 +10509,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -10435,6 +10617,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -10525,6 +10709,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -10615,6 +10801,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -10743,6 +10931,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -10833,6 +11023,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -10923,6 +11115,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -11030,6 +11224,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -11137,6 +11333,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -11227,6 +11425,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -11317,6 +11517,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -11424,6 +11626,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -11531,6 +11735,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -11621,6 +11827,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -11711,6 +11919,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -11801,6 +12011,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -11908,6 +12120,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -11998,6 +12212,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -12088,6 +12304,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -12207,6 +12425,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -12297,6 +12517,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -12387,6 +12609,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -12477,6 +12701,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -12584,6 +12810,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -12699,6 +12927,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -12789,6 +13019,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -12906,6 +13138,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -12996,6 +13230,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -13086,6 +13322,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -13193,6 +13431,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -13300,6 +13540,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": false,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -13372,6 +13614,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": false,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -13426,6 +13670,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": false,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -13519,6 +13765,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": false,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -13609,6 +13857,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": false,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -13716,6 +13966,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": false,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -13823,6 +14075,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": false,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -13947,6 +14201,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": false,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -14075,6 +14331,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": false,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -14199,6 +14457,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": false,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -14289,6 +14549,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": false,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -14379,6 +14641,8 @@
       "availability": "available",
       "capabilities": {
         "audio_input": false,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -14486,6 +14750,8 @@
       "availability": "deferred",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -14593,6 +14859,8 @@
       "availability": "deferred",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -14665,6 +14933,8 @@
       "availability": "deferred",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": true,
         "detect_languages": [],
         "end_of_turn": false,
@@ -14719,6 +14989,8 @@
       "availability": "deferred",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -14791,6 +15063,8 @@
       "availability": "deferred",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -14880,6 +15154,8 @@
       "availability": "deferred",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,
@@ -14952,6 +15228,8 @@
       "availability": "deferred",
       "capabilities": {
         "audio_input": true,
+        "avatar_aspect": null,
+        "avatar_aspect_note": null,
         "cloud_only": false,
         "detect_languages": [],
         "end_of_turn": false,

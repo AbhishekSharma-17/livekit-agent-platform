@@ -569,6 +569,25 @@ class ProviderCapabilities(BaseModel):
             "the platform's default turn detector."
         ),
     )
+    avatar_aspect: Literal["portrait", "landscape", "square"] | None = Field(
+        None,
+        description=(
+            "Avatar only (V6-26, D-V6-30): the vendor's documented native video aspect, cited in "
+            "`avatar_aspect_note`. The console (and the session stage, once a package threads it "
+            "through `AgentPublicOut` — docs/v6/_asks.md #151) sizes the video well to this before "
+            "the first frame arrives, so the layout does not jump. `None` = not documented (most "
+            "vendors' resolution is configurable per call, or undocumented): the well waits for the "
+            "real track dimensions instead of guessing."
+        ),
+    )
+    avatar_aspect_note: str | None = Field(
+        None,
+        description=(
+            "Avatar only (V6-26): one line citing where `avatar_aspect` came from (the vendor's "
+            "documented default resolution or aspect), e.g. 'Tavus replica video defaults to "
+            "1280x720 (docs.tavus.io)'. Unset when `avatar_aspect` is unset."
+        ),
+    )
 
 
 class ProviderSpec(BaseModel):
@@ -2106,7 +2125,17 @@ _FULL: list[ProviderSpec] = [
         ],
         catalog=CatalogSpec(adapter="anam_avatars", kinds=["avatars", "personas"]),
         test="anam_avatars",
-        capabilities=ProviderCapabilities(tool_calling=False),
+        capabilities=ProviderCapabilities(
+            tool_calling=False,
+            avatar_aspect="landscape",
+            avatar_aspect_note=(
+                "Output dimensions are optional and per-persona-model; left unset, Anam's default "
+                "is landscape (Cara 3: 720x480, Cara 4: 1152x768) per "
+                "anam.ai/docs/personas/session/video. Overridable per session (Cara 4 also offers "
+                "a 768x1152 portrait size) — a persona configured for portrait output is not "
+                "reflected by this registry entry."
+            ),
+        ),
         docs_url="https://docs.livekit.io/agents/integrations/avatar/anam/",
         get_key_url="https://anam.ai/",
         probe="anam_avatar_get",
@@ -2384,7 +2413,15 @@ _NEW: list[ProviderSpec] = [
             FieldSpec(name="agent_image_url", label="Agent image URL", type="string"),
             FieldSpec(name="agent_image", label="Agent image", type="file", accept="image/*"),
         ],
-        capabilities=ProviderCapabilities(tool_calling=False),
+        capabilities=ProviderCapabilities(
+            tool_calling=False,
+            avatar_aspect="portrait",
+            avatar_aspect_note=(
+                "LemonSlice avatars render as 368x560 pixel videos (~9:16 portrait); the vendor "
+                "center-crops the source image to that aspect if it doesn't already match "
+                "(docs.livekit.io/agents/integrations/avatar/lemonslice/)."
+            ),
+        ),
         notes="Exactly one of agent_id/agent_image_url/agent_image is required; ctor also "
         "accepts **kwargs passthrough.",
         docs_url="https://docs.livekit.io/agents/integrations/avatar/",

@@ -463,6 +463,37 @@
           "title": "Audio Input",
           "type": "boolean"
         },
+        "avatar_aspect": {
+          "anyOf": [
+            {
+              "enum": [
+                "portrait",
+                "landscape",
+                "square"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Avatar only (V6-26, D-V6-30): the vendor's documented native video aspect, cited in `avatar_aspect_note`. The console (and the session stage, once a package threads it through `AgentPublicOut` — docs/v6/_asks.md #151) sizes the video well to this before the first frame arrives, so the layout does not jump. `None` = not documented (most vendors' resolution is configurable per call, or undocumented): the well waits for the real track dimensions instead of guessing.",
+          "title": "Avatar Aspect"
+        },
+        "avatar_aspect_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Avatar only (V6-26): one line citing where `avatar_aspect` came from (the vendor's documented default resolution or aspect), e.g. 'Tavus replica video defaults to 1280x720 (docs.tavus.io)'. Unset when `avatar_aspect` is unset.",
+          "title": "Avatar Aspect Note"
+        },
         "cloud_only": {
           "default": false,
           "title": "Cloud Only",
@@ -632,6 +663,8 @@
           "$ref": "#/$defs/ProviderCapabilities",
           "default": {
             "audio_input": true,
+            "avatar_aspect": null,
+            "avatar_aspect_note": null,
             "cloud_only": false,
             "detect_languages": [],
             "end_of_turn": false,

@@ -1878,6 +1878,8 @@ export interface PipelineConfig {
  * via the `definition` "AvatarOptions".
  */
 export interface AvatarOptions {
+  fit?: ("contain" | "cover") | null;
+  framing?: ("auto" | "portrait" | "landscape" | "square") | null;
   idle_timeout_s?: number | null;
   max_duration_s?: number | null;
   participant_name?: string;
@@ -7277,6 +7279,14 @@ export interface ProviderOut {
  */
 export interface ProviderCapabilities {
   audio_input?: boolean;
+  /**
+   * Avatar only (V6-26, D-V6-30): the vendor's documented native video aspect, cited in `avatar_aspect_note`. The console (and the session stage, once a package threads it through `AgentPublicOut` — docs/v6/_asks.md #151) sizes the video well to this before the first frame arrives, so the layout does not jump. `None` = not documented (most vendors' resolution is configurable per call, or undocumented): the well waits for the real track dimensions instead of guessing.
+   */
+  avatar_aspect?: ("portrait" | "landscape" | "square") | null;
+  /**
+   * Avatar only (V6-26): one line citing where `avatar_aspect` came from (the vendor's documented default resolution or aspect), e.g. 'Tavus replica video defaults to 1280x720 (docs.tavus.io)'. Unset when `avatar_aspect` is unset.
+   */
+  avatar_aspect_note?: string | null;
   cloud_only?: boolean;
   /**
    * STT only (V5-31): the base codes automatic detection covers when it is narrower than `languages` (Deepgram's `multi` covers ten). Empty = the same as `languages`.

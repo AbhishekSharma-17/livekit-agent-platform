@@ -817,6 +817,9 @@ class FlowRuntime:
         """
         for _ in range(MAX_TOOL_CHAIN):
             if edge.transition_speech:
+                if referenced_variables(edge.transition_speech) & _extract_names(source.node):
+                    # The line names a value this very transition extracts: wait for it.
+                    await self.settle()
                 self._speak(render_template(edge.transition_speech, self.state.variables))
             self.state.current_node = node.id
             self.state.path.append(node.id)

@@ -262,7 +262,12 @@ class ToolNodeExecutor:
                 if not built:
                     raise _Unavailable("the server was refused or could not be built")
                 toolset = built[0]
-                await toolset.setup()
+                try:
+                    await toolset.setup()
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    raise _Unavailable("the server did not start") from exc
                 tool: lk_llm.Tool | lk_llm.Toolset = toolset
             else:
                 found = self._tools.get(name)

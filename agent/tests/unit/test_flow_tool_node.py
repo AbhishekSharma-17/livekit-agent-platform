@@ -16,7 +16,7 @@ from fakes.fake_llm import FakeLLM
 from livekit.agents import RunContext, ToolError, function_tool, llm
 from lkap_contracts.agent_config import ResolvedAgentConfig
 from lkap_contracts.flow import FlowSpec
-from lkap_contracts.tools import HttpToolDefinition
+from lkap_contracts.tools import HttpToolDefinition, McpServerDefinition
 from test_flow_runtime import ScriptedLLM, ToolCall, _FlowFactory, _history_kinds, _wait_for
 from test_main import FakeJobContext, RoomlessStarter, _deps, _metadata
 
@@ -157,7 +157,7 @@ def _lookup_flow(*, error_edge: bool = True, arguments: dict[str, Any] | None = 
             "source": "ask",
             "target": "lookup",
             "condition": "The caller gave the policy number.",
-            "transition_speech": "One moment.",
+            "transition_speech": "One moment, looking up {{ policy_no }}.",
         },
         {
             "id": "found_it",
@@ -237,7 +237,8 @@ async def test_tool_step_calls_the_tool_binds_the_result_and_takes_the_ok_edge()
         for item in context.items
     )
     kinds = _history_kinds(starter)
-    assert kinds.index("assistant:One moment.") < kinds.index("assistant:Found it, Ada.")
+    # The incoming speech names what the leaving step extracts, so it waited for it.
+    assert kinds.index("assistant:One moment, looking up P-1.") < kinds.index("assistant:Found it, Ada.")
     assert kinds.index("assistant:Found it, Ada.") < kinds.index("handoff:ask->found")
 
     await ctx.fire_shutdown("done")
@@ -384,3 +385,103 @@ async def test_tool_step_hands_its_outcome_to_the_rules_engine() -> None:
     await _wait_for(lambda: session.current_agent.id == "found")
     assert {"policy_lookup": True} in seen
     await ctx.fire_shutdown("done")
+
+
+# ------------------------------------------------------------------ a server of tools (MCP)
+
+
+class _FakeServerTools(llm.Toolset):
+    """Stands in for the `MCPToolset` the worker builds for an MCP row (setup, one tool, close)."""
+
+    def __init__(self, calls: list[dict[str, Any]], *, fail_setup: bool = False) -> None:
+        async def find_contact(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
+            calls.append(dict(raw_arguments))
+            return fence('{"holder": "Ada"}', source="mcp:crm")
+
+        tool = function_tool(
+            find_contact,
+            raw_schema={
+                "name": "find_contact",
+                "description": "Find a contact.",
+                "parameters": {"type": "object", "properties": {"policy": {"type": "string"}}},
+            },
+        )
+        super().__init__(id="mcp_crm", tools=[tool])
+        self.fail_setup = fail_setup
+        self.events: list[str] = []
+
+    async def setup(self) -> _FakeServerTools:
+        self.events.append("setup")
+        if self.fail_setup:
+            raise RuntimeError("the server did not answer")
+        return self
+
+    async def aclose(self) -> None:
+        self.events.append("aclose")
+
+
+CRM_ROW = McpServerDefinition(name="crm", url="https://mcp.example.com/mcp", allowed_tools=["find_contact"])
+
+
+async def _to_server_lookup(*, fail_setup: bool) -> tuple[Any, ...]:
+    calls: list[dict[str, Any]] = []
+    built: list[_FakeServerTools] = []
+    builder_calls: list[dict[str, Any]] = []
+
+    def _mcp_builder(defs: list[Any], **kwargs: Any) -> list[Any]:
+        builder_calls.append({"names": [d.name for d in defs], **kwargs})
+        if kwargs.get("flow_node") and "on_skipped" not in kwargs:
+            fake = _FakeServerTools(calls, fail_setup=fail_setup)
+            built.append(fake)
+            return [fake]
+        return []
+
+    flow = _lookup_flow()
+    lookup = next(n for n in flow["nodes"] if n["id"] == "lookup")
+    lookup.update({"tool": "crm", "mcp_tool": "find_contact"})
+    lookup["arguments"] = {"policy": "{{ var.policy_no }}"}
+    resolved = _config(flow).model_copy(update={"tools": [CRM_ROW]})
+    api = FakeApi(resolved)
+    ctx = FakeJobContext(_metadata())
+    starter = RoomlessStarter()
+    conversation = ScriptedLLM(["Hi.", ToolCall("go_to_lookup"), "Next."])
+    deps = _deps(
+        api,
+        factory=_FlowFactory(conversation, FakeLLM([json.dumps({"policy_no": "P-1"})])),
+        session_starter=starter,
+        declarative_tools_builder=lambda _defs, **_: [],
+        mcp_servers_builder=_mcp_builder,
+    )
+    await run_session(ctx, deps)
+    session = starter.session
+    assert session is not None
+    await session.run(user_input="It is P-1.")
+    return api, ctx, session, calls, built, builder_calls
+
+
+async def test_tool_step_calls_one_tool_of_a_server_and_closes_the_server() -> None:
+    api, ctx, session, calls, built, builder_calls = await _to_server_lookup(fail_setup=False)
+    await _wait_for(lambda: session.current_agent.id == "found")
+
+    assert calls == [{"policy": "P-1"}]
+    assert {"names": ["crm"], "flow_node": True} in builder_calls
+    (server,) = built
+    assert server.events == ["setup", "aclose"]
+    state = session.userdata
+    assert isinstance(state, FlowUserdata)
+    assert state.flow.variables["holder"] == "Ada"
+    await ctx.fire_shutdown("done")
+    (ended,) = [e.payload for e in api.events_of("tool_call_ended") if e.payload.get("flow_node")]
+    assert (ended["tool"], ended["outcome"]) == ("find_contact", "ok")
+
+
+async def test_tool_step_whose_server_does_not_start_takes_the_error_edge_and_still_closes_it() -> None:
+    api, ctx, session, calls, built, _builder_calls = await _to_server_lookup(fail_setup=True)
+    await _wait_for(lambda: session.current_agent.id == "oops")
+
+    assert calls == []
+    (server,) = built
+    assert server.events == ["setup", "aclose"]
+    await ctx.fire_shutdown("done")
+    (ended,) = [e.payload for e in api.events_of("tool_call_ended") if e.payload.get("flow_node")]
+    assert (ended["outcome"], ended["reason"]) == ("error", "unavailable")

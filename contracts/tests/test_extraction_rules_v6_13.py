@@ -468,3 +468,35 @@ def test_extraction_issues_flow_overlap_and_steps() -> None:
         ("extraction.fields[0].name", "warning"),
         ("extraction.triggers[0].nodes", "warning"),
     }
+
+
+def test_extraction_issues_notebook_sections() -> None:
+    notebook = BlockSpec(
+        id="book",
+        type="notebook",
+        config={
+            "sections": [
+                {"id": "summary", "kind": "details"},
+                {"id": "notes", "kind": "text"},
+                {"id": "todo", "kind": "checklist"},
+            ]
+        },
+    )
+    config = ExtractionConfig.model_validate(
+        {
+            "enabled": True,
+            "fields": [
+                {"name": "a", "show_in": "notebook:book.summary"},
+                {"name": "b", "show_in": "notebook:book.notes"},
+                {"name": "c", "show_in": "notebook:book.todo"},
+                {"name": "d", "show_in": "notebook:book.gone"},
+            ],
+        }
+    )
+    issues = {(i.path, i.severity): i.message for i in extraction_issues(config, [notebook])}
+    assert set(issues) == {
+        ("extraction.fields[2].show_in", "error"),
+        ("extraction.fields[3].show_in", "error"),
+    }
+    assert "checklist section" in issues[("extraction.fields[2].show_in", "error")]
+    assert "no section 'gone'" in issues[("extraction.fields[3].show_in", "error")]

@@ -22,8 +22,9 @@ This is the union of the plan's ``cadence`` (every turn, every n turns, manual) 
 brief's triggers (every n turns, tool, step exit); the default is every caller turn.
 
 Where values show (:attr:`ExtractionField.show_in`): ``details:<block_id>`` (a row keyed by
-the field name) or ``details:<block_id>.<key>``; ``notebook:<block_id>.<section_id>`` is
-reserved for the notebook block (V6-08) and refused until it exists. The required fields
+the field name) or ``details:<block_id>.<key>``, or ``notebook:<block_id>.<section_id>`` (a
+``details`` section: a row keyed by the field name; a ``text`` section: a note keyed by the field
+name, "Label: value"). The required fields
 not yet captured are listed as a "still needed" checklist when :attr:`ExtractionConfig.still_needed`
 is ``checklist`` (items ``need_<field>``, ticked as values arrive; other items are kept).
 
@@ -41,6 +42,7 @@ from typing import Annotated, Any, Final, Literal
 
 from pydantic import AfterValidator, BaseModel, Field, field_validator
 
+from lkap_contracts.blocks import NotebookBlockConfig
 from lkap_contracts.common import Issue
 from lkap_contracts.flow import VariableSpec
 from lkap_contracts.ui_protocol import BlockSpec
@@ -126,8 +128,8 @@ class ExtractionField(VariableSpec):
     sensitive: bool = False
     """Never written into an event or a log line, whatever the storage tier."""
     show_in: str | None = Field(default=None, max_length=140)
-    """Where the value shows: ``details:<block_id>[.<key>]``; ``notebook:<block_id>.<section_id>``
-    is reserved for the notebook block."""
+    """Where the value shows: ``details:<block_id>[.<key>]`` or ``notebook:<block_id>.<section_id>``
+    (a details or text section of a notebook block)."""
 
     @field_validator("show_in")
     @classmethod
@@ -238,6 +240,20 @@ class ExtractionEvent(BaseModel):
 # --------------------------------------------------------------------------- validation
 
 
+def _notebook_section_problem(config: Any, section_id: str | None) -> str | None:
+    """Why a notebook section cannot show an extracted value, or ``None``."""
+    try:
+        sections = NotebookBlockConfig.model_validate(config or {}).sections
+    except ValueError:
+        return None  # the panel validator reports the invalid config
+    section = next((s for s in sections if s.id == section_id), None)
+    if section is None:
+        return f"it has no section '{section_id}'"
+    if section.kind not in ("details", "text"):
+        return f"section '{section_id}' is a {section.kind} section; use a details or text section"
+    return None
+
+
 def extraction_issues(
     config: ExtractionConfig,
     blocks: Iterable[BlockSpec],
@@ -250,7 +266,8 @@ def extraction_issues(
     """The semantic checks of ``AgentConfig.extraction`` (nothing when it is off and empty).
 
     * ``show_in`` into a block that is not on the panel or is not a ``details`` block → error;
-      a ``notebook:`` target → error until the notebook block exists.
+      a ``notebook:`` target naming a section the notebook does not have, or a checklist or
+      drawing section → error.
     * ``still_needed: checklist`` with no checklist block, or with no required field → warning.
     * On with no fields → warning.
     * ``node_exit`` on an agent without a flow, or naming a step that does not exist → warning.
@@ -271,7 +288,9 @@ def extraction_issues(
     """
     if not config.enabled and not config.fields:
         return []
+    blocks = list(blocks)
     block_types: Mapping[str, str] = {block.id: str(block.type) for block in blocks}
+    block_configs = {block.id: block.config for block in blocks}
     issues: list[Issue] = []
     if config.enabled and not config.fields:
         issues.append(
@@ -305,6 +324,15 @@ def extraction_issues(
                             f"block, but it is a {kind} block",
                         )
                     )
+                elif target.kind == "notebook":
+                    problem = _notebook_section_problem(block_configs.get(target.block_id), target.key)
+                    if problem is not None:
+                        issues.append(
+                            Issue(
+                                path=f"{path}.show_in",
+                                message=f"'{field.name}' shows in notebook '{target.block_id}': {problem}",
+                            )
+                        )
         if flow_extracted and field.name in flow_extracted:
             issues.append(
                 Issue(

@@ -128,7 +128,7 @@ def _ctx(
 ) -> tuple[FakePackSessionContext, FakeSession]:
     session = FakeSession()
     agent_config = default_agent_config(
-        panel=_PANEL,
+        panel=config.pop("panel", _PANEL),
         extraction=extraction or ExtractionConfig(),
         rules=[Rule.model_validate(rule) for rule in rules or []],
         privacy=PrivacyConfig(storage_tier=tier),  # type: ignore[arg-type]
@@ -493,3 +493,44 @@ def test_known_variables_block_fences_untrusted_values() -> None:
 def test_render_template_caps_a_fenced_value(value: str) -> None:
     rendered = render_template("{{ v }}", {"v": value}, untrusted={"v": "extraction"})
     assert rendered.endswith("... [truncated]</untrusted>")
+
+
+# --------------------------------------------------------------------------- notebook targets (V6-08)
+
+
+async def test_runner_writes_notebook_details_and_text_sections() -> None:
+    from lkap_agent.ui.blocks import initial_block_state
+
+    sections = [
+        {"id": "summary", "title": "Summary", "kind": "details"},
+        {"id": "notes", "title": "Notes", "kind": "text"},
+        {"id": "todo", "title": "Still needed", "kind": "checklist"},
+    ]
+    notebook = BlockSpec(id="book", type="notebook", config={"sections": sections})
+    extraction = ExtractionConfig.model_validate(
+        {
+            "enabled": True,
+            "fields": [
+                {"name": "policy_number", "label": "Policy number", "show_in": "notebook:book.summary"},
+                {"name": "hazard", "show_in": "notebook:book.notes"},
+                {"name": "other", "show_in": "notebook:book.todo"},
+            ],
+        }
+    )
+    llm = DictLLM(
+        {"policy_number": "PX-7", "hazard": "smoke", "other": "x"},
+        {"policy_number": "PX-8", "hazard": "gas"},
+    )
+    ctx, session = _ctx(extraction=extraction, llm=llm, panel=PanelLayout(blocks=[notebook]))
+    ctx.ui.state.blocks["book"] = initial_block_state(notebook)
+    runner = ExtractionRunner(ctx, ctx.config.extraction)
+    session.history.add_message(role="user", content="PX-7, smoke")
+    await runner.run("turn")
+    session.history.add_message(role="user", content="sorry, PX-8 and it is gas")
+    await runner.run("turn")
+    book = ctx.ui.state.blocks["book"]["sections"]
+    assert [(r["key"], r["label"], r["value"]) for r in book["summary"]["items"]] == [
+        ("policy_number", "Policy number", "PX-8")
+    ]
+    assert [(e["key"], e["text"]) for e in book["notes"]["entries"]] == [("hazard", "Hazard: gas")]
+    assert book["todo"]["items"] == []  # a checklist section never takes a value

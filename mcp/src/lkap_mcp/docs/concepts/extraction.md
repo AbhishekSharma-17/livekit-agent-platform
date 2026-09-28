@@ -12,8 +12,8 @@ agent; switch them on with `agent_update(patch={"extraction": {...},
   `string|number|boolean|enum|date|phone|email`, `description`, `options`,
   `required`) plus `label` (what the panel shows), `hint` (guidance for the
   extraction model), `sensitive` (never written into an event) and `show_in`
-  (`details:<block_id>` or `details:<block_id>.<key>`; a notebook section
-  target is reserved for the notebook block).
+  (`details:<block_id>`, `details:<block_id>.<key>`, or
+  `notebook:<block_id>.<section_id>` for a notebook's details or text section).
 - `triggers` — one of each kind: `every_n_turns` with `n` (the default: every
   caller turn), `tool` with `tools` (after one of them returns), `node_exit`
   with `nodes` (when a flow step ends; empty means any step), `manual` (the

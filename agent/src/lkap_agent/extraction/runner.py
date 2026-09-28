@@ -14,8 +14,8 @@ Writes, in order:
    never overwriting a value, and the names into ``userdata["lkap.extracted_variables"]``
    (so a flow fences them in its instructions, ask #31). Names a flow step's own ``extract``
    lists are left to the step;
-2. each field's ``show_in`` row (``details:<block>[.<key>]``; ``notebook:`` targets are
-   skipped until the notebook block exists);
+2. each field's ``show_in``: a ``details`` block's row, or a notebook section's row (a
+   ``details`` section) or keyed note (a ``text`` section);
 3. the "still needed" checklist items (``need_<field>``) when ``still_needed`` is
    ``checklist``, keeping every other item;
 4. one ``extraction`` session event (names and whether each is set; values only on the
@@ -236,43 +236,78 @@ class ExtractionRunner:
 
     # ------------------------------------------------------------------ the panel
 
-    def _block_types(self) -> dict[str, str]:
-        from lkap_agent.ui.blocks import session_block_specs  # noqa: PLC0415 - avoids an import cycle
-
-        panel = getattr(getattr(self.ctx, "config", None), "panel", None)
-        specs = session_block_specs(self.ctx.ui, panel) if panel is not None else []
-        return {spec.id: str(spec.type) for spec in specs}
+    def _rows(self, block_id: str, section_id: str | None) -> list[dict[str, Any]]:
+        state = self.ctx.ui.state.blocks.get(block_id) or {}
+        if not isinstance(state, dict):
+            return []
+        if section_id is not None:
+            section = (state.get("sections") or {}).get(section_id)
+            state = section if isinstance(section, dict) else {}
+        rows = state.get("items") or state.get("entries")
+        return [row for row in rows or [] if isinstance(row, dict)]
 
     async def _show(self, changed: list[str]) -> None:
-        """Write each changed field's ``show_in`` row (details blocks; notebook targets wait for V6-08)."""
+        """Write each changed field where it shows: a details block's row, or a notebook section's
+        row (``details`` section) or keyed note (``text`` section)."""
         wanted = [spec for spec in self.fields if spec.name in changed and spec.show_in]
         if not wanted:
             return
         from lkap_agent.tools.builtin.set_details import DetailIn, detail_item  # noqa: PLC0415
+        from lkap_agent.ui.blocks import (  # noqa: PLC0415 - avoids an import cycle
+            new_notebook_entry_id,
+            notebook_sections,
+            session_block_specs,
+        )
 
-        types = self._block_types()
+        panel = getattr(getattr(self.ctx, "config", None), "panel", None)
+        specs = {
+            spec.id: spec for spec in (session_block_specs(self.ctx.ui, panel) if panel is not None else [])
+        }
         store = self.variables()
+        now = time.time()
         ops: dict[str, list[UiPatchOp]] = {}
-        for spec in wanted:
+        for wanted_field in wanted:
             try:
-                target = parse_show_in(spec.show_in or "")
+                target = parse_show_in(wanted_field.show_in or "")
             except ValueError:
                 continue
-            if target.kind != "details" or types.get(target.block_id) != "details":
-                _log.debug("extraction.show_in_skipped", field=spec.name, kind=target.kind)
+            block = specs.get(target.block_id)
+            if block is None or str(block.type) != target.kind:
+                _log.debug("extraction.show_in_skipped", field=wanted_field.name, kind=target.kind)
                 continue
-            key = target.key or spec.name
-            state = self.ctx.ui.state.blocks.get(target.block_id) or {}
-            rows = state.get("items") if isinstance(state, dict) else None
-            existing = next((r for r in rows or [] if isinstance(r, dict) and r.get("key") == key), None)
-            value = store.get(spec.name)
-            text = ("yes" if value else "no") if isinstance(value, bool) else str(value)
-            row = detail_item(
-                DetailIn(key=key, value=text[:500], label=field_label(spec)), existing, now=time.time()
-            )
-            ops.setdefault(target.block_id, []).append(
-                UiPatchOp(op="upsert", path="/items", value=row, key=key)
-            )
+            value = store.get(wanted_field.name)
+            text = (("yes" if value else "no") if isinstance(value, bool) else str(value))[:500]
+            if target.kind == "details":
+                key = target.key or wanted_field.name
+                existing = next((r for r in self._rows(block.id, None) if r.get("key") == key), None)
+                row = detail_item(
+                    DetailIn(key=key, value=text, label=field_label(wanted_field)), existing, now=now
+                )
+                ops.setdefault(block.id, []).append(UiPatchOp(op="upsert", path="/items", value=row, key=key))
+                continue
+            section = next((s for s in notebook_sections(block) if s.id == target.key), None)
+            if section is None or section.kind not in ("details", "text"):
+                _log.debug("extraction.show_in_skipped", field=wanted_field.name, kind="notebook_section")
+                continue
+            rows = self._rows(block.id, section.id)
+            key = wanted_field.name
+            if section.kind == "details":
+                existing = next((r for r in rows if r.get("key") == key), None)
+                row = detail_item(
+                    DetailIn(key=key, value=text, label=field_label(wanted_field)), existing, now=now
+                )
+                path = f"/sections/{section.id}/items"
+            else:
+                existing = next((r for r in rows if r.get("key") == key), None)
+                row = {
+                    "id": existing.get("id") if existing else new_notebook_entry_id(),
+                    "text": f"{field_label(wanted_field)}: {text}",
+                    "author": "agent",
+                    "key": key,
+                    "ts": now,
+                }
+                path = f"/sections/{section.id}/entries"
+            ops.setdefault(block.id, []).append(UiPatchOp(op="upsert", path=path, value=row, key=key))
         for block_id, block_ops in ops.items():
             try:
                 await self.ctx.ui.patch_block(block_id, block_ops)

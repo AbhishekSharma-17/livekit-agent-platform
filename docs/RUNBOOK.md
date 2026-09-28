@@ -6,6 +6,7 @@ This runbook covers running the LiveKit Agent Platform, operating it (sign-in, L
 - Sections 12–19 are the v1 runbook, from live runs on 2026-09-18 and 2026-09-19. They still hold, except where a v2 section replaces them.
 - Section 20 is v3 (Remote MCP, the `lkap-mcp` service, V3-06).
 - Sections 9.2–9.7 are v5. §9.7 lists every setting, optional extra and migration v5 added in one place; the design is `docs/v5/ARCHITECTURE-V5.md`.
+- Sections 9.8–9.9 are v6 (with the V6-27 notes in §3). §9.9 lists every setting, dependency and migration v6 added; the design is `docs/v6/ARCHITECTURE-V6.md`.
 
 **Binding references:**
 - **v2:** `docs/v2/README.md`, which gives the precedence order: ARCHITECTURE-V2, CONTRACTS-V2, PLAN-V2 §8 rulings.
@@ -65,6 +66,7 @@ Nothing in the repo reads that file or knows where your launcher keeps its confi
 | `LKAP_NET_ALLOW_PRIVATE_HOSTS` | ✓ | | | | comma list of host names, IPs or CIDRs the outbound network guard may reach although they are private. Unset = `localhost,127.0.0.1,::1` in `dev`, nothing in `prod` (§5.1). |
 | `LKAP_SELF_HOSTED_ALLOWED_NETWORKS` | optional | | | | comma list of CIDRs a **self-hosted** LiveKit connection may reach (V5-27, R-V5-17). Unset = loopback, RFC 1918, ULA and CGNAT (the reach before V5-27, so a local install is unchanged); an empty value = none (a self-hosted connection then reaches only what `LKAP_NET_ALLOW_PRIVATE_HOSTS` allows); a list, e.g. `100.64.0.0/10,10.20.0.0/16`, is the ceiling. Metadata, link-local, multicast and reserved addresses stay refused whatever is listed; `localhost` works only when a loopback network is allowed. Set it on a host where workspace admins are not the operator (§5.1). |
 | `LKAP_MCP_OAUTH_ALLOW_UNBOUND` | optional | | | | `true` lets an MCP sign-in finish in a browser that does not hold the start's binder cookie (V5-27, R-V5-14). Default `false`. Only for a deployment whose console and `/v1/oauth/mcp/` are on different sites; neither shipped layout is (§9.3). |
+| `LKAP_CALL_START_WORKER_CHECK` | ✓ | | | | `block` (default), `warn` or `off`: what a call or test chat start does when no worker of an external or supervised connection has been heard from (V6-27, §3). `block` answers 409 `no_worker_running`; `warn` only logs `call_start_no_worker`. The default is pending the user's decision (V6 ask #177). |
 | `LKAP_CONNECTION_ID` | | optional | | | the connection a worker serves. Unset means the default connection. |
 | `LKAP_AGENT_NAME` | | optional | | | must equal the connection's `agent_name` (default `lkap-agent`) |
 | `LKAP_INSTANCE_KEY`, `LKAP_MANAGED_BY` | | set by the supervisor | | | leave unset for a hand-started worker |
@@ -369,7 +371,7 @@ No migration. What an operator notices:
 
 **New required dependencies** (installed by `uv sync`; nothing to configure): on the api `markitdown[docx,pptx,xlsx]` (office and HTML documents, V5-01), `pgvector` (V5-13) and `mcp` (the MCP sign-in helpers, V5-14); on the worker `phonenumbers` (the caller's timezone from their number, V5-51). The Qdrant keyword model for a knowledge connection with native hybrid search is downloaded into `LKAP_DATA_DIR/models` on first use (V5-20). Postgres needs the `vector` extension from `v5_003` on: the compose files use `pgvector/pgvector:pg16` (§9.2). No other vendor key is an environment variable: Composio, knowledge-connection, web-search, SMS, Cal.com, Ragie and moderation keys are stored in the vault through the console or `POST /v1/credentials`.
 
-**Migration chain.** `cd api && uv run alembic heads` prints `v5_008_memory`. The revision ids do not follow the chain order (ids were reserved in the plan's ledger and re-chained as packages merged); the chain, oldest first, is:
+**Migration chain.** At v5's close `cd api && uv run alembic heads` printed `v5_008_memory`; since V6-16 it prints `v6_002_datasets` (§9.9). The revision ids do not follow the chain order (ids were reserved in the plan's ledger and re-chained as packages merged); the chain, oldest first, is:
 
 | Order | Revision | Package | Adds |
 |---|---|---|---|
@@ -404,6 +406,25 @@ preset and three tool kits; `docs/INSURANCE_PACK_MAPPING.md` §5). Creating it o
 refuses stops running and shows as an error on that rule; the agent still loads. Find them with
 `lkap_contracts.rules_expr.nested_repeat` over each stored `config.rules[*].when` pattern, and rewrite each one
 (for example `(fire|smoke)+` → `fire|smoke`).
+
+### 9.9 v6 at a glance: settings, dependencies, migrations, limits
+
+**Settings added or given a new default in v6.** With none set, a local install behaves as before v6 except for the `LKAP_PACKS` default (§9.8).
+
+| Variable | Read by | Default | What it does | Since | More |
+|---|---|---|---|---|---|
+| `LKAP_PACKS` | api and worker | `packs.generic` | The code packs loaded. Before V6-22 the default also listed `packs.insurance_claim`; set `packs.insurance_claim,packs.generic` on both to keep the legacy pack. | V6-22 | §9.8 |
+| `LKAP_CALL_START_WORKER_CHECK` | api | `block` | Fail fast when no worker of the agent's external or supervised connection is running: `block` (409 `no_worker_running`), `warn` (log `call_start_no_worker` only), `off`. Never refuses in the first two minutes after the api starts, or while another connection's live workers answer to the same server and agent name. Use `warn` when workers run without `LKAP_CONNECTION_ID`. The default is Fable's recommendation and awaits the user's decision (V6 ask #177). | V6-27 | §3 |
+
+**Dependencies.** The full worker image installs `livekit-plugins-minimax-ai` 1.8.3 (the `minimax-tts` entry; the stale `livekit-plugins-minimax` is never installed) and no longer installs `livekit-plugins-fireworksai` (Fireworks stopped its speech service; `fireworksai-stt` is `removed` in the registry and a stored agent naming it gets a validator error). The dev venv installs neither. The web adds `perfect-freehand` 1.2.3 (MIT), loaded only when a drawing board renders. Nothing else is new; `livekit-agents` stays at 1.8.3.
+
+**Migration.** One: `v6_002_datasets` (V6-16), chained after `v5_008_memory`; it adds `datasets`, `dataset_rows` and `dataset_keys` and widens the `tools.kind` check to include `dataset` (a table rebuild on SQLite). It drops nothing. Apply it as in §9 (back up first); the rehearsal is `docs/v6/_briefs/migration-rehearsal-v6.md`. `v6_001_inference_credentials` is reserved and not built (below).
+
+**Lookup-table limits (V6-16, V6-21).** Per file: CSV or JSON, at most 5 MiB, 50,000 rows, 64 columns, 8 key columns, key cells of 256 characters. Per workspace: 100 lookup tables and 1,000,000 rows (`lkap_api.limits`), checked before an upload is read. Rate limits per workspace: 10 uploads and 60 console test lookups a minute (`POST /v1/datasets`, `POST /v1/datasets/{id}/lookup`; the worker's internal lookup is not limited); unlike the sign-in and text-chat limits they apply even with `LKAP_RATE_LIMIT_ENABLED=false`. Exported cells that start like a spreadsheet formula get a leading `'`; nothing in a cell is ever evaluated. A phone key matches on its last ten digits, so two numbers that differ only in their country code match each other.
+
+**LiveKit Inference on a self-hosted connection: not available.** A self-hosted connection cannot use LiveKit Inference slots (the validators refuse them), exactly as in v5. The per-connection "LiveKit Cloud Inference credentials" of the v6 plan (D-V6-11) wait for a spike the user runs later (U-V6-1: a free LiveKit Build project and Docker). Do not pass `LIVEKIT_INFERENCE_API_KEY`/`_SECRET` through `LKAP_SUPERVISOR_PASSTHROUGH_ENV` as a workaround: every pool on the host would share them, and the validators still refuse the slots (D-V6-13). When it is built, usage is billed to that Cloud project (Build includes $2.50 of Inference a month, then requests fail) and travels over the public internet.
+
+**Speech.** OpenRouter's speech-to-text and text-to-speech entries wait for the whole utterance or sentence, so the console marks them "not for live calls" and the api adds a tip on a voice pipeline that uses one; use them for text tests and batch work. On a Cloud connection LiveKit Inference is the recommended streaming stack; on a self-hosted one, direct Deepgram and Cartesia keys (`docs/v6/ARCHITECTURE-V6.md` §2).
 
 ## 10. Smoke test
 

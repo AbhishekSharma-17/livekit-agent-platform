@@ -71,7 +71,9 @@ KIT_ORDER: Final[tuple[str, ...]] = (
 #: Placeholder names the api fills itself (a setting may not use them).
 RESERVED_TOKENS: Final[frozenset[str]] = frozenset({"prefix", "dataset_id", "key_column", "tool"})
 #: What the preview shows for a lookup table (``GET /v1/tool-kits``).
-PREVIEW_DATASET_ID: Final[str] = "your_table"
+# Shaped like a real dataset id (S6-15 pins `^[0-9a-f]{32}$`); stands in for the caller's table
+# in the catalogue and in previews until a dataset is chosen.
+PREVIEW_DATASET_ID: Final[str] = "0" * 32
 PREVIEW_KEY_COLUMN: Final[str] = "reference"
 
 _TOKEN_RE: Final = re.compile(r"{{\s*kit\.([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?)\s*}}")

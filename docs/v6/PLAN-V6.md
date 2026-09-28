@@ -389,7 +389,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-11 | Sonnet | 3 | merged | 158346c | | |
 | V6-12 | Opus | 3 | merged | f374804 | | |
 | V6-13 | Opus | 3 | merged | 73dee86 | | |
-| V6-14 | Sonnet | 4 | planned | | | |
+| V6-14 | Sonnet | 4 | merged | aa6dae6 | | |
 | V6-15 | Sonnet | 4 | planned | | | |
 | V6-16 | Opus | 4 | merged | b379030 | | |
 | V6-17 | Opus | 4 | merged | 53b4553 | | |

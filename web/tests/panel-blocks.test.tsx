@@ -117,15 +117,23 @@ describe("block catalog", () => {
     // `agent_state` participant attribute the same way.
     // V6-10: `notebook` joins it too — its own paper CSS and four section renderers;
     // `layout` joins it too — `radix-ui`'s Tabs primitive.
+    // V6-24: `signature`, `chart`, `timer`, `code` and `cart` join it too — `signature`
+    // needs `@livekit/components-react` like `canvas`; the rest follow `table`'s policy
+    // of staying out of the first load for a panel with none of them.
     expect([...LAZY_BLOCK_TYPES].sort()).toEqual([
       "activity",
       "canvas",
       "captions",
+      "cart",
+      "chart",
+      "code",
       "document",
       "layout",
       "markdown",
       "notebook",
+      "signature",
       "table",
+      "timer",
       "transcript",
       "upload",
       "video",

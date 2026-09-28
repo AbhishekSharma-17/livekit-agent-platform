@@ -113,6 +113,32 @@ describe("notebook block", () => {
     expect(screen.getByText(/written by you/)).toBeTruthy();
   });
 
+  it("a caller note with a link renders the text, no anchor (S6-9, ask #86: caller entries render without links)", async () => {
+    const state = fixtureUiState({
+      notebook: {
+        ...notebookFixture,
+        sections: {
+          ...notebookFixture.sections,
+          notes: {
+            kind: "text",
+            entries: [
+              { id: "n1", text: "See [our page](https://example.com) for the agent's own link.", author: "agent", ts: 1 },
+              { id: "n2", text: "Try [this site](https://example.com) I found.", author: "caller", ts: 2 },
+            ],
+          },
+        },
+      },
+    });
+    render(<Block spec={SPEC} {...panelProps({ state })} />);
+    await waitFor(() => expect(screen.getByTestId("block-notebook").getAttribute("data-loading")).toBeNull());
+    // The agent's own entry still links (formatting is unaffected by this rule).
+    const agentLink = screen.getByRole("link", { name: "our page" });
+    expect(agentLink.getAttribute("href")).toBe("https://example.com");
+    // The caller's entry shows the same link text, but unwrapped — never a clickable anchor.
+    expect(screen.getByText(/Try this site I found\./)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "this site" })).toBeNull();
+  });
+
   it("a section missing from state (or with the wrong kind) renders its own empty content, not a crash", () => {
     const state = fixtureUiState({ notebook: { sections: { notes: { kind: "checklist", items: [] } } } });
     expect(() => render(<Block spec={SPEC} {...panelProps({ state })} />)).not.toThrow();

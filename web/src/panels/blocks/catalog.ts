@@ -16,7 +16,23 @@
  * are configurable, and nothing else is — `BlockSpec.config` is public
  * (R-V2-7), so it never carries anything but these.
  */
-import type { DocumentBlockState, FormBlockState, GalleryBlockState, HandoffBlockState, KbCitationsBlockState, TableBlockState, TableColumn, TranscriptBlockState, VideoBlockState, BlockSpec } from "@/contracts/lkap-contracts";
+import type {
+  CartBlockState,
+  ChartBlockState,
+  CodeBlockState,
+  DocumentBlockState,
+  FormBlockState,
+  GalleryBlockState,
+  HandoffBlockState,
+  KbCitationsBlockState,
+  SignatureBlockState,
+  TableBlockState,
+  TableColumn,
+  TimerBlockState,
+  TranscriptBlockState,
+  VideoBlockState,
+  BlockSpec,
+} from "@/contracts/lkap-contracts";
 
 import type { BlockType } from "@/panels/composite/layout";
 
@@ -1012,6 +1028,15 @@ export interface BlockStateByType {
   video: Required<VideoBlockState>;
   kb_citations: Required<KbCitationsBlockState>;
   handoff: Required<HandoffBlockState>;
+  // V6-23: signature/chart/timer/code/cart all start from their contracts state model's
+  // defaults, seeded by any `BlockSpec.config` key of the same name (`signature.disclosure_text`,
+  // `chart.kind`, `timer.mode`, `cart.currency`) — the generic rule below, mirroring the
+  // worker's `initial_block_state`.
+  signature: Required<SignatureBlockState>;
+  chart: Required<ChartBlockState>;
+  timer: Required<TimerBlockState>;
+  code: Required<CodeBlockState>;
+  cart: Required<CartBlockState>;
 }
 
 const STATE_DEFAULTS: { [K in keyof BlockStateByType]: () => BlockStateByType[K] } = {
@@ -1025,6 +1050,12 @@ const STATE_DEFAULTS: { [K in keyof BlockStateByType]: () => BlockStateByType[K]
   // V5-32/36: the worker seeds `handoff` the same way (`ui/blocks.py::BLOCK_STATE_MODELS`,
   // docs/v5/_asks.md #210) — idle, nothing filled in yet.
   handoff: () => ({ status: "idle", mode: null, target: null, queue_position: null, agent_name: null, reason: null }),
+  // V6-23: mirrors `SignatureBlockState`'s own defaults (`ui/blocks.py::BLOCK_STATE_MODELS`).
+  signature: () => ({ status: "idle", submitted_at: null, disclosure_text: "", signed: null, asset_id: null, text_hash: null, at: null }),
+  chart: () => ({ kind: "bar", title: null, unit: null, points: [], gauge_min: 0, gauge_max: 100, caption: null, updated_at: null }),
+  timer: () => ({ mode: "countdown", label: null, status: "idle", duration_s: null, started_at: null, ends_at: null, ended_at: null }),
+  code: () => ({ code: "", language: null, title: null, updated_at: null }),
+  cart: () => ({ currency: "USD", lines: [], adjustments: [], subtotal: 0, total: 0, updated_at: null }),
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

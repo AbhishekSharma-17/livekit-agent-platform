@@ -137,6 +137,7 @@ Themes: **S** speech and pricing · **I** LiveKit Inference · **P** panels · *
 | V6-28 | S | Rules: a stored `matches` pattern the scanner refuses becomes a per-rule validation error instead of a load failure (#166); `CanvasBlockConfig.signature_mode` marked superseded (#212) | Opus | 7 | V6-24 merged; before V6-25 (R-V6-3) |
 | V6-29 | R | Hardening from the re-review (R-V6-4): S6-26 and S6-27 (gate), S6-28 … S6-32; the card is R-V6-4 | Opus | 7 | V6-28 merged; before V6-25's final sign-off |
 | V6-30 | P+T | Demo-quality fixes from the V6 demos run (`_briefs/v6-demos-populate.md` F-1…F-5): live extraction timing out, panel tools refusing JSON-string arguments, `search_knowledge` without a knowledge base, reasoning read aloud, archived agents shown as live in the console | Opus | 8 | V6 closed (user request 2026-09-29) |
+| V6-31 | S | Reasoning-model awareness: a per-model capability view from the provider catalogs (reasoning, supported parameters), a `reasoning_effort` setting, unsupported parameters dropped instead of failing (GPT-6 Luna 404), latency-aware defaults and console hints for voice | Opus | 8 | V6-30 merged (user request 2026-09-29) |
 
 **Parallel-safe pairs and groups** (disjoint exclusive files; contracts commits still serialised in the listed order):
 
@@ -443,6 +444,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-28 | Opus | 7 | merged | 780d650 | none | |
 | V6-29 | Opus | 7 | merged | a04a489 | none | |
 | V6-30 | Opus | 8 | merged | 60db953 | | #296–#301 |
+| V6-31 | Opus | 8 | running | | | |
 
 Migrations applied to the dev DB (the coordinator appends: id · date · backup path in the scratchpad, never in the repo): `v6_002_datasets` · 2026-09-28 · backup `lkap.db.pre-v6_002` (U-V6-3). `v6_001` not applied (V6-05 deferred).
 

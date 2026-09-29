@@ -4537,6 +4537,11 @@ export interface CredentialCreate {
 /**
  * A stored credential, without any secret material.
  *
+ * V6-32: the last key test (every ``POST /v1/credentials/{id}/test`` is
+ * recorded, including the one run right after adding the key) and when a
+ * session, a tool call, a catalog read or a knowledge-base embed last used
+ * the key. All four are ``None`` until it happens.
+ *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "CredentialOut".
  */
@@ -4545,6 +4550,16 @@ export interface CredentialOut {
   fingerprint: string;
   id: string;
   label: string;
+  last_test_at?: string | null;
+  last_test_message?: string | null;
+  /**
+   * `true` the key worked, `false` it failed, `null` untested or the provider has no automatic test
+   */
+  last_test_ok?: boolean | null;
+  /**
+   * When a session, tool call, catalog read or embed last used the key (to within a minute)
+   */
+  last_used_at?: string | null;
   provider_id: string;
   updated_at: string;
 }
@@ -7684,7 +7699,7 @@ export interface ProviderOut {
   capabilities?: ProviderCapabilities;
   catalog?: CatalogSpec | null;
   /**
-   * The registry id whose credential rows this provider uses (its credential home, R-V4-7). Unset means the provider is its own home. The home exists, has no home of its own and declares the same secret field names.
+   * The registry id whose credential rows this provider uses (its credential home, R-V4-7). Unset means the provider is its own home. The home exists, has no home of its own and declares the same secret field names. V6-32: every entry of a vendor whose entries take the same account key names one home (`credential_family`), and a row stored under any member of the family serves the whole family.
    */
   credential_provider?: string | null;
   default_credential_id?: string | null;
@@ -7712,6 +7727,10 @@ export interface ProviderOut {
     | "sms"
     | "knowledge";
   label: string;
+  /**
+   * V6-32: whether the console offers this entry in its pickers and counts it on a key's tags. `False` keeps the entry valid and runnable for a stored agent that already uses it (validation, resolution and the worker are unchanged); `unlisted_note` says why in plain words.
+   */
+  listed?: boolean;
   models?: ModelSpec[];
   notes?: string | null;
   package: string;
@@ -7736,6 +7755,10 @@ export interface ProviderOut {
    */
   telephony_variant?: string | null;
   test?: string | null;
+  /**
+   * V6-32: the plain-words reason an entry is not offered (`listed` is `False`).
+   */
+  unlisted_note?: string | null;
   v?: 1 | 2;
   vendor: string;
   verification?: "verified" | "unverified";
@@ -7894,7 +7917,7 @@ export interface ProviderSpec {
   capabilities?: ProviderCapabilities;
   catalog?: CatalogSpec | null;
   /**
-   * The registry id whose credential rows this provider uses (its credential home, R-V4-7). Unset means the provider is its own home. The home exists, has no home of its own and declares the same secret field names.
+   * The registry id whose credential rows this provider uses (its credential home, R-V4-7). Unset means the provider is its own home. The home exists, has no home of its own and declares the same secret field names. V6-32: every entry of a vendor whose entries take the same account key names one home (`credential_family`), and a row stored under any member of the family serves the whole family.
    */
   credential_provider?: string | null;
   default_model?: string | null;
@@ -7919,6 +7942,10 @@ export interface ProviderSpec {
     | "sms"
     | "knowledge";
   label: string;
+  /**
+   * V6-32: whether the console offers this entry in its pickers and counts it on a key's tags. `False` keeps the entry valid and runnable for a stored agent that already uses it (validation, resolution and the worker are unchanged); `unlisted_note` says why in plain words.
+   */
+  listed?: boolean;
   models?: ModelSpec[];
   notes?: string | null;
   package: string;
@@ -7943,6 +7970,10 @@ export interface ProviderSpec {
    */
   telephony_variant?: string | null;
   test?: string | null;
+  /**
+   * V6-32: the plain-words reason an entry is not offered (`listed` is `False`).
+   */
+  unlisted_note?: string | null;
   v?: 1 | 2;
   vendor: string;
   verification?: "verified" | "unverified";

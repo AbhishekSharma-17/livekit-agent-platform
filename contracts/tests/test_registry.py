@@ -17,9 +17,11 @@ from lkap_contracts.providers import (
     ProviderSpec,
     available_providers,
     by_kind,
+    credential_family,
     credential_home,
     get,
     mvp_providers,
+    shares_credential,
     vision_support,
 )
 
@@ -301,15 +303,88 @@ def test_credential_home_resolves_aliases_and_passes_other_ids_through() -> None
     assert credential_home("not-a-provider") == "not-a-provider"
 
 
-def test_only_the_four_non_llm_openrouter_entries_and_deepgram_flux_have_a_home() -> None:
-    aliased = {s.id for s in REGISTRY if s.credential_provider is not None}
-    assert aliased == {
+#: V6-32: every key family and its home (R-V4-7 widened). A change here is a change to where
+#: new keys are stored; stored rows keep working through ``credential_family``.
+EXPECTED_FAMILIES: dict[str, set[str]] = {
+    "openrouter-llm": {
+        "openrouter-llm",
         "openrouter-stt",
         "openrouter-tts",
         "openrouter-embedding",
         "openrouter-image-gen",
-        "deepgram-flux-stt",  # V6-02: one Deepgram key serves Nova and Flux
-    }
+    },
+    "deepgram-stt": {"deepgram-stt", "deepgram-flux-stt", "deepgram-tts"},
+    "cartesia-tts": {"cartesia-tts", "cartesia-stt"},
+    "elevenlabs-tts": {"elevenlabs-tts", "elevenlabs-stt"},
+    "openai-llm": {
+        "openai-llm",
+        "openai-realtime",
+        "openai-gptlive-realtime",
+        "openai-responses-llm",
+        "openai-stt",
+        "openai-tts",
+        "openai-embedding",
+        "openai-image-gen",
+    },
+    "google-llm": {"google-llm", "google-realtime", "google-image-gen"},
+    "groq-llm": {"groq-llm", "groq-stt", "groq-tts"},
+    "baseten-llm": {"baseten-llm", "baseten-stt", "baseten-tts"},
+    "xai-llm": {"xai-llm", "xai-realtime", "xai-stt", "xai-tts"},
+    "mistral-llm": {"mistral-llm", "mistral-stt"},
+    "aws-bedrock-llm": {"aws-bedrock-llm", "aws-polly-tts"},
+    "gnani-stt": {"gnani-stt", "gnani-tts"},
+    "gradium-stt": {"gradium-stt", "gradium-tts"},
+    "sarvam-stt": {"sarvam-stt", "sarvam-tts"},
+    "slng-stt": {"slng-stt", "slng-tts"},
+    "smallestai-stt": {"smallestai-stt", "smallestai-tts"},
+    "speechmatics-stt": {"speechmatics-stt", "speechmatics-tts"},
+}
+
+
+def test_every_shared_key_family_has_exactly_the_expected_members_and_home() -> None:
+    families: dict[str, set[str]] = {}
+    for spec in REGISTRY:
+        if spec.credential_provider is not None:
+            families.setdefault(spec.credential_provider, {spec.credential_provider}).add(spec.id)
+    assert families == EXPECTED_FAMILIES
+
+
+@pytest.mark.parametrize("home", sorted(EXPECTED_FAMILIES))
+def test_credential_family_is_the_same_set_from_every_member(home: str) -> None:
+    for member in EXPECTED_FAMILIES[home]:
+        assert credential_family(member) == frozenset(EXPECTED_FAMILIES[home])
+        assert credential_home(member) == home
+
+
+def test_a_deepgram_key_serves_the_deepgram_voice_but_never_another_vendor() -> None:
+    assert shares_credential("deepgram-stt", "deepgram-tts")
+    assert shares_credential("deepgram-tts", "deepgram-flux-stt")
+    assert not shares_credential("deepgram-stt", "cartesia-tts")
+    assert not shares_credential("openai-llm", "openrouter-llm")
+    assert not shares_credential("azure-openai-realtime", "openai-realtime")
+
+
+def test_vendors_left_separate_until_their_plugins_are_read_have_no_home() -> None:
+    # docs/v6/_asks.md #313: one member records no environment variable, so not verified.
+    separate = ("palabra-tts", "simplismart-tts", "soniox-tts", "telnyx-tts", "nvidia-tts", "azure-tts")
+    for provider_id in separate:
+        assert get(provider_id).credential_provider is None
+    # Service-account credentials, not the Gemini API key.
+    assert credential_family("google-stt") == frozenset({"google-stt"})
+
+
+def test_an_unknown_id_is_its_own_one_member_family() -> None:
+    assert credential_family("not-a-provider") == frozenset({"not-a-provider"})
+
+
+def test_only_the_openrouter_speech_entries_are_unlisted_and_each_says_why() -> None:
+    unlisted = {spec.id for spec in REGISTRY if not spec.listed}
+    assert unlisted == {"openrouter-stt", "openrouter-tts"}
+    for provider_id in unlisted:
+        spec = get(provider_id)
+        assert spec.availability == "available"  # stored agents still validate and run
+        assert spec.unlisted_note
+    assert all(spec.unlisted_note is None for spec in REGISTRY if spec.listed)
 
 
 # --------------------------------------------------------------------------- OpenRouter (D-V4-9, R-V4-8)

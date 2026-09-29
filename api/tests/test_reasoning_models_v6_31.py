@@ -191,11 +191,13 @@ def test_an_uncached_catalog_gives_no_findings() -> None:
     assert reasoning_issues(_ctx("openai/gpt-6-luna", None, temperature=0.7)) == []
 
 
-def test_a_model_that_always_reasons_gets_a_tip() -> None:
+def test_a_reasoning_model_without_an_effort_setting_gets_a_tip() -> None:
     (issue,) = reasoning_issues(_ctx("deepseek/deepseek-r1", R1_META))
 
     assert issue.path == "pipeline.llm"
-    assert issue.message.startswith("Tip: 'deepseek/deepseek-r1' always thinks before it answers")
+    assert issue.message.startswith(
+        "Tip: 'deepseek/deepseek-r1' can think before it answers and has no effort setting"
+    )
 
 
 def test_the_background_model_gets_parameter_warnings_but_no_voice_warning() -> None:

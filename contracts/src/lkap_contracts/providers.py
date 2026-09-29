@@ -1047,7 +1047,9 @@ _AVAILABLE: list[ProviderSpec] = [
             # itself treats as reasoning models (`inference/llm.py` `_MIN_REASONING_EFFORT`,
             # `plugins/openai/models.py` `_supports_reasoning_effort`); the effort lists are OpenRouter's
             # public listing for the same ids (2026-09-29). The Gemini ids stay unknown: whether
-            # Inference passes `reasoning_effort` to them is not verified.
+            # Inference passes `reasoning_effort` to them is not verified. Note: with tools, the SDK
+            # strips `reasoning_effort` for `gpt-5.2*`/`gpt-5.4*` ids itself
+            # (`_REASONING_EFFORT_TOOL_INCOMPATIBLE_PREFIXES`), so GPT-5.4 mini runs at its own default.
             ModelSpec(id="openai/gpt-4.1", label="GPT-4.1", reasoning=False),
             ModelSpec(id="openai/gpt-4o-mini", label="GPT-4o mini", reasoning=False),
             ModelSpec(

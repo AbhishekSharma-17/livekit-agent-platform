@@ -11,7 +11,7 @@ is an error — a save never fails on it; each warning says what the agent will 
   replaced by the next level it offers;
 * a reasoning model thinking at ``medium`` or more on a voice pipeline adds several seconds to
   every reply (measured 2026-09-29: 8.2 s against 3.6 s from end of speech to first audio), and a
-  model that always reasons with no effort setting gets a tip.
+  reasoning model with no effort setting gets a tip.
 
 Only the slots the worker shapes are checked (``llm`` and ``workflow_llm``); a model id that fails
 the id rule is never quoted (R-V4-21) and gets no finding.
@@ -58,11 +58,12 @@ SLOW_VOICE_EFFORT_MESSAGE: Final[str] = (
     "conversation"
 )
 
-#: The tip for a model that always reasons and takes no effort setting.
+#: The tip for a reasoning model that takes no effort setting (the view does not say whether it
+#: thinks on every turn, so the wording says "can").
 ALWAYS_REASONS_TIP: Final[str] = (
-    "Tip: {name} always thinks before it answers and has no effort setting, which can add seconds "
-    "to each reply on a voice call; a model without reasoning, or one whose effort can be lowered, "
-    "answers faster"
+    "Tip: {name} can think before it answers and has no effort setting, so how long it thinks is up "
+    "to the model, which can add seconds to each reply on a voice call; a model without reasoning, or "
+    "one whose effort can be lowered, answers faster"
 )
 
 

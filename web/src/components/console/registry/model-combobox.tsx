@@ -11,6 +11,7 @@ import { useCredentials, useProviderModels, useProviders } from "@/components/co
 import { formatUsdPerMin, usePriceQuotes } from "@/components/console/lib/cost-hooks";
 import { catalogSaysVision } from "@/components/console/registry/model-capabilities";
 import { TestedChip, testedStateFor } from "@/components/console/registry/model-test-panel";
+import { modelBlurb } from "@/components/console/registry/model-blurb";
 import { isOpenRouterSpeech } from "@/components/console/registry/provider-meta";
 import { FAST_VOICE_NOTE, isFastForVoice, resolveReasoning } from "@/components/console/registry/reasoning";
 import { CATALOG_FULL_LIMIT, useCatalog } from "@/hooks/useCatalog";
@@ -24,6 +25,8 @@ const CATALOG_RENDER_CAP = 100;
 /** The provider context the combobox needs for its live groups (all optional: without it, it is today's suggestions-only picker). */
 export type ModelComboboxProvider = Pick<ProviderSpec, "id" | "vendor" | "probe" | "requires_credential" | "kind"> & {
   catalog?: CatalogSpec | null;
+  /** V6-33: what the provider can do (streaming, ends turns itself), for the one-line note under each model. */
+  capabilities?: ProviderSpec["capabilities"];
 };
 
 export interface ModelComboboxProps {
@@ -51,6 +54,8 @@ export interface ModelComboboxProps {
   credentialId?: string | null;
   /** `ProvidersResponse.model_id_rules`; read from the providers cache when omitted. */
   rules?: ModelIdRules | null;
+  /** The slot's stored option values, so a streaming switch (`use_realtime`) reads right in the one-line notes. */
+  fields?: Record<string, unknown> | null;
 }
 
 /** Whether a provider has a live model list (`catalog.kinds` includes `models`). */
@@ -270,6 +275,7 @@ function ModelComboboxView({
   "aria-invalid": invalid,
   provider,
   rules: rulesProp,
+  fields,
   live,
 }: ModelComboboxProps & { live: LiveData }) {
   const [openState, setOpenState] = React.useState(false);
@@ -296,6 +302,8 @@ function ModelComboboxView({
   }
 
   const catalogItems = live.catalogItems;
+  const blurbFor = (blurbModelId: string, item?: CatalogItem) =>
+    modelBlurb({ provider, models, modelId: blurbModelId, catalogItem: item, fields });
   const catalogById = new Map(catalogItems.map((item) => [item.id, item]));
   const effective = value.trim() || defaultModel || "";
   const suggestedIds = new Set(models.map((m) => m.id));
@@ -410,6 +418,7 @@ function ModelComboboxView({
                         <ModelPriceHint priceQuotes={live.priceQuotes} modelId={model.id} />
                       </span>
                       <span className="truncate font-mono text-xs text-muted-foreground">{model.id}</span>
+                      <ModelBlurb text={blurbFor(model.id, catalogById.get(model.id))} />
                       {model.note ? <span className="text-xs text-muted-foreground">{model.note}</span> : null}
                     </div>
                   </CommandItem>
@@ -451,6 +460,7 @@ function ModelComboboxView({
                       <span className="truncate font-mono text-xs text-muted-foreground" title={item.id}>
                         {item.id}
                       </span>
+                      <ModelBlurb text={blurbFor(item.id, item)} />
                     </div>
                   </CommandItem>
                 ))}
@@ -512,6 +522,16 @@ function ModelComboboxView({
         </Command>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** The one line that says what a model does (V6-33); nothing when the platform knows nothing worth saying. */
+export function ModelBlurb({ text, className }: { text: string | null | undefined; className?: string }) {
+  if (!text) return null;
+  return (
+    <span data-slot="model-blurb" className={cn("text-xs text-pretty text-foreground/80", className)}>
+      {text}
+    </span>
   );
 }
 

@@ -58,6 +58,7 @@ function stubFetch(templateStatus: 200 | 404 = 200) {
     if (url.startsWith("/api/console/providers")) return respond({ providers: [] });
     if (url.startsWith("/api/console/packs")) return respond({ items: [] });
     if (url.startsWith("/api/console/tools")) return respond({ items: [], total: 0 });
+    if (url.startsWith("/api/console/connections")) return respond({ items: [], total: 0 });
     throw new Error(`Unhandled fetch: ${url}`);
   });
   vi.stubGlobal("fetch", fetchMock);

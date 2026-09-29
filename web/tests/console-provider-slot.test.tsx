@@ -416,26 +416,30 @@ function TabHarness({ values }: { values: Partial<AgentEditorForm["config"]> }) 
 describe("ProvidersTab", () => {
   it("shows the cascaded pipeline in order and switches to realtime from the mode cards", async () => {
     withClient(<TabHarness values={{}} />);
-    const slots = await screen.findByRole("list", { name: "Pipeline slots" });
+    const slots = await screen.findByRole("list", { name: "Pipeline parts" });
     const titles = within(slots)
       .getAllByRole("heading", { level: 3 })
       .map((h) => h.textContent);
-    expect(titles).toEqual(["Speech-to-text", "Language model", "Text-to-speech"]);
+    expect(titles).toEqual([
+      "Listens: turns speech into text",
+      "Thinks: understands, decides, calls tools, writes the reply",
+      "Speaks: turns the reply into voice",
+    ]);
 
     fireEvent.click(screen.getByRole("radio", { name: /Realtime/ }));
     expect(screen.getByTestId("mode").textContent).toBe("realtime");
     await waitFor(() =>
       expect(
-        within(screen.getByRole("list", { name: "Pipeline slots" }))
+        within(screen.getByRole("list", { name: "Pipeline parts" }))
           .getAllByRole("heading", { level: 3 })
           .map((h) => h.textContent),
-      ).toEqual(["Realtime model"]),
+      ).toEqual(["Listens, thinks and speaks in one model"]),
     );
   });
 
   it("keeps one slot open at a time", async () => {
     withClient(<TabHarness values={{}} />);
-    await screen.findByRole("list", { name: "Pipeline slots" });
+    await screen.findByRole("list", { name: "Pipeline parts" });
     fireEvent.click(screen.getByRole("button", { name: /Edit speech-to-text/i }));
     fireEvent.click(screen.getByRole("button", { name: /Edit language model/i }));
     expect(screen.getAllByRole("button", { name: /Done/ })).toHaveLength(1);
@@ -444,19 +448,19 @@ describe("ProvidersTab", () => {
   it("puts optional slots behind Add buttons and removes them again", async () => {
     withClient(<TabHarness values={{}} />);
     fireEvent.click(await screen.findByRole("button", { name: "Add avatar" }));
-    const avatar = screen.getByRole("region", { name: "Avatar" });
+    const avatar = screen.getByRole("region", { name: /^Gives the agent a face/ });
     // Avatars have no Inference option: the vendor list shows directly.
     expect(within(avatar).queryByRole("radio", { name: /LiveKit Inference/ })).toBeNull();
     fireEvent.click(within(avatar).getByRole("radio", { name: /Beyond Presence/ }));
     expect(screen.getByTestId("dirty").textContent).toBe("true");
     fireEvent.click(within(avatar).getByRole("button", { name: "Remove" }));
-    expect(screen.queryByRole("region", { name: "Avatar" })).toBeNull();
+    expect(screen.queryByRole("region", { name: /^Gives the agent a face/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Add avatar" })).toBeTruthy();
 
     // An added slot left empty can be dismissed too.
     fireEvent.click(screen.getByRole("button", { name: "Add image generation" }));
-    fireEvent.click(within(screen.getByRole("region", { name: "Image generation" })).getByRole("button", { name: "Remove" }));
-    expect(screen.queryByRole("region", { name: "Image generation" })).toBeNull();
+    fireEvent.click(within(screen.getByRole("region", { name: /^Draws pictures/ })).getByRole("button", { name: "Remove" }));
+    expect(screen.queryByRole("region", { name: /^Draws pictures/ })).toBeNull();
   });
 
   it("warns on the language model when the camera is on and the model is text-only", async () => {
@@ -498,10 +502,10 @@ describe("ProvidersTab", () => {
       />,
     );
     expect(await screen.findByText(/uses half-cascade/)).toBeTruthy();
-    const titles = within(screen.getByRole("list", { name: "Pipeline slots" }))
+    const titles = within(screen.getByRole("list", { name: "Pipeline parts" }))
       .getAllByRole("heading", { level: 3 })
       .map((h) => h.textContent);
-    expect(titles).toEqual(["Realtime model", "Text-to-speech"]);
+    expect(titles).toEqual(["Listens, thinks and speaks in one model", "Speaks: turns the reply into voice"]);
   });
 });
 
@@ -628,10 +632,10 @@ describe("ProvidersTab — cost estimate (docs/v4/COSTS.md §5 item 2)", () => {
 
   it("shows a priced slot's own chip and 'no price' with Set a price for an unpriced, admin-only slot", async () => {
     withClient(<TabWithEstimate values={{}} />);
-    const sttCard = await screen.findByRole("region", { name: "Speech-to-text" });
+    const sttCard = await screen.findByRole("region", { name: /^Listens: turns speech into text/ });
     await waitFor(() => expect(within(sttCard).getByText(/≈ \$0\.0048\/min · estimate/)).toBeTruthy(), { timeout: 3000 });
 
-    const llmCard = screen.getByRole("region", { name: "Language model" });
+    const llmCard = screen.getByRole("region", { name: /^Thinks: understands, decides, calls tools, writes the reply/ });
     await waitFor(() => expect(within(llmCard).getByText("no price")).toBeTruthy(), { timeout: 3000 });
     expect(within(llmCard).getByRole("button", { name: "Set a price" })).toBeTruthy();
   });

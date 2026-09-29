@@ -20,11 +20,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Field } from "@/components/shared/field";
 import { Icon } from "@/components/shared/icon";
-import { CAPABILITY_META } from "@/components/shared/capability-meta";
 import { resolveBoundConnection } from "@/components/console/agents/providers-section/connection-gate";
+import {
+  avatarConnectionNote,
+  noiseConnectionNote,
+  turnEnderSentence,
+  whoEndsTurn,
+} from "@/components/console/agents/providers-section/pipeline-summary";
+import { ConnectionNotes, PipelineSummaryLine } from "@/components/console/agents/providers-section/pipeline-summary-line";
 import { useSectionIssues } from "@/components/console/agents/editor/editor-context";
 import { useProviders } from "@/components/console/lib/api-hooks";
 import { ProviderSlotCard } from "@/components/console/registry/provider-slot-card";
+import { PART_JOBS } from "@/components/console/registry/slot-jobs";
 import {
   connectionDisabledReason,
   isKnownTextOnlyLlm,
@@ -53,46 +60,61 @@ type PipelineMode = AgentEditorForm["config"]["pipeline"]["mode"];
 interface SlotDef {
   key: SlotKey;
   kind: ProviderKind;
+  /** The technical name, shown small under the job (V6-33). */
   title: string;
-  description: string;
+  /** What the part does, in plain words; leads the card. */
+  job: string;
+  /** A line under the job where there is more to say; the turn-detection one is built from the agent's setup. */
+  description?: string;
 }
 
 const SLOTS: Record<SlotKey, SlotDef> = {
-  stt: { key: "stt", kind: "stt", title: "Speech-to-text", description: "Turns the caller's speech into text." },
-  llm: { key: "llm", kind: "llm", title: "Language model", description: "Decides what to say and which tools to call." },
-  tts: { key: "tts", kind: "tts", title: "Text-to-speech", description: "Speaks the model's replies." },
+  stt: { key: "stt", kind: "stt", title: PART_JOBS.stt.name, job: PART_JOBS.stt.job },
+  llm: { key: "llm", kind: "llm", title: PART_JOBS.llm.name, job: PART_JOBS.llm.job },
+  tts: { key: "tts", kind: "tts", title: PART_JOBS.tts.name, job: PART_JOBS.tts.job },
   realtime: {
     key: "realtime",
     kind: "realtime",
-    title: "Realtime model",
-    description: "Hears, thinks and speaks in one model; can watch the camera live when it supports video.",
+    title: PART_JOBS.realtime.name,
+    job: PART_JOBS.realtime.job,
+    description: "Can watch the camera live when it supports video.",
   },
-  avatar: { key: "avatar", kind: "avatar", title: "Avatar", description: "A talking-head video shown on the call's stage." },
+  avatar: {
+    key: "avatar",
+    kind: "avatar",
+    title: PART_JOBS.avatar.name,
+    job: PART_JOBS.avatar.job,
+    description: "A talking-head video shown on the call's stage.",
+  },
   image_gen: {
     key: "image_gen",
     kind: "image_gen",
-    title: "Image generation",
+    title: PART_JOBS.image_gen.name,
+    job: PART_JOBS.image_gen.job,
     description: "Used by packs that draw sketches or illustrations, such as the insurance notebook.",
   },
   workflow_llm: {
     key: "workflow_llm",
     kind: "llm",
-    title: "Workflow model",
+    title: PART_JOBS.workflow_llm.name,
+    job: PART_JOBS.workflow_llm.job,
     description:
       "Used by packs for structured extraction. When unset: the main language model (cascaded) or a LiveKit Inference model (realtime).",
   },
-  vad: { key: "vad", kind: "vad", title: "Voice activity detection", description: "Decides when the caller is speaking. Unset uses Silero locally." },
-  turn_detection: {
-    key: "turn_detection",
-    kind: "turn_detection",
-    title: "Turn detection",
-    description: "Decides when the caller has finished a turn. Unset uses LiveKit Inference's turn detector.",
+  vad: {
+    key: "vad",
+    kind: "vad",
+    title: PART_JOBS.vad.name,
+    job: PART_JOBS.vad.job,
+    description: "Notices when the caller is speaking. Unset uses Silero, running in the agent's worker.",
   },
+  turn_detection: { key: "turn_detection", kind: "turn_detection", title: PART_JOBS.turn_detection.name, job: PART_JOBS.turn_detection.job },
   noise_cancellation: {
     key: "noise_cancellation",
     kind: "noise_cancellation",
-    title: "Noise cancellation",
-    description: "Cleans up the caller's audio before it reaches STT/the realtime model.",
+    title: PART_JOBS.noise_cancellation.name,
+    job: PART_JOBS.noise_cancellation.job,
+    description: "Cleans up the caller's audio before it reaches the listener.",
   },
 };
 
@@ -198,10 +220,27 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
     }
   }
 
+  /** The line under a part's job. Turn detection says who ends the turn when it is left unset (V6-33). */
+  function slotDescription(key: SlotKey): string | undefined {
+    if (key === "turn_detection") {
+      const ender = whoEndsTurn({ pipeline: { ...pipeline, turn_detection: null }, providers, connection: boundConnection });
+      return ender ? `If you leave this unset: ${turnEnderSentence(ender)}` : undefined;
+    }
+    return SLOTS[key].description;
+  }
+
+  /** A Cloud-versus-self-hosted note that belongs on one part's card. */
+  function connectionNoteFor(key: SlotKey): string | null {
+    if (key === "avatar") return avatarConnectionNote(boundConnection);
+    if (key === "noise_cancellation") return noiseConnectionNote(boundConnection);
+    return null;
+  }
+
   function renderSlot(key: SlotKey, optional: boolean, extraConstraints?: Partial<SlotConstraints>) {
     const def = SLOTS[key];
     const problem = slotError(key);
     const isLlmWithNote = key === "llm" && showVisionNote;
+    const connectionNote = connectionNoteFor(key);
     return (
       <Controller
         key={key}
@@ -210,7 +249,8 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
         render={({ field }) => (
           <ProviderSlotCard
             title={def.title}
-            description={def.description}
+            job={def.job}
+            description={slotDescription(key)}
             kind={def.kind}
             value={field.value}
             onChange={field.onChange}
@@ -258,6 +298,10 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
                     setVisionPickerOpen(true);
                   }}
                 />
+              ) : connectionNote ? (
+                <p data-slot="connection-note" className="text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">
+                  {connectionNote}
+                </p>
               ) : undefined
             }
           />
@@ -274,6 +318,11 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
 
   return (
     <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-3">
+        <PipelineSummaryLine pipeline={pipeline} providers={providers} connection={boundConnection} />
+        <ConnectionNotes connection={boundConnection} />
+      </div>
+
       <Group title="How it talks" description="Pick how speech flows through the agent. You can switch later; the other mode's choices are kept until you save.">
         <Controller
           control={control}
@@ -293,7 +342,7 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
       </Group>
 
       <Group title="Pipeline" description={pipelineSlots.length > 1 ? "In the order a turn flows through them." : undefined}>
-        <ol className="flex flex-col" aria-label="Pipeline slots">
+        <ol className="flex flex-col" aria-label="Pipeline parts">
           {pipelineSlots.map((key, index) => (
             <li key={key} className="flex flex-col">
               {index > 0 ? <span aria-hidden="true" className="ml-7 h-4 w-px bg-border" /> : null}
@@ -340,18 +389,11 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
       <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
         <CollapsibleTrigger className="group/adv inline-flex items-center gap-1 rounded-xs text-sm font-medium text-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
           <ChevronRightIcon className="size-4 transition-transform duration-(--dur-2) group-data-[state=open]/adv:rotate-90" aria-hidden="true" />
-          Advanced: VAD, turn detection, noise cancellation
+          Advanced: hearing speech, ending turns, filtering noise
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-3 flex flex-col gap-3">
           <p className="max-w-[65ch] text-[0.8125rem] text-pretty text-muted-foreground">
-            Unset uses the connection&apos;s defaults:{" "}
-            {boundConnection?.capabilities?.turn_detector_mode === "local"
-              ? "a local turn-detector model"
-              : `${CAPABILITY_META.turn_detector.label.toLowerCase()} through LiveKit Inference`}
-            {boundConnection?.capabilities?.noise_cancellation_tier && boundConnection.capabilities.noise_cancellation_tier !== "none"
-              ? `, and ${boundConnection.capabilities.noise_cancellation_tier} noise cancellation`
-              : ""}
-            .
+            You only need these to change the defaults. Left unset, the agent uses the connection&apos;s own choices.
           </p>
           {ADVANCED_SLOTS.map((key) => renderSlot(key, true))}
         </CollapsibleContent>

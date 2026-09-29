@@ -54,6 +54,7 @@ from lkap_contracts.providers import get as get_spec
 
 from lkap_agent.logging import get_logger
 from lkap_agent.providers.openrouter_llm import with_inline_tool_schemas
+from lkap_agent.providers.reasoning import llm_capability_kwargs, request_parameters_of
 from lkap_agent.providers.special_cases import (
     ProviderBuildError,
     apply_pipeline_mode,
@@ -121,6 +122,11 @@ _INFERENCE_PREFIX: Final[str] = "livekit-inference-"
 
 #: Registry classes the worker itself implements (``lkap_agent.providers.*``).
 _WORKER_CLASS_PREFIX: Final[str] = "lkap_agent."
+
+#: Registry fields of ``livekit-inference-llm`` that ``inference.LLM`` takes inside ``extra_kwargs``
+#: (``ChatCompletionOptions``); ``reasoning_effort`` is sent that way by livekit-agents 1.8.3's own
+#: ``evals/evaluation.py``.
+_INFERENCE_EXTRA_KWARGS: Final[tuple[str, ...]] = ("temperature", "reasoning_effort")
 
 #: Secret kwargs an Inference provider must never receive (it authenticates with
 #: the worker's own LiveKit credentials from env).
@@ -341,8 +347,11 @@ class ProviderFactory:
                 f"{provider.provider_id} ({provider.python_class}) rejected its configuration: {exc}"
             ) from exc
         if spec.id == "openrouter-llm":
-            # V6-30 (F-2): OpenRouter's Gemini translation does not follow `$ref` in tool schemas.
-            built = with_inline_tool_schemas(built)
+            # V6-30 (F-2): OpenRouter's Gemini translation does not follow `$ref` in tool schemas;
+            # V6-31: each request leaves out the optional parameters the model does not accept.
+            built = with_inline_tool_schemas(
+                built, request_parameters=request_parameters_of(provider.capabilities)
+            )
         return built
 
     def build_all(
@@ -435,11 +444,16 @@ class ProviderFactory:
 
         if spec.id == "google-realtime":
             kwargs = _google_realtime_kwargs(kwargs, mode)
-        if spec.id == "livekit-inference-llm" and "temperature" in kwargs:
-            # `inference.LLM` takes sampling options only via `extra_kwargs`
-            # (ChatCompletionOptions); the catalog exposes `temperature` flat.
+        if spec.kind == "llm":
+            # V6-31: leave out what the model does not accept; the voice default reasoning effort.
+            kwargs = llm_capability_kwargs(spec, kwargs, provider.capabilities)
+        if spec.id == "livekit-inference-llm" and any(name in kwargs for name in _INFERENCE_EXTRA_KWARGS):
+            # `inference.LLM` takes request options only via `extra_kwargs`
+            # (ChatCompletionOptions); the registry exposes them flat.
             extra = dict(kwargs.pop("extra_kwargs", None) or {})
-            extra.setdefault("temperature", kwargs.pop("temperature"))
+            for name in _INFERENCE_EXTRA_KWARGS:
+                if name in kwargs:
+                    extra.setdefault(name, kwargs.pop(name))
             kwargs["extra_kwargs"] = extra
         if spec.id == "openrouter-llm":
             kwargs = _openrouter_llm_kwargs(kwargs)

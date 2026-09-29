@@ -53,7 +53,9 @@ SIGNATURES = _load_signatures()
 #: (`factory.py::_constructor_kwargs`), so the field is real but is not a
 #: direct constructor kwarg name — this test checks names reach *some*
 #: correct destination, not that every field is a literal top-level kwarg.
-_KNOWN_FIELD_REMAPS: frozenset[tuple[str, str]] = frozenset({("livekit-inference-llm", "temperature")})
+_KNOWN_FIELD_REMAPS: frozenset[tuple[str, str]] = frozenset(
+    {("livekit-inference-llm", "temperature"), ("livekit-inference-llm", "reasoning_effort")}
+)
 
 #: Every `available` entry whose class lives in a `livekit.*` plugin package.
 _PLUGIN_SPECS = [

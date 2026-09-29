@@ -446,9 +446,9 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-29 | Opus | 7 | merged | a04a489 | none | |
 | V6-30 | Opus | 8 | merged | 60db953 | | #296–#301 |
 | V6-31 | Opus | 8 | merged | f648e77 | | #303–#311 |
-| V6-32 | Opus | 8 | running | | | |
+| V6-32 | Opus | 8 | merged | 0007ed4 | | #313–#318 |
 
-Migrations applied to the dev DB (the coordinator appends: id · date · backup path in the scratchpad, never in the repo): `v6_002_datasets` · 2026-09-28 · backup `lkap.db.pre-v6_002` (U-V6-3). `v6_001` not applied (V6-05 deferred).
+Migrations applied to the dev DB (the coordinator appends: id · date · backup path in the scratchpad, never in the repo): `v6_002_datasets` · 2026-09-28 · backup `lkap.db.pre-v6_002` (U-V6-3). `v6_001` not applied (V6-05 deferred). `v6_003_credential_last_used` · 2026-09-30 · backup `lkap.db.pre-v6_003` (U-V6-3).
 
 ---
 

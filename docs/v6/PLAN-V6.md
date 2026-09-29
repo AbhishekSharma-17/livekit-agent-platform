@@ -139,6 +139,7 @@ Themes: **S** speech and pricing · **I** LiveKit Inference · **P** panels · *
 | V6-30 | P+T | Demo-quality fixes from the V6 demos run (`_briefs/v6-demos-populate.md` F-1…F-5): live extraction timing out, panel tools refusing JSON-string arguments, `search_knowledge` without a knowledge base, reasoning read aloud, archived agents shown as live in the console | Opus | 8 | V6 closed (user request 2026-09-29) |
 | V6-31 | S | Reasoning-model awareness: a per-model capability view from the provider catalogs (reasoning, supported parameters), a `reasoning_effort` setting, unsupported parameters dropped instead of failing (GPT-6 Luna 404), latency-aware defaults and console hints for voice | Opus | 8 | V6-30 merged (user request 2026-09-29) |
 | V6-32 | S+P | Provider keys: one vendor key shared by its STT and TTS entries (Deepgram TTS refused the Deepgram key), OpenRouter key tags without the non-streaming speech entries, the credentials page showing tested/created/last-used truthfully | Opus | 8 | V6-31 merged (user request 2026-09-30) |
+| V6-33 | P | Console clarity: each pipeline part labelled by its job (listens, decides when you have finished, thinks, speaks, draws, filters noise), a one-line pipeline summary per agent incl. which part ends the turn and where it runs, Cloud vs self-hosted differences, a one-line "what this model does" in the pickers | Sonnet | 8 | V6-32 merged (user request 2026-09-30) |
 
 **Parallel-safe pairs and groups** (disjoint exclusive files; contracts commits still serialised in the listed order):
 
@@ -447,6 +448,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-30 | Opus | 8 | merged | 60db953 | | #296–#301 |
 | V6-31 | Opus | 8 | merged | f648e77 | | #303–#311 |
 | V6-32 | Opus | 8 | merged | 0007ed4 | | #313–#318 |
+| V6-33 | Sonnet | 8 | running | | | |
 
 Migrations applied to the dev DB (the coordinator appends: id · date · backup path in the scratchpad, never in the repo): `v6_002_datasets` · 2026-09-28 · backup `lkap.db.pre-v6_002` (U-V6-3). `v6_001` not applied (V6-05 deferred). `v6_003_credential_last_used` · 2026-09-30 · backup `lkap.db.pre-v6_003` (U-V6-3).
 

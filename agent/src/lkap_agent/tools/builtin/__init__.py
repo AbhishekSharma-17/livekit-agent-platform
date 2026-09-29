@@ -196,7 +196,8 @@ def build_builtin_tools(
             `ctx.userdata[BUILTIN_PROVIDERS_USERDATA_KEY]`.
 
     Returns:
-        The enabled tools. `describe_current_frame` and `pin_frame` are
+        The enabled tools. `search_knowledge` only when `knowledge.kb_ids` names a knowledge
+        base (V6-30: the session searches nothing else). `describe_current_frame` and `pin_frame` are
         omitted unless the agent has `capabilities.camera` or
         `capabilities.screen_share` (docs/ARCHITECTURE.md §8) — they have
         nothing to encode otherwise. The `BLOCK_TOOL_NAMES` tools are
@@ -279,7 +280,8 @@ def build_builtin_tools(
     tools: list[FunctionTool[..., Any]] = []
     if _want("end_call"):
         tools.append(build_end_call_tool(ctx, shutdown=shutdown))
-    if _want("search_knowledge"):
+    # V6-30 (F-3): only with a knowledge base to search; with none the model burnt tool steps on it.
+    if _want("search_knowledge") and ctx.config.knowledge.kb_ids:
         tools.append(build_search_knowledge_tool(ctx, execution=_policy("search_knowledge")))
     if http_enabled and _want("http_request"):
         tools.append(

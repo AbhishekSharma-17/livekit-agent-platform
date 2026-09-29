@@ -53,6 +53,7 @@ from lkap_contracts.providers import ProviderKind, ProviderSpec
 from lkap_contracts.providers import get as get_spec
 
 from lkap_agent.logging import get_logger
+from lkap_agent.providers.openrouter_llm import with_inline_tool_schemas
 from lkap_agent.providers.special_cases import (
     ProviderBuildError,
     apply_pipeline_mode,
@@ -332,13 +333,17 @@ class ProviderFactory:
             positional=positional is not None,
         )
         try:
-            return target(*args, **kwargs)
+            built = target(*args, **kwargs)
         except ProviderBuildError:
             raise
         except Exception as exc:
             raise ProviderBuildError(
                 f"{provider.provider_id} ({provider.python_class}) rejected its configuration: {exc}"
             ) from exc
+        if spec.id == "openrouter-llm":
+            # V6-30 (F-2): OpenRouter's Gemini translation does not follow `$ref` in tool schemas.
+            built = with_inline_tool_schemas(built)
+        return built
 
     def build_all(
         self, resolved: ResolvedAgentConfig, *, optional: frozenset[str] | None = None

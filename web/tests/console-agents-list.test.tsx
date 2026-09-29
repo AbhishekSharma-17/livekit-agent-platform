@@ -105,6 +105,11 @@ function stubFetch(agents: AgentOut[], role: "owner" | "admin" | "builder" | "vi
     if (url.startsWith("/api/console/agents/") && method === "DELETE") {
       return { ok: true, status: 204, json: async () => undefined } as Response;
     }
+    if (url.startsWith("/api/console/agents/") && method === "POST" && url.split("?")[0].endsWith("/unarchive")) {
+      const id = url.split("?")[0].split("/").slice(-2)[0];
+      const found = agents.find((a) => a.id === id) as AgentOut;
+      return { ok: true, status: 200, json: async () => ({ ...found, archived_at: null }) } as Response;
+    }
     if (url.startsWith("/api/console/agents/") && method === "PUT") {
       const id = url.split("?")[0].split("/").pop() as string;
       const body = JSON.parse(init?.body as string) as Partial<AgentOut>;
@@ -239,6 +244,63 @@ describe("AgentsTable", () => {
     fireEvent.click(screen.getByRole("button", { name: "All" }));
     await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
     expect(tableScope().getByText("Support desk")).toBeTruthy();
+  });
+
+  // ------------------------------------------------------- V6-30 (F-5): archived agents
+  it("lists archived agents only under Archived, with an Archived chip and never a Live one", async () => {
+    renderTable([
+      agent({ id: "a-1", name: "Claims intake", slug: "claims-intake", published: true }),
+      agent({ id: "a-2", name: "Old smoke test", slug: "smoke", published: true, archived_at: "2026-09-29T07:30:00Z" }),
+    ]);
+
+    await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
+    expect(tableScope().queryByText("Old smoke test")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Live" }));
+    await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
+    expect(tableScope().queryByText("Old smoke test")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Archived" }));
+    await waitFor(() => expect(tableScope().getByText("Old smoke test")).toBeTruthy());
+    expect(tableScope().queryByText("Claims intake")).toBeNull();
+    expect(tableScope().getByText("Archived", { selector: "[data-tone]" })).toBeTruthy();
+    expect(tableScope().queryByText("Live", { selector: "[data-tone]" })).toBeNull();
+    expect(tableScope().queryByRole("button", { name: "Actions for Old smoke test" })).toBeNull();
+    const cards = within(document.querySelector('[data-slot="responsive-table-cards"]') as HTMLElement);
+    expect(cards.getByText("Archived", { selector: "[data-tone]" })).toBeTruthy();
+    expect(cards.queryByText("Live", { selector: "[data-tone]" })).toBeNull();
+  });
+
+  it("restores an archived agent after confirming in a dialog", async () => {
+    searchParams = new URLSearchParams("status=archived");
+    const { fetchMock } = renderTable([
+      agent({ id: "a-2", name: "Old smoke test", slug: "smoke", archived_at: "2026-09-29T07:30:00Z" }),
+    ]);
+
+    const restore = await waitFor(() => tableScope().getByRole("button", { name: "Restore Old smoke test" }));
+    await waitFor(() => expect((restore as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(restore);
+
+    const dialog = await screen.findByRole("dialog", { name: 'Restore "Old smoke test"?' });
+    expect(within(dialog).getByText("It moves back to your agents as a draft.")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Restore" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) => String(url).startsWith("/api/console/agents/a-2/unarchive") && init?.method === "POST",
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("points to Archived when every agent is archived", async () => {
+    renderTable([agent({ id: "a-2", name: "Old smoke test", slug: "smoke", archived_at: "2026-09-29T07:30:00Z" })]);
+
+    expect((await screen.findAllByText("No active agents")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("No agents yet")).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Show archived" })[0]);
+    await waitFor(() => expect(tableScope().getByText("Old smoke test")).toBeTruthy());
   });
 
   it("also renders the row in the mobile card list", async () => {

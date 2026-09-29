@@ -243,6 +243,22 @@ async def test_agent_create_from_a_template_seeds_it_and_returns_its_next_steps(
     assert result["next_steps"][: len(labels)] == labels
 
 
+async def test_agent_create_patch_replacing_a_starters_instructions_warns_about_its_kits(
+    key: Any, mcp_session: Any, fake_seed_embedder: None
+) -> None:
+    """V6-30 (F-6): the claims starter's kits put their text in the instructions; a patch wipes it."""
+    raw = await key(BUILDER_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        result = await mcp.call(
+            "agent_create", name="Claims", template_id="claims_intake", patch={"instructions": "Take claims."}
+        )
+
+    assert result["ok"] is True, result
+    [warning] = [w for w in result["warnings"] if "kit_add" in w]
+    assert "record_lookup" in warning
+
+
 async def test_agent_create_from_a_code_pack_template_ignores_the_default_pack_id(
     key: Any, mcp_session: Any, fake_seed_embedder: None
 ) -> None:

@@ -3,9 +3,12 @@
 One :class:`ExtractionRunner` per session. :meth:`ExtractionRunner.run` reads the
 conversation so far, and unless the transcript is unchanged since the last successful run
 (a SHA-256 of the transcript and the field list: unchanged text costs nothing) makes **one**
-prompt-for-JSON call on the session's ``workflow_llm`` within :data:`EXTRACTION_BUDGET_S`
-seconds. It never raises and is always started in the background by
-:class:`~lkap_agent.extraction.session.LiveStructure`, so the reply is never delayed.
+prompt-for-JSON call on the session's ``workflow_llm`` (the agent's own LLM when no separate one
+is set) within the session's budget (:func:`extraction_budget_s`: ``LKAP_EXTRACTION_TIMEOUT_S``,
+default :data:`EXTRACTION_BUDGET_S`). It never raises and is always started in the background by
+:class:`~lkap_agent.extraction.session.LiveStructure`, so the reply is never delayed; when the
+model answers after the reply went out, the values still land and the rules still run (V6-30).
+A timeout is a logged warning naming the budget.
 
 Writes, in order:
 
@@ -28,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
 import time
 from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass, field
@@ -58,10 +62,12 @@ from lkap_agent.logging import get_logger
 from lkap_agent.tools.context import session_variables
 
 __all__ = [
+    "EXTRACTION_TIMEOUT_ATTR",
     "SENSITIVE_MASK",
     "ExtractionRun",
     "ExtractionRunner",
     "Trigger",
+    "extraction_budget_s",
     "field_label",
     "summary_variables",
 ]
@@ -76,12 +82,28 @@ _MAX_EVENT_VALUE_CHARS: Final[int] = 200
 _GUARD_S: Final[float] = 0.25
 #: V6-21 (S6-11): what the panel shows for a captured ``sensitive`` field.
 SENSITIVE_MASK: Final[str] = "••••"
+#: V6-30: the ``SessionContext`` attribute carrying the worker's ``LKAP_EXTRACTION_TIMEOUT_S``.
+EXTRACTION_TIMEOUT_ATTR: Final[str] = "extraction_timeout_s"
+#: What the timeout warning suggests.
+_TIMEOUT_HINT: Final[str] = (
+    "the extraction model did not answer within the budget; raise LKAP_EXTRACTION_TIMEOUT_S on the "
+    "worker or set a faster workflow_llm on the agent"
+)
 
 _INSTRUCTIONS: Final[str] = (
     "Extract the following facts from the conversation between a voice agent (assistant) and a "
     "caller (user). Only use what the caller actually said or confirmed; never guess. When the "
     "caller corrected something, use the corrected value. Use null for anything not stated."
 )
+
+
+def extraction_budget_s(ctx: Any) -> float:
+    """The session's extraction budget: the worker's setting, else :data:`EXTRACTION_BUDGET_S`."""
+    value = getattr(ctx, EXTRACTION_TIMEOUT_ATTR, None)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return EXTRACTION_BUDGET_S
+    budget = float(value)
+    return budget if math.isfinite(budget) and budget > 0 else EXTRACTION_BUDGET_S
 
 
 def field_label(spec: ExtractionField) -> str:
@@ -125,18 +147,19 @@ def _flow_owned(config: Any) -> set[str]:
 class ExtractionRunner:
     """Extracts ``AgentConfig.extraction.fields`` for one session (see the module docstring)."""
 
-    def __init__(self, ctx: Any, config: ExtractionConfig, *, budget_s: float = EXTRACTION_BUDGET_S) -> None:
+    def __init__(self, ctx: Any, config: ExtractionConfig, *, budget_s: float | None = None) -> None:
         """Bind the runner to a session.
 
         Args:
             ctx: The session's ``SessionContext`` (``workflow_llm``, ``session``, ``ui``,
-                ``userdata``, ``config``, ``record_event``).
+                ``userdata``, ``config``, ``record_event``, ``extraction_timeout_s``).
             config: ``AgentConfig.extraction`` (on, with fields).
-            budget_s: The wall-clock budget of one extraction call.
+            budget_s: The wall-clock budget of one extraction call; ``None`` reads the
+                session's (:func:`extraction_budget_s`).
         """
         self.ctx = ctx
         self.config = config
-        self.budget_s = budget_s
+        self.budget_s = budget_s if budget_s is not None else extraction_budget_s(ctx)
         owned = _flow_owned(getattr(ctx, "config", None))
         self.fields: list[ExtractionField] = [spec for spec in config.fields if spec.name not in owned]
         self._schema: type[BaseModel] | None = (
@@ -221,7 +244,17 @@ class ExtractionRunner:
                 still_needed=self.still_needed(),
                 duration_ms=int((time.monotonic() - started) * 1000),
             )
-            _log.info("extraction.failed", trigger=trigger, status=run.status, error_type=type(exc).__name__)
+            if timed_out:
+                # V6-30 (F-1): never silent; the rules reading these values wait for the next run.
+                _log.warning(
+                    "extraction.timeout",
+                    trigger=trigger,
+                    budget_s=self.budget_s,
+                    duration_ms=run.duration_ms,
+                    hint=_TIMEOUT_HINT,
+                )
+            else:
+                _log.warning("extraction.failed", trigger=trigger, error_type=type(exc).__name__)
             self._record(trigger, run)
             return run
         raw = result.model_dump() if isinstance(result, BaseModel) else dict(result or {})

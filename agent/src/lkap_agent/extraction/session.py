@@ -18,7 +18,10 @@ It listens to the ``AgentSession`` itself:
 * ``close`` — cancels anything still running.
 
 Every extraction runs as a task (a new trigger while one runs is coalesced into one more
-run), so the caller's reply is never delayed. After each extraction the rules are evaluated.
+run), so the caller's reply is never delayed. After each extraction the rules are evaluated,
+also when it finished after the reply went out (its values and panel writes land then; an
+``instruct`` note waits for the next caller turn). Cost stays bounded: at most one call in
+flight and one queued per session, and none when the transcript is unchanged.
 """
 
 from __future__ import annotations
@@ -30,7 +33,6 @@ from typing import Any, Final
 
 from livekit.agents import llm as lk_llm
 from lkap_contracts.extraction import (
-    EXTRACTION_BUDGET_S,
     EveryNTurnsTrigger,
     ManualTrigger,
     NodeExitTrigger,
@@ -214,13 +216,16 @@ class LiveStructure:
         return result
 
     async def run_now(self) -> ExtractionRun | None:
-        """``extract_now``: wait for a run in progress (within the budget), then run once more."""
+        """``extract_now``: wait for a run in progress (within the budget), then run once more.
+
+        The second run costs nothing when the transcript did not change meanwhile (the hash).
+        """
         if self.runner is None:
             return None
         running = self._running
         if running is not None and not running.done():
             with contextlib.suppress(Exception):
-                await asyncio.wait_for(asyncio.shield(running), timeout=EXTRACTION_BUDGET_S)
+                await asyncio.wait_for(asyncio.shield(running), timeout=self.runner.budget_s)
         return await self._run_once("manual")
 
     async def _evaluate(self, trigger: RuleTrigger) -> None:

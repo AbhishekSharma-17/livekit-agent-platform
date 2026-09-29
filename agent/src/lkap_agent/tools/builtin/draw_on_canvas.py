@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, Final
+from typing import Annotated, Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from lkap_contracts.ui_protocol import (
@@ -32,6 +32,7 @@ from lkap_contracts.ui_protocol import (
 from packs.base import PackSessionContext
 from pydantic import BaseModel, Field, ValidationError
 
+from lkap_agent.tools.json_args import json_list
 from lkap_agent.tools.untrusted import strip_control
 from lkap_agent.ui.blocks import canvas_config, describe_blocks, pick_block, session_block_specs
 
@@ -57,6 +58,13 @@ class PointIn(BaseModel):
     y: float = Field(ge=0, le=1, description="0 = top edge, 1 = bottom edge.")
 
 
+#: One point and one mark as the model writes them (V6-30).
+POINT_EXAMPLE: Final[str] = '{"x": 0.2, "y": 0.3}'
+SHAPE_EXAMPLE: Final[str] = '{"kind": "box", "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.2, "label": "Leak"}'
+#: JSON text of the points of a mark is read too (V6-30, F-2).
+PointList = Annotated[list[PointIn], json_list(POINT_EXAMPLE)]
+
+
 class ShapeIn(BaseModel):
     """One mark to draw."""
 
@@ -66,12 +74,16 @@ class ShapeIn(BaseModel):
     y: float | None = Field(default=None, ge=0, le=1, description="box, circle, text: the top edge.")
     w: float | None = Field(default=None, ge=0, le=1, description="box, circle: the width.")
     h: float | None = Field(default=None, ge=0, le=1, description="box, circle: the height.")
-    points: list[PointIn] = Field(
+    points: PointList = Field(
         default=[], description="arrow: from and to (two points); path: two or more points."
     )
     text: str = Field(default="", description="text: the words to write.")
     label: str = Field(default="", description="Optional short caption next to the mark.")
     color: str = Field(default="", description="Optional colour as #rrggbb (default red).")
+
+
+#: JSON text of the marks is read too (V6-30, F-2).
+ShapeList = Annotated[list[ShapeIn], json_list(SHAPE_EXAMPLE)]
 
 
 def _clean(text: str, limit: int) -> str:
@@ -139,7 +151,7 @@ def build_draw_on_canvas_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
 
     async def draw_on_canvas(
         context: RunContext[Any],
-        shapes: list[ShapeIn],
+        shapes: ShapeList,
         block_id: str = "",
         background: str = "",
         replace: bool = False,
@@ -201,6 +213,7 @@ def build_draw_on_canvas_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
         description=(
             "Mark up the drawing board the caller sees: boxes, circles, arrows, paths and short "
             "labels (coordinates 0 to 1), optionally over a picture from this call. Do it quietly. "
-            f"Boards: {boards}."
+            f"Marks are objects, e.g. shapes=[{SHAPE_EXAMPLE}]; an arrow or a path takes "
+            f"points=[{POINT_EXAMPLE}, …]. Boards: {boards}."
         ),
     )

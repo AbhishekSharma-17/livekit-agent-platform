@@ -12,13 +12,14 @@ step becomes current.
 from __future__ import annotations
 
 import time
-from typing import Any, Final, get_args
+from typing import Annotated, Any, Final, get_args
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from lkap_contracts.ui_protocol import BlockSpec, StepsBlockState, StepStatus
 from packs.base import PackSessionContext
 from pydantic import BaseModel, Field, ValidationError
 
+from lkap_agent.tools.json_args import json_list
 from lkap_agent.ui.blocks import describe_blocks, session_block_specs
 
 __all__ = ["STEP_STATUSES", "StepIn", "build_set_steps_tool", "manual_steps_blocks", "merge_steps"]
@@ -34,6 +35,10 @@ class StepIn(BaseModel):
     status: StepStatus = Field(default="pending", description="Where the step stands.")
     label: str = Field(default="", description="What the caller sees; leave empty to keep the step's label.")
     note: str = Field(default="", description="An optional short note under the step.")
+
+
+#: JSON text of the steps is read too (V6-30, F-2).
+StepList = Annotated[list[StepIn], json_list('{"id": "photos", "status": "done"}')]
 
 
 def manual_steps_blocks(specs: list[BlockSpec]) -> list[BlockSpec]:
@@ -87,7 +92,7 @@ def build_set_steps_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
     inventory = describe_blocks(manual_steps_blocks(session_block_specs(ctx.ui, ctx.config.panel)))
 
     async def set_steps(
-        context: RunContext[Any], steps: list[StepIn], current: str = "", block_id: str = ""
+        context: RunContext[Any], steps: StepList, current: str = "", block_id: str = ""
     ) -> str:
         """Update the steps shown in the caller's side panel.
 

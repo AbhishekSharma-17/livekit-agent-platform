@@ -834,6 +834,18 @@ def test_a_batch_mixing_silent_and_speaking_tools_keeps_its_reply() -> None:
     assert event.has_tool_reply
 
 
+@pytest.mark.parametrize("mode", ["realtime", "cascaded"])
+def test_a_failed_silent_tool_keeps_its_reply(mode: str) -> None:
+    """V6-30: a silent tool that failed must not end the turn silently; the model says what went wrong."""
+    agent = _agent(resolved_config(mode=mode), _SilentPack())
+    event = _tools_executed("sync_claim_packet")
+    event.function_call_outputs[0].is_error = True
+
+    agent.on_function_tools_executed(event)
+
+    assert event.has_tool_reply
+
+
 @pytest.mark.parametrize(("version", "silenced"), [("1.8.3", True), ("1.9.0", True), ("1.8.2", False)])
 def test_cascaded_mode_honours_silent_reply_from_livekit_agents_1_8_3(
     monkeypatch: pytest.MonkeyPatch, version: str, silenced: bool

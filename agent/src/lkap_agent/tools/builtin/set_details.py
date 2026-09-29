@@ -12,16 +12,17 @@ function declarations handle poorly.
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Annotated, Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from lkap_contracts.ui_protocol import UiPatchOp
 from packs.base import PackSessionContext
 from pydantic import BaseModel, Field, ValidationError
 
+from lkap_agent.tools.json_args import json_list
 from lkap_agent.ui.blocks import describe_blocks, pick_block, session_block_specs
 
-__all__ = ["DetailIn", "build_set_details_tool", "detail_item"]
+__all__ = ["DETAIL_EXAMPLE", "DetailIn", "DetailList", "build_set_details_tool", "detail_item"]
 
 _NUMERIC_TYPES = frozenset({"number", "money"})
 
@@ -32,6 +33,12 @@ class DetailIn(BaseModel):
     key: str = Field(description="Machine key of the row, e.g. claim_no.")
     value: str = Field(description="The value as text; empty clears it.")
     label: str = Field(default="", description="What the caller sees; leave empty to keep the row's label.")
+
+
+#: One fact as the model writes it (V6-30: shown in the tool description and in a refusal).
+DETAIL_EXAMPLE: Final[str] = '{"key": "claim_no", "value": "CL-1042", "label": "Claim number"}'
+#: A list of facts; JSON text of one is read too (V6-30, F-2).
+DetailList = Annotated[list[DetailIn], json_list(DETAIL_EXAMPLE)]
 
 
 def _label_of(key: str) -> str:
@@ -70,7 +77,7 @@ def build_set_details_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
     """Build the `set_details` tool bound to `ctx`."""
     inventory = describe_blocks(session_block_specs(ctx.ui, ctx.config.panel), ["details"])
 
-    async def set_details(context: RunContext[Any], items: list[DetailIn], block_id: str = "") -> str:
+    async def set_details(context: RunContext[Any], items: DetailList, block_id: str = "") -> str:
         """Add or update facts on the details card in the caller's side panel.
 
         Args:
@@ -115,6 +122,6 @@ def build_set_details_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
         description=(
             "Add or update facts on the details card in the caller's side panel, such as a claim "
             "number or a date. Update it quietly as facts are confirmed; do not read the card aloud. "
-            f"Details blocks: {inventory}."
+            f"Each item is an object, e.g. items=[{DETAIL_EXAMPLE}]. Details blocks: {inventory}."
         ),
     )

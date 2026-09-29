@@ -1548,6 +1548,7 @@ def _assemble(
         channel=resolved.channel,
         request_shutdown=lambda reason: ctx.shutdown(reason=reason),
         llm_capabilities=plan.llm_capabilities,
+        extraction_timeout_s=deps.settings.extraction_timeout_s,
     )
     cell.append(session_ctx)
 

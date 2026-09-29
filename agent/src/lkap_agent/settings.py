@@ -10,6 +10,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
+from lkap_contracts.extraction import EXTRACTION_BUDGET_S
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -106,6 +107,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = False
     vision_max_frame_age_s: float = 8.0
+    #: `LKAP_EXTRACTION_TIMEOUT_S` (V6-30): seconds one live-extraction call may take. It runs
+    #: off the reply path, so this bounds how late extracted values (and the rules that read
+    #: them) land, never how late the agent answers.
+    extraction_timeout_s: float = Field(default=EXTRACTION_BUDGET_S, ge=1.0, le=60.0)
     #: `LKAP_IDLE_HANGUP_S`: seconds a session may stay idle before the worker
     #: hangs up (REVIEW-FINAL F-02). The clock starts when the SDK reports the
     #: user `away` while the agent is listening or idle, and any other user state

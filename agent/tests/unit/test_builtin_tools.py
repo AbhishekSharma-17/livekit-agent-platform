@@ -754,6 +754,7 @@ class TestBuildBuiltinTools:
         # V5-31: `switch_language` needs more than one language.
         # V6-06: `generate_image` needs an image model and a gallery block.
         # V6-13: `extract_now` needs extraction on with a `manual` trigger.
+        # V6-30: `search_knowledge` needs a knowledge base; the default config attaches none.
         unregistered = {
             "describe_current_frame",
             "pin_frame",
@@ -761,6 +762,7 @@ class TestBuildBuiltinTools:
             "switch_language",
             "generate_image",
             "extract_now",
+            "search_knowledge",
         }
         unregistered |= CONFIGURED_BUILTINS
         assert names == set(BUILTIN_TOOL_NAMES) - unregistered

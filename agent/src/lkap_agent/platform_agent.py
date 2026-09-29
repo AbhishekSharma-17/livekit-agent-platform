@@ -101,6 +101,7 @@ from lkap_contracts.api_models import (
     SupervisorWhisperPacket,
 )
 from lkap_contracts.common import SessionChannel
+from lkap_contracts.extraction import EXTRACTION_BUDGET_S
 from lkap_contracts.packs import PackManifest
 from lkap_contracts.providers import ModelCapabilities, vision_support
 from lkap_contracts.ui_protocol import (
@@ -424,6 +425,8 @@ class SessionContext:
     request_shutdown: Callable[[str], None] | None = None
     llm_capabilities: ModelCapabilities | None = None
     """What the api resolved about the cascaded LLM (``ResolvedProvider.capabilities``, V4-08)."""
+    extraction_timeout_s: float = EXTRACTION_BUDGET_S
+    """The worker's ``LKAP_EXTRACTION_TIMEOUT_S`` (V6-30): one live-extraction call's budget."""
 
 
 class PlatformAgent(Agent):
@@ -1649,12 +1652,17 @@ class PlatformAgent(Agent):
         livekit-agents 1.8.3 (`AgentActivity._pipeline_reply_task_impl` reads
         `has_tool_reply`), so there a `silent_reply` batch is silenced too
         (R-V4-68); below 1.8.3 a cascaded LLM answers every tool output.
+
+        V6-30: a batch with a failed call keeps its reply, so a turn never ends silently on
+        an error the model could explain or retry.
         """
         if not self._silent_reply_tools:
             return
         if self._ctx.pipeline_mode not in _REALTIME_MODEL_MODES and not sdk_version_at_least(
             SILENT_REPLY_PIPELINE_MIN_SDK
         ):
+            return
+        if any(getattr(output, "is_error", False) for output in ev.function_call_outputs):
             return
         names = {call.name for call in ev.function_calls}
         if names and names <= self._silent_reply_tools:

@@ -13,17 +13,23 @@ in the V6 demos run Gemini 3.5 Flash quoted the schema it had received as
 streams write every ``$ref`` out in place (:func:`inline_schema_refs`) before the request goes out.
 The result is the same JSON Schema, valid for OpenAI's strict mode too; a self-referencing model
 keeps its ``$ref`` (it cannot be written out). Only the ``openai`` tool format is rewritten.
+
+Since V6-31 each stream also leaves out the optional request parameters the model's catalog record
+does not list (:func:`lkap_agent.providers.reasoning.filter_request_kwargs`), so OpenRouter's
+``require_parameters`` routing never 404s on a parameter such as ``temperature`` or
+``parallel_tool_calls`` that a reasoning model's endpoints refuse.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from typing import Any, Final
 
 from livekit.agents import llm
 from livekit.plugins.openai import llm as openai_llm
 
 from lkap_agent.logging import get_logger
+from lkap_agent.providers.reasoning import filter_request_kwargs
 
 __all__ = ["InlineRefToolContext", "OpenRouterLLM", "inline_schema_refs", "with_inline_tool_schemas"]
 
@@ -97,25 +103,42 @@ class InlineRefToolContext(llm.ToolContext):
 
 
 class OpenRouterLLM(openai_llm.LLM):
-    """``openai.LLM`` for OpenRouter: every chat stream sends its tool schemas without ``$ref``."""
+    """``openai.LLM`` for OpenRouter: every chat stream sends its tool schemas without ``$ref``
+    and only the optional parameters the model accepts."""
+
+    #: The chat request parameters the model accepts (V6-31); ``None`` = unknown, send everything.
+    lkap_request_parameters: frozenset[str] | None = None
 
     def chat(self, **kwargs: Any) -> openai_llm.LLMStream:
         """Open a chat stream (``openai.LLM.chat``) with an :class:`InlineRefToolContext`.
 
         The stream's request task starts on the next loop iteration, so swapping the tool context
-        here, synchronously, is always before the tool schemas are built.
+        and filtering the request's keyword arguments here, synchronously, is always before the
+        request is built.
         """
         stream = super().chat(**kwargs)
         tools: Sequence[llm.Tool | llm.Toolset] = getattr(stream, "_tools", None) or []
         if hasattr(stream, "_tool_ctx"):
             stream._tool_ctx = InlineRefToolContext(list(tools))
+        extra = getattr(stream, "_extra_kwargs", None)
+        accepted = self.lkap_request_parameters
+        if accepted is not None and isinstance(extra, dict):
+            stream._extra_kwargs = filter_request_kwargs(extra, accepted, model=self.model)
         return stream
 
 
-def with_inline_tool_schemas(model: Any) -> Any:
-    """Make an ``openai.LLM`` built for OpenRouter an :class:`OpenRouterLLM` (in place); others unchanged."""
+def with_inline_tool_schemas(model: Any, *, request_parameters: Collection[str] | None = None) -> Any:
+    """Make an ``openai.LLM`` built for OpenRouter an :class:`OpenRouterLLM` (in place); others unchanged.
+
+    Args:
+        model: The object ``LLM.with_openrouter`` returned.
+        request_parameters: The parameters the model accepts (V6-31); ``None`` = unknown.
+    """
     if type(model) is openai_llm.LLM:
         model.__class__ = OpenRouterLLM
     elif not isinstance(model, OpenRouterLLM):
         logger.debug("openrouter llm left as built", llm_class=type(model).__name__)
+    if isinstance(model, OpenRouterLLM):
+        accepted = frozenset(request_parameters) if request_parameters is not None else None
+        model.lkap_request_parameters = accepted
     return model

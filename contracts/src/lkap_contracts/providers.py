@@ -37,6 +37,42 @@ ProviderKind = Literal[
 #: vendor's REST API itself (``lkap_api.kb.stores``, ``lkap_api.kb.rerankers``); nothing to construct.
 FieldType = Literal["string", "secret", "number", "boolean", "enum", "json", "model", "file", "catalog"]
 
+# ------------------------------------------------------------------ reasoning models (V6-31)
+#: How long a reasoning model thinks before it answers, lowest first: the ``openai`` SDK's
+#: ``ReasoningEffort`` values at the pinned version (``openai/types/shared/reasoning_effort.py``),
+#: which is also the vocabulary of OpenRouter's ``reasoning.supported_efforts``. ``none`` turns
+#: thinking off on the models that allow it.
+ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+
+#: :data:`ReasoningEffort` in order, lowest first.
+REASONING_EFFORTS: tuple[ReasoningEffort, ...] = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+
+#: The registry field (on ``openrouter-llm``, ``openai-llm``, ``livekit-inference-llm``) that sets it.
+REASONING_EFFORT_FIELD = "reasoning_effort"
+
+#: Efforts that add seconds to every reply on a voice call (measured 2026-09-29: GPT-6 Luna at its
+#: default ``medium`` took 8.2 s from end of speech to first audio against 3.6 s for GPT-4.1 mini).
+SLOW_VOICE_EFFORTS: frozenset[str] = frozenset({"medium", "high", "xhigh", "max"})
+
+#: Chat request parameters the worker leaves out when the model's capability view says the model
+#: does not accept them (V6-31), instead of letting the request fail: OpenRouter with
+#: ``provider.require_parameters`` (the platform's default) routes only to endpoints that accept
+#: every parameter sent, and answers 404 when none does. ``tools`` is never on this list.
+OPTIONAL_REQUEST_PARAMETERS: frozenset[str] = frozenset(
+    {
+        "temperature",
+        "top_p",
+        "top_k",
+        "frequency_penalty",
+        "presence_penalty",
+        "seed",
+        "stop",
+        "parallel_tool_calls",
+        "reasoning_effort",
+        "verbosity",
+    }
+)
+
 #: Whether the platform offers a provider at all (CONTRACTS-V2 §4.1).
 #:
 #: ``available`` — offered; ``deferred`` — catalogued but not shipped yet;
@@ -221,6 +257,85 @@ class ModelCapabilities(BaseModel):
     streaming: bool | None = None
     context_tokens: int | None = None
     source: Literal["declared", "detected", "catalog", "registry"] | None = None
+    reasoning: bool | None = Field(
+        None,
+        description=(
+            "V6-31: the model thinks before it answers (a reasoning model). From OpenRouter's catalog "
+            "(`reasoning` in `supported_parameters`, or a `reasoning` record) or the registry's "
+            "`ModelSpec.reasoning`. `null` = unknown."
+        ),
+    )
+    reasoning_efforts: list[ReasoningEffort] | None = Field(
+        None,
+        description=(
+            "V6-31: the `reasoning_effort` values the model accepts, lowest first (OpenRouter's "
+            "`reasoning.supported_efforts`, or the registry's `ModelSpec.reasoning_efforts`). Empty = "
+            "the model takes no effort setting; `null` = unknown."
+        ),
+    )
+    request_parameters: list[str] | None = Field(
+        None,
+        description=(
+            "V6-31: the chat request parameters the model accepts (OpenRouter's `supported_parameters`, "
+            "e.g. `tools`, `temperature`, `reasoning_effort`). The worker leaves out any of "
+            "`OPTIONAL_REQUEST_PARAMETERS` missing from this list; `null` = unknown, and every "
+            "parameter is sent as before."
+        ),
+    )
+
+
+def accepts_parameter(capabilities: ModelCapabilities | None, name: str) -> bool | None:
+    """Whether the model accepts the chat request parameter ``name`` (V6-31); ``None`` = unknown."""
+    if capabilities is None or capabilities.request_parameters is None:
+        return None
+    return name in capabilities.request_parameters
+
+
+def lowest_reasoning_effort(efforts: list[ReasoningEffort] | None) -> ReasoningEffort | None:
+    """The lowest of ``efforts`` in :data:`REASONING_EFFORTS` order, or ``None`` when there is none."""
+    known = [effort for effort in REASONING_EFFORTS if effort in (efforts or [])]
+    return known[0] if known else None
+
+
+def reasoning_effort_to_send(
+    capabilities: ModelCapabilities | None, requested: str | None
+) -> ReasoningEffort | str | None:
+    """The ``reasoning_effort`` a request should carry for a configured value (V6-31).
+
+    The one rule the worker applies and the api's validator explains:
+
+    * nothing known about the model (``capabilities`` is ``None``, or both ``reasoning`` and
+      ``reasoning_efforts`` are unknown): ``requested`` as it is, today's behaviour;
+    * the model does not reason, or its known parameters leave out ``reasoning_effort``: nothing;
+    * a value is configured: it, or when the model lists its efforts and not this one, the
+      nearest listed effort above it (else the highest);
+    * nothing configured on a reasoning model that lists its efforts: the lowest, because every
+      level above it adds seconds to a spoken reply.
+
+    Args:
+        capabilities: The model's resolved capability view.
+        requested: The agent's stored ``reasoning_effort`` (``None`` or ``""`` = not set).
+
+    Returns:
+        The effort to send, or ``None`` to send none.
+    """
+    wanted = requested or None
+    if capabilities is None or (capabilities.reasoning is None and capabilities.reasoning_efforts is None):
+        return wanted
+    if capabilities.reasoning is False or accepts_parameter(capabilities, REASONING_EFFORT_FIELD) is False:
+        return None
+    efforts = capabilities.reasoning_efforts
+    if wanted is not None:
+        if not efforts or wanted in efforts:
+            return wanted
+        if wanted not in REASONING_EFFORTS:
+            return None
+        listed = [effort for effort in REASONING_EFFORTS if effort in efforts]
+        above = [
+            effort for effort in listed if REASONING_EFFORTS.index(effort) > REASONING_EFFORTS.index(wanted)
+        ]
+        return above[0] if above else listed[-1]
+    return lowest_reasoning_effort(efforts)
 
 
 class CatalogFilter(BaseModel):
@@ -473,6 +588,20 @@ class ModelSpec(BaseModel):
             "still resolves; the validator warns and the console offers the entry's `default_model`."
         ),
     )
+    reasoning: bool | None = Field(
+        None,
+        description=(
+            "V6-31: the model thinks before it answers. Set only where the plugin source or the "
+            "vendor's published listing says so; `null` = unknown (the live catalog decides)."
+        ),
+    )
+    reasoning_efforts: list[ReasoningEffort] = Field(
+        default=[],
+        description=(
+            "V6-31: the `reasoning_effort` values the model accepts through this provider, lowest "
+            "first. Empty = not recorded."
+        ),
+    )
 
 
 class CatalogSpec(BaseModel):
@@ -689,6 +818,19 @@ def _api_key(label: str = "API key", *, help_text: str | None = None, env: str |
     )
 
 
+def _reasoning_effort_field() -> FieldSpec:
+    """The ``reasoning_effort`` option of an LLM whose plugin sends it (V6-31); no default."""
+    return FieldSpec(
+        name=REASONING_EFFORT_FIELD,
+        label="Reasoning effort",
+        type="enum",
+        options=list(REASONING_EFFORTS),
+        help="How long a reasoning model thinks before it answers. Lower is faster: on a live call, "
+        "medium or higher adds several seconds to every reply. Left empty, the agent uses the lowest "
+        "level the model supports. Models that do not reason ignore it.",
+    )
+
+
 def _deferred(
     provider_id: str,
     kind: ProviderKind,
@@ -885,7 +1027,10 @@ _AVAILABLE: list[ProviderSpec] = [
                 type="number",
                 default=0.7,
                 help="Sampling temperature (0 = deterministic).",
-            )
+            ),
+            # V6-31: sent as `extra_kwargs["reasoning_effort"]` (`inference.ChatCompletionOptions`),
+            # the way livekit-agents 1.8.3's own `evals/evaluation.py` sends it.
+            _reasoning_effort_field(),
         ],
         models=[
             ModelSpec(
@@ -898,11 +1043,33 @@ _AVAILABLE: list[ProviderSpec] = [
             # (rendered 2026-09-27T22:10Z). Vision is not flagged until the platform verifies it.
             ModelSpec(id="google/gemini-3.8-flash", label="Gemini 3.8 Flash"),
             ModelSpec(id="google/gemini-3.1-flash-lite", label="Gemini 3.1 Flash Lite"),
-            ModelSpec(id="openai/gpt-4.1", label="GPT-4.1"),
-            ModelSpec(id="openai/gpt-4o-mini", label="GPT-4o mini"),
-            ModelSpec(id="openai/gpt-5.5", label="GPT-5.5"),
-            ModelSpec(id="openai/gpt-5.4-mini", label="GPT-5.4 mini"),
-            ModelSpec(id="openai/gpt-5.6-luna", label="GPT-5.6 Luna"),
+            # V6-31: reasoning is recorded only for OpenAI's GPT-5 family, which livekit-agents 1.8.3
+            # itself treats as reasoning models (`inference/llm.py` `_MIN_REASONING_EFFORT`,
+            # `plugins/openai/models.py` `_supports_reasoning_effort`); the effort lists are OpenRouter's
+            # public listing for the same ids (2026-09-29). The Gemini ids stay unknown: whether
+            # Inference passes `reasoning_effort` to them is not verified. Note: with tools, the SDK
+            # strips `reasoning_effort` for `gpt-5.2*`/`gpt-5.4*` ids itself
+            # (`_REASONING_EFFORT_TOOL_INCOMPATIBLE_PREFIXES`), so GPT-5.4 mini runs at its own default.
+            ModelSpec(id="openai/gpt-4.1", label="GPT-4.1", reasoning=False),
+            ModelSpec(id="openai/gpt-4o-mini", label="GPT-4o mini", reasoning=False),
+            ModelSpec(
+                id="openai/gpt-5.5",
+                label="GPT-5.5",
+                reasoning=True,
+                reasoning_efforts=["none", "low", "medium", "high", "xhigh"],
+            ),
+            ModelSpec(
+                id="openai/gpt-5.4-mini",
+                label="GPT-5.4 mini",
+                reasoning=True,
+                reasoning_efforts=["none", "low", "medium", "high", "xhigh"],
+            ),
+            ModelSpec(
+                id="openai/gpt-5.6-luna",
+                label="GPT-5.6 Luna",
+                reasoning=True,
+                reasoning_efforts=["none", "low", "medium", "high", "xhigh", "max"],
+            ),
             ModelSpec(id="openai/gpt-oss-120b", label="GPT-OSS 120B"),
             ModelSpec(id="xai/grok-4.7", label="Grok 4.7"),
             ModelSpec(id="deepseek-ai/deepseek-v4.1-flash", label="DeepSeek V4.1 Flash"),
@@ -1101,11 +1268,14 @@ _AVAILABLE: list[ProviderSpec] = [
                 placeholder="https://api.openai.com/v1",
             ),
             FieldSpec(name="temperature", label="Temperature", type="number", default=0.7),
+            # V6-31: `openai.LLM(reasoning_effort=...)`; unset, livekit-plugins-openai 1.8.3 picks
+            # `none`/`minimal` itself for the GPT-5 ids it knows (`_supports_reasoning_effort`).
+            _reasoning_effort_field(),
         ],
         models=[
-            ModelSpec(id="gpt-4.1", label="GPT-4.1"),
-            ModelSpec(id="gpt-4o", label="GPT-4o"),
-            ModelSpec(id="gpt-4.1-mini", label="GPT-4.1 mini"),
+            ModelSpec(id="gpt-4.1", label="GPT-4.1", reasoning=False),
+            ModelSpec(id="gpt-4o", label="GPT-4o", reasoning=False),
+            ModelSpec(id="gpt-4.1-mini", label="GPT-4.1 mini", reasoning=False),
         ],
         default_model="gpt-4.1",
         catalog=_openai_catalog(_OPENAI_LLM_FILTER),
@@ -1453,6 +1623,9 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         secret_fields=[_openrouter_key()],
         fields=[
             FieldSpec(name="temperature", label="Temperature", type="number", default=0.7),
+            # V6-31: `LLM.with_openrouter(reasoning_effort=...)`, sent as the top-level
+            # `reasoning_effort` OpenRouter lists in each reasoning model's `supported_parameters`.
+            _reasoning_effort_field(),
             FieldSpec(
                 name="fallback_models",
                 label="Fallback models",
@@ -1487,9 +1660,11 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
             ),
         ],
         models=[
-            ModelSpec(id="openai/gpt-4.1-mini", label="GPT-4.1 mini", supports_video=True),
-            ModelSpec(id="openai/gpt-4.1", label="GPT-4.1", supports_video=True),
-            ModelSpec(id="openai/gpt-4o-mini", label="GPT-4o mini", supports_video=True),
+            # V6-31: only "does not reason" is recorded here (it changes nothing the worker sends);
+            # whether a model reasons, and at which efforts, comes from OpenRouter's live catalog.
+            ModelSpec(id="openai/gpt-4.1-mini", label="GPT-4.1 mini", supports_video=True, reasoning=False),
+            ModelSpec(id="openai/gpt-4.1", label="GPT-4.1", supports_video=True, reasoning=False),
+            ModelSpec(id="openai/gpt-4o-mini", label="GPT-4o mini", supports_video=True, reasoning=False),
             ModelSpec(id="google/gemini-3.5-flash", label="Gemini 3.5 Flash", supports_video=True),
             ModelSpec(id="anthropic/claude-sonnet-4.6", label="Claude Sonnet 4.6", supports_video=True),
         ],

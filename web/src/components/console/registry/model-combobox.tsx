@@ -12,6 +12,7 @@ import { formatUsdPerMin, usePriceQuotes } from "@/components/console/lib/cost-h
 import { catalogSaysVision } from "@/components/console/registry/model-capabilities";
 import { TestedChip, testedStateFor } from "@/components/console/registry/model-test-panel";
 import { isOpenRouterSpeech } from "@/components/console/registry/provider-meta";
+import { FAST_VOICE_NOTE, isFastForVoice, resolveReasoning } from "@/components/console/registry/reasoning";
 import { CATALOG_FULL_LIMIT, useCatalog } from "@/hooks/useCatalog";
 import { idIssueSentence, isSendableModelId, validateModelId } from "@/lib/model-ids";
 import { cn } from "@/lib/utils";
@@ -93,6 +94,34 @@ function matches(id: string, label: string, needle: string): boolean {
 
 function recordSaysVision(record: ProviderModelOut): boolean {
   return record.declared?.vision === true || (record.declared?.vision == null && record.detected?.vision === true);
+}
+
+/**
+ * V6-31: "Reasoning" when the model thinks before it answers, and "Fast for
+ * voice" for a small model that does not reason or can reason at `none`/`minimal`
+ * (what a voice session sends when no effort is set).
+ */
+export function ReasoningBadges({
+  models,
+  modelId,
+  catalogItem,
+}: {
+  models: ModelSpec[];
+  modelId: string;
+  catalogItem?: CatalogItem | null;
+}) {
+  const view = resolveReasoning({ spec: { models }, modelId, catalogItem });
+  const fast = isFastForVoice(view, modelId);
+  return (
+    <>
+      {view.reasoning === true ? <CapabilityBadge kind="reasoning" /> : null}
+      {fast ? (
+        <span title={FAST_VOICE_NOTE.text} className="inline-flex">
+          <CapabilityBadge kind="fast-voice" />
+        </span>
+      ) : null}
+    </>
+  );
 }
 
 /** OpenRouter is the one vendor with a server-side search (`search_vendor`, R-V4-28). */
@@ -267,6 +296,7 @@ function ModelComboboxView({
   }
 
   const catalogItems = live.catalogItems;
+  const catalogById = new Map(catalogItems.map((item) => [item.id, item]));
   const effective = value.trim() || defaultModel || "";
   const suggestedIds = new Set(models.map((m) => m.id));
   const liveItems = dedupe([...live.vendorItems, ...catalogItems]).filter((item) => !suggestedIds.has(item.id));
@@ -375,6 +405,7 @@ function ModelComboboxView({
                             </span>
                           ) : null}
                           {model.supports_video ? <CapabilityBadge kind="vision" /> : null}
+                          <ReasoningBadges models={models} modelId={model.id} catalogItem={catalogById.get(model.id)} />
                         </span>
                         <ModelPriceHint priceQuotes={live.priceQuotes} modelId={model.id} />
                       </span>
@@ -413,6 +444,7 @@ function ModelComboboxView({
                             {item.label}
                           </span>
                           {catalogSaysVision(item.meta) === true ? <CapabilityBadge kind="vision" /> : null}
+                          <ReasoningBadges models={models} modelId={item.id} catalogItem={item} />
                         </span>
                         <ModelPriceHint priceQuotes={live.priceQuotes} modelId={item.id} />
                       </span>

@@ -3,6 +3,7 @@ import * as React from "react";
 import {
   AudioLinesIcon,
   AudioWaveformIcon,
+  BrainIcon,
   CloudIcon,
   EyeIcon,
   KeyRoundIcon,
@@ -11,6 +12,7 @@ import {
   TypeIcon,
   VolumeXIcon,
   WrenchIcon,
+  ZapIcon,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -31,7 +33,11 @@ export type CapabilityKind =
   /** Runs only through LiveKit Cloud (Inference / Cloud-hosted). */
   | "cloud-only"
   /** A model id outside the suggestions and the vendor's live list (docs/v4/CUSTOM-MODELS.md D-V4-23). */
-  | "custom";
+  | "custom"
+  /** The model thinks before it answers (V6-31). */
+  | "reasoning"
+  /** A small model that answers quickly on a live call (V6-31, `FAST_VOICE_NOTE`). */
+  | "fast-voice";
 
 export interface CapabilityBadgeProps {
   kind: CapabilityKind;
@@ -62,6 +68,8 @@ export const CAPABILITY_BADGE_META: Record<CapabilityKind, CapabilityMeta> = {
   "text-modality": { icon: TypeIcon, label: "Text modality", tone: "neutral" },
   "cloud-only": { icon: CloudIcon, label: "Cloud only", tone: "neutral" },
   custom: { icon: PencilLineIcon, label: "Custom", tone: "neutral" },
+  reasoning: { icon: BrainIcon, label: "Reasoning", tone: "neutral" },
+  "fast-voice": { icon: ZapIcon, label: "Fast for voice", tone: "success" },
 };
 
 const TONE_CLASSES = {

@@ -38,6 +38,7 @@ _META_KEYS: tuple[str, ...] = (
     "context_length",
     "architecture",
     "supported_parameters",
+    "reasoning",  # V6-31: `supported_efforts`, `default_effort`, `mandatory` (the reasoning view)
     "supported_voices",
     "top_provider",
     "per_request_limits",

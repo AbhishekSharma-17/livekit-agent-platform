@@ -32,6 +32,8 @@ import {
   type ProviderKind,
   type StreamingChipCopy,
 } from "@/components/console/registry/provider-meta";
+import { acceptsParameter, offersEffort, REASONING_EFFORT_FIELD, type ReasoningView } from "@/components/console/registry/reasoning";
+import { ReasoningEffortField, useSlotReasoningView } from "@/components/console/registry/reasoning-effort-field";
 import { recommendedFieldValues, RegistryForm } from "@/components/console/registry/registry-form";
 import { idIssueSentence, isSendableModelId, validateModelId } from "@/lib/model-ids";
 import { cn } from "@/lib/utils";
@@ -257,7 +259,15 @@ export function ProviderSlotEditor({
   }
 
   const liftedModelField = current ? modelFieldOf(current) : undefined;
-  const optionFields = (current?.fields ?? []).filter((field) => field !== liftedModelField);
+  const reasoning = useSlotReasoningView(current, value, current && value ? slotModelId(current, value) : "");
+  const hiddenByModel = modelHiddenFields(current, reasoning);
+  const optionFields = (current?.fields ?? []).filter(
+    (field) => field !== liftedModelField && field.name !== REASONING_EFFORT_FIELD && !hiddenByModel.has(field.name),
+  );
+  const effortField = current?.fields?.find((field) => field.name === REASONING_EFFORT_FIELD);
+  const storedEffort = value?.fields?.[REASONING_EFFORT_FIELD];
+  const showEffort =
+    Boolean(effortField) && (offersEffort(reasoning) || (typeof storedEffort === "string" && storedEffort.trim() !== ""));
 
   const vendors = ofKind.filter((p) => !isInferenceProvider(p));
   const selectable: ProviderSpec[] = [];
@@ -322,9 +332,29 @@ export function ProviderSlotEditor({
             />
           ) : null}
 
-          {optionFields.length > 0 ? (
+          {optionFields.length > 0 || showEffort ? (
             <div className="flex flex-col gap-3">
               <h4 className="text-sm font-semibold text-foreground">Options</h4>
+              {showEffort ? (
+                <ReasoningEffortField
+                  id={`${prefix}-field-${REASONING_EFFORT_FIELD}`}
+                  view={reasoning}
+                  value={typeof storedEffort === "string" ? storedEffort : null}
+                  onChange={(next) => {
+                    const fields = { ...(value.fields ?? {}) };
+                    if (next === null) delete fields[REASONING_EFFORT_FIELD];
+                    else fields[REASONING_EFFORT_FIELD] = next;
+                    onChange({ ...value, fields });
+                  }}
+                  issue={fieldIssueFor?.(REASONING_EFFORT_FIELD)}
+                  issuePath={issuePath ? `${issuePath}.fields.${REASONING_EFFORT_FIELD}` : undefined}
+                />
+              ) : null}
+              {hiddenByModel.size > 0 ? (
+                <p data-slot="hidden-by-model" className="text-xs text-pretty text-muted-foreground">
+                  {hiddenFieldsNote(current, hiddenByModel)}
+                </p>
+              ) : null}
               <RegistryForm
                 fields={optionFields}
                 values={value.fields ?? {}}
@@ -353,6 +383,21 @@ export function ProviderSlotEditor({
       ) : null}
     </div>
   );
+}
+
+/** Options a model is known not to accept (V6-31): the worker leaves them out, so the form hides them. */
+const MODEL_OPTIONAL_FIELDS: readonly string[] = ["temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "seed"];
+
+function modelHiddenFields(spec: ProviderSpec | undefined, view: ReasoningView): Set<string> {
+  if (!spec || spec.kind !== "llm") return new Set();
+  const names = (spec.fields ?? []).map((field) => field.name);
+  return new Set(names.filter((name) => MODEL_OPTIONAL_FIELDS.includes(name) && acceptsParameter(view, name) === false));
+}
+
+function hiddenFieldsNote(spec: ProviderSpec | undefined, hidden: Set<string>): string {
+  const labels = (spec?.fields ?? []).filter((field) => hidden.has(field.name)).map((field) => field.label);
+  const list = labels.join(", ");
+  return `This model sets its own ${list.toLowerCase()}, so ${labels.length === 1 ? "that option is" : "those options are"} hidden and never sent.`;
 }
 
 /**

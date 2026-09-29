@@ -3,8 +3,9 @@
 ``AgentConfig.extraction`` names the facts the agent should capture from the conversation
 (:class:`ExtractionField`: a flow ``VariableSpec`` plus a label, a hint for the extraction
 model, a ``sensitive`` flag and where the value is shown). The worker extracts them **in the
-background** with the session's ``workflow_llm`` (one prompt-for-JSON call, at most
-:data:`EXTRACTION_BUDGET_S` seconds, never delaying the reply), keyed by a hash of the
+background** with the session's ``workflow_llm`` (else the agent's own LLM; one prompt-for-JSON
+call, at most :data:`EXTRACTION_BUDGET_S` seconds by default, never delaying the reply; the values
+land and the rules run when it finishes, even after the reply went out), keyed by a hash of the
 transcript so unchanged text costs nothing, and writes the values into the session's
 variables: the one store ``{{ var.* }}`` placeholders, ``requires_vars``, bindings, flows and
 rules share. A ``null`` never overwrites a value; a flow node's own ``extract`` wins for the
@@ -69,8 +70,11 @@ __all__ = [
 
 #: The session event each extraction run records.
 EXTRACTION_EVENT: Final[str] = "extraction"
-#: Wall-clock budget of one extraction call (first try and repair together).
-EXTRACTION_BUDGET_S: Final[float] = 2.0
+#: Default wall-clock budget of one extraction call (first try and repair together). The call
+#: runs off the reply path, so the budget bounds how late values land, not how late the agent
+#: answers; V6-30 raised it from 2 s, which a hosted model (e.g. Gemini Flash through
+#: OpenRouter) could never meet. A worker overrides it with ``LKAP_EXTRACTION_TIMEOUT_S``.
+EXTRACTION_BUDGET_S: Final[float] = 10.0
 #: Most fields on one agent.
 MAX_EXTRACTION_FIELDS: Final[int] = 30
 #: The id prefix of the "still needed" checklist items the extraction owns.

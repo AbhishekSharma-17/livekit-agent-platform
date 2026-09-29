@@ -388,7 +388,7 @@ NEVER_BACKGROUND_TOOLS: Final[frozenset[str]] = frozenset(
         "spell_back",
         # V5-31: instant, and the model's next sentence is in the new language.
         "switch_language",
-        # V6-13: bounded to two seconds, and the model reads the captured values next.
+        # V6-13: bounded by the extraction budget, and the model reads the captured values next.
         "extract_now",
         # Composio Tool Router meta tools (docs/v5/COMPOSIO.md D-V5-C7): running an action,
         # opening a connection or waiting on one always waits for the result.

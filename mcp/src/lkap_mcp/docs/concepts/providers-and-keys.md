@@ -104,6 +104,16 @@ receiving camera frames. `lkap_describe("model", "openrouter-llm/openai/gpt-4.1-
 shows the merged view: registry entry, workspace record, catalog item and
 capabilities.
 
+Reasoning models (V6-31): the same view says whether a model `reasoning`,
+which `reasoning_efforts` it takes and which `request_parameters` it accepts
+(from OpenRouter's catalog, or the registry for LiveKit Inference's GPT-5
+ids). The worker leaves out an option the model refuses (`temperature` on
+GPT-6 Luna) instead of failing, and with no `reasoning_effort` field set it
+sends the lowest effort the model lists, which is what a voice call wants.
+Set `fields.reasoning_effort` on `openrouter-llm`, `openai-llm` or
+`livekit-inference-llm` to override; `agent_validate` warns when medium or
+higher would add seconds to every spoken reply.
+
 A model that disappears upstream becomes a warning, never an error.
 `agent_validate` warns that a custom id "no longer appears in the vendor's
 catalog (last seen <date>)", or that the vendor has retired it. The warning

@@ -7026,6 +7026,18 @@ export interface ModelCapabilities {
   audio_in?: boolean | null;
   audio_out?: boolean | null;
   context_tokens?: number | null;
+  /**
+   * V6-31: the model thinks before it answers (a reasoning model). From OpenRouter's catalog (`reasoning` in `supported_parameters`, or a `reasoning` record) or the registry's `ModelSpec.reasoning`. `null` = unknown.
+   */
+  reasoning?: boolean | null;
+  /**
+   * V6-31: the `reasoning_effort` values the model accepts, lowest first (OpenRouter's `reasoning.supported_efforts`, or the registry's `ModelSpec.reasoning_efforts`). Empty = the model takes no effort setting; `null` = unknown.
+   */
+  reasoning_efforts?: ("none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[] | null;
+  /**
+   * V6-31: the chat request parameters the model accepts (OpenRouter's `supported_parameters`, e.g. `tools`, `temperature`, `reasoning_effort`). The worker leaves out any of `OPTIONAL_REQUEST_PARAMETERS` missing from this list; `null` = unknown, and every parameter is sent as before.
+   */
+  request_parameters?: string[] | null;
   source?: ("declared" | "detected" | "catalog" | "registry") | null;
   streaming?: boolean | null;
   tools?: boolean | null;
@@ -7844,6 +7856,14 @@ export interface ModelSpec {
   id: string;
   label: string;
   note?: string | null;
+  /**
+   * V6-31: the model thinks before it answers. Set only where the plugin source or the vendor's published listing says so; `null` = unknown (the live catalog decides).
+   */
+  reasoning?: boolean | null;
+  /**
+   * V6-31: the `reasoning_effort` values the model accepts through this provider, lowest first. Empty = not recorded.
+   */
+  reasoning_efforts?: ("none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[];
   /**
    * Accepts visual input: video frames for realtime models, image content parts for LLMs. Set only after the platform has verified it.
    */

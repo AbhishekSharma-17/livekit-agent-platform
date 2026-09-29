@@ -17577,6 +17577,60 @@
                 "default": null,
                 "title": "Context Tokens"
               },
+              "reasoning": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "V6-31: the model thinks before it answers (a reasoning model). From OpenRouter's catalog (`reasoning` in `supported_parameters`, or a `reasoning` record) or the registry's `ModelSpec.reasoning`. `null` = unknown.",
+                "title": "Reasoning"
+              },
+              "reasoning_efforts": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "enum": [
+                        "none",
+                        "minimal",
+                        "low",
+                        "medium",
+                        "high",
+                        "xhigh",
+                        "max"
+                      ],
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "V6-31: the `reasoning_effort` values the model accepts, lowest first (OpenRouter's `reasoning.supported_efforts`, or the registry's `ModelSpec.reasoning_efforts`). Empty = the model takes no effort setting; `null` = unknown.",
+                "title": "Reasoning Efforts"
+              },
+              "request_parameters": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "V6-31: the chat request parameters the model accepts (OpenRouter's `supported_parameters`, e.g. `tools`, `temperature`, `reasoning_effort`). The worker leaves out any of `OPTIONAL_REQUEST_PARAMETERS` missing from this list; `null` = unknown, and every parameter is sent as before.",
+                "title": "Request Parameters"
+              },
               "source": {
                 "anyOf": [
                   {

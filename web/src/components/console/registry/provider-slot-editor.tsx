@@ -13,10 +13,12 @@ import { CredentialPicker } from "@/components/console/registry/credential-picke
 import { ModelCapabilitiesBlock } from "@/components/console/registry/model-capabilities";
 import {
   isCustomModelId,
+  ModelBlurb,
   ModelCombobox,
   useModelCatalog,
   useModelIdRules,
 } from "@/components/console/registry/model-combobox";
+import { modelBlurb } from "@/components/console/registry/model-blurb";
 import { ModelTestControls } from "@/components/console/registry/model-test-panel";
 import {
   inferenceProviderFor,
@@ -485,8 +487,18 @@ function SlotModel({
           provider={spec}
           credentialId={credentialId}
           rules={rules}
+          fields={value.fields}
         />
       </Field>
+      <ModelBlurb
+        text={modelBlurb({
+          provider: spec,
+          models: suggestions,
+          modelId,
+          catalogItem: catalogItems.find((item) => item.id === modelId),
+          fields: value.fields,
+        })}
+      />
       {sendable && modelKind ? (
         <ModelTestControls
           spec={spec}

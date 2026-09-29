@@ -46,8 +46,10 @@ export interface SlotCostEstimate {
 }
 
 export interface ProviderSlotCardProps extends ProviderSlotEditorProps {
-  /** Card title, sentence case ("Speech-to-text"). */
+  /** Card title, sentence case ("Speech-to-text"). With `job`, this is the small secondary technical name. */
   title: string;
+  /** V6-33: what the part does, in plain words ("Listens: turns speech into text"). Leads the card in place of the title. */
+  job?: string;
   /** One line under the title. */
   description?: string;
   /** One card is open at a time; the parent owns which. */
@@ -76,6 +78,7 @@ export interface ProviderSlotCardProps extends ProviderSlotEditorProps {
  */
 export function ProviderSlotCard({
   title,
+  job,
   description,
   expanded,
   onExpandedChange,
@@ -120,8 +123,13 @@ export function ProviderSlotCard({
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             <div className="flex flex-col gap-0.5">
               <h3 id={titleId} className="text-sm font-semibold text-foreground">
-                {title}
+                {job ?? title}
               </h3>
+              {job ? (
+                <p data-slot="slot-technical-name" className="text-[0.6875rem] leading-4 tracking-[0.02em] text-muted-foreground">
+                  {title}
+                </p>
+              ) : null}
               {description ? <p className="text-xs text-pretty text-muted-foreground">{description}</p> : null}
             </div>
             <ProviderSlotSummary value={value} providers={providers} kind={kind} />

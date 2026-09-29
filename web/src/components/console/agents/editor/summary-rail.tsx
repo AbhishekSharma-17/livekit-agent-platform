@@ -23,6 +23,11 @@ import type { AgentOut, ProviderSpec } from "@/contracts/lkap-contracts";
 import { pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+import { resolveBoundConnection } from "@/components/console/agents/providers-section/connection-gate";
+import { PipelineSummaryLine } from "@/components/console/agents/providers-section/pipeline-summary-line";
+import { PART_JOBS } from "@/components/console/registry/slot-jobs";
+import { useConnections } from "@/hooks/useConnections";
+
 import { CostEstimateDialog } from "./cost-estimate-dialog";
 import { useDraftCostEstimate, useEditorContext } from "./editor-context";
 import { publicUrl } from "./publish-popover";
@@ -33,13 +38,14 @@ const CAPABILITY_KEYS: CapabilityKey[] = ["camera", "screen_share", "chat_input"
 
 type PipelineSlot = "stt" | "llm" | "tts" | "realtime" | "avatar" | "image_gen";
 
+/** Each part by its job (V6-33): "Listens", "Thinks", "Speaks"; the technical name follows only where nothing is set. */
 const SLOT_LABEL: Record<PipelineSlot, string> = {
-  stt: "Speech-to-text",
-  llm: "Language model",
-  tts: "Text-to-speech",
-  realtime: "Realtime model",
-  avatar: "Avatar",
-  image_gen: "Image generation",
+  stt: PART_JOBS.stt.name,
+  llm: PART_JOBS.llm.name,
+  tts: PART_JOBS.tts.name,
+  realtime: PART_JOBS.realtime.name,
+  avatar: PART_JOBS.avatar.name,
+  image_gen: PART_JOBS.image_gen.name,
 };
 
 /** Slots shown in the mini-flow for a mode, in pipeline order. */
@@ -138,7 +144,9 @@ function SlotLine({ slot, value, providers }: { slot: PipelineSlot; value: Provi
     return (
       <li className="flex items-center gap-2">
         <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-xs border border-dashed border-border" />
-        <span className="text-muted-foreground">{SLOT_LABEL[slot]} not set</span>
+        <span className="text-muted-foreground">
+          {PART_JOBS[slot].verb}: {SLOT_LABEL[slot].toLowerCase()} not set
+        </span>
       </li>
     );
   }
@@ -149,6 +157,7 @@ function SlotLine({ slot, value, providers }: { slot: PipelineSlot; value: Provi
     <li className="flex min-w-0 items-center gap-2">
       <VendorMark vendor={spec?.vendor ?? value.provider_id} size="sm" />
       <span className="min-w-0">
+        <span className="block text-[0.6875rem] leading-4 text-muted-foreground">{PART_JOBS[slot].verb}</span>
         <span className="block truncate font-medium">{spec?.label ?? value.provider_id}</span>
         {modelLabel ? <span className="block truncate text-xs text-muted-foreground">{modelLabel}</span> : null}
       </span>
@@ -276,6 +285,13 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
   const packsQuery = usePacks();
   const toolsQuery = useTools(agent.id);
   const connectionQuery = useAgentConnection(agent.connection_id);
+  // V6-33: the connection the summary line describes: the form's choice (it may be unsaved), else the saved one, else the default.
+  const formConnectionId = useWatch<AgentEditorForm, "connection_id">({ name: "connection_id" });
+  const connectionsQuery = useConnections();
+  const boundConnection = resolveBoundConnection(
+    formConnectionId === undefined ? agent.connection_id : formConnectionId,
+    connectionsQuery.data?.items ?? [],
+  );
   const descriptionId = React.useId();
   const costEstimate = useDraftCostEstimate();
   const [costDialogOpen, setCostDialogOpen] = React.useState(false);
@@ -370,11 +386,14 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
           {mode === "flow" ? "Flow" : "Prompt"}
         </RailRow>
         <RailRow label={`Pipeline · ${modeText}`} section="providers">
+          <div className="flex flex-col gap-2.5">
+          <PipelineSummaryLine variant="rail" pipeline={pipeline} providers={providers} connection={boundConnection} />
           <ol aria-label="Pipeline" className="flex flex-col gap-2">
             {[...pipelineSlots(pipelineMode), ...optional].map((slot) => (
               <SlotLine key={slot} slot={slot} value={pipeline?.[slot]} providers={providers} />
             ))}
           </ol>
+          </div>
         </RailRow>
         <RailRow
           label="Cost"

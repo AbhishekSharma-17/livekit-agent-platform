@@ -13,6 +13,7 @@ import { useProviders } from "@/components/console/lib/api-hooks";
 import { useWriteAccess } from "@/components/console/lib/roles";
 import { ProviderSlotCard, type SlotCostEstimate } from "@/components/console/registry/provider-slot-card";
 import { isKnownTextOnlyLlm, type ProviderKind } from "@/components/console/registry/provider-meta";
+import { PART_JOBS } from "@/components/console/registry/slot-jobs";
 import { WorkspacePricesDialog, type WorkspacePricePrefill } from "@/components/console/settings/workspace-prices-dialog";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { cn } from "@/lib/utils";
@@ -26,31 +27,43 @@ type PipelineMode = AgentEditorForm["config"]["pipeline"]["mode"];
 interface SlotDef {
   key: SlotKey;
   kind: ProviderKind;
+  /** The technical name, shown small under the job (V6-33). */
   title: string;
-  description: string;
+  /** What the part does, in plain words; leads the card. */
+  job: string;
+  description?: string;
 }
 
 const SLOTS: Record<SlotKey, SlotDef> = {
-  stt: { key: "stt", kind: "stt", title: "Speech-to-text", description: "Turns the caller's speech into text." },
-  llm: { key: "llm", kind: "llm", title: "Language model", description: "Decides what to say and which tools to call." },
-  tts: { key: "tts", kind: "tts", title: "Text-to-speech", description: "Speaks the model's replies." },
+  stt: { key: "stt", kind: "stt", title: PART_JOBS.stt.name, job: PART_JOBS.stt.job },
+  llm: { key: "llm", kind: "llm", title: PART_JOBS.llm.name, job: PART_JOBS.llm.job },
+  tts: { key: "tts", kind: "tts", title: PART_JOBS.tts.name, job: PART_JOBS.tts.job },
   realtime: {
     key: "realtime",
     kind: "realtime",
-    title: "Realtime model",
-    description: "Hears, thinks and speaks in one model; can watch the camera live when it supports video.",
+    title: PART_JOBS.realtime.name,
+    job: PART_JOBS.realtime.job,
+    description: "Can watch the camera live when it supports video.",
   },
-  avatar: { key: "avatar", kind: "avatar", title: "Avatar", description: "A talking-head video shown on the call's stage." },
+  avatar: {
+    key: "avatar",
+    kind: "avatar",
+    title: PART_JOBS.avatar.name,
+    job: PART_JOBS.avatar.job,
+    description: "A talking-head video shown on the call's stage.",
+  },
   image_gen: {
     key: "image_gen",
     kind: "image_gen",
-    title: "Image generation",
+    title: PART_JOBS.image_gen.name,
+    job: PART_JOBS.image_gen.job,
     description: "Used by packs that draw sketches or illustrations, such as the insurance notebook.",
   },
   workflow_llm: {
     key: "workflow_llm",
     kind: "llm",
-    title: "Workflow model",
+    title: PART_JOBS.workflow_llm.name,
+    job: PART_JOBS.workflow_llm.job,
     description:
       "Used by packs for structured extraction. When unset: the main language model (cascaded) or a LiveKit Inference model (realtime).",
   },
@@ -160,6 +173,7 @@ export function ProvidersTab() {
         render={({ field }) => (
           <ProviderSlotCard
             title={def.title}
+            job={def.job}
             description={def.description}
             kind={def.kind}
             value={field.value}
@@ -233,7 +247,7 @@ export function ProvidersTab() {
         description={pipelineSlots.length > 1 ? "In the order a turn flows through them." : undefined}
         aside={headerUsd ? <span className="text-[0.8125rem] text-muted-foreground">{headerUsd} · estimate</span> : undefined}
       >
-        <ol className="flex flex-col" aria-label="Pipeline slots">
+        <ol className="flex flex-col" aria-label="Pipeline parts">
           {pipelineSlots.map((key, index) => (
             <li key={key} className="flex flex-col">
               {index > 0 ? <span aria-hidden="true" className="ml-7 h-4 w-px bg-border" /> : null}

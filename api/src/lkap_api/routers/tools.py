@@ -39,6 +39,7 @@ from lkap_api.db.models import Agent, Credential, Tool, utcnow
 from lkap_api.db.session import Database
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, SettingsDep, VaultDep
 from lkap_api.errors import BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError
+from lkap_api.key_usage import mark_used
 from lkap_api.logging import get_logger
 from lkap_api.mcp_oauth.credential import binds_tool, load_sign_in
 from lkap_api.mcp_oauth.revoke import disconnect_tool
@@ -526,6 +527,7 @@ async def _resolved_http_definition(db: AsyncSession, vault: Vault, row: Tool) -
         if credential is None:
             raise UnprocessableEntityError(f"unknown credential '{definition.credential_id}'")
         secrets = vault.decrypt(credential.ciphertext)
+        await mark_used(db, [credential.id])
     resolved = resolve_tool_definition(definition, secrets)
     assert isinstance(resolved, HttpToolDefinition)  # noqa: S101 - narrowed by kind
     return resolved
@@ -661,6 +663,7 @@ async def _mcp_resolved(
         if credential is None:
             raise UnprocessableEntityError(f"unknown credential '{definition.credential_id}'")
         secrets = vault.decrypt(credential.ciphertext)
+        await mark_used(db, [credential.id])
     resolved = resolve_tool_definition(definition, secrets)
     assert isinstance(resolved, McpServerDefinition)  # noqa: S101 - narrowed by kind
     return resolved

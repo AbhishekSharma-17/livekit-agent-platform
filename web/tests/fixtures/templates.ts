@@ -1854,7 +1854,7 @@ export const TEMPLATES: TemplatesResponse = {
         "requires": {
           "provider_keys": [
             {
-              "provider_id": "google-image-gen",
+              "provider_id": "google-llm",
               "optional": true,
               "purpose": "incident sketches"
             }

@@ -22,25 +22,40 @@ fully built and tested with zero `provider_key_create` calls. Every other
 provider (`deepgram-stt`, `openai-llm`, `elevenlabs-tts`, `google-realtime`,
 `bey-avatar`, …) needs a credential first.
 
-## One OpenRouter key
+## One key per vendor
 
-OpenRouter sells LLM, speech-to-text, text-to-speech, embeddings and image
-generation behind one key, so five entries share it: `openrouter-llm`,
-`openrouter-stt`, `openrouter-tts`, `openrouter-embedding` and
-`openrouter-image-gen`. `openrouter-llm` is the key's **home**: the other
-four name it in `credential_provider`, a key created for any of them is
-stored under `openrouter-llm`, and `provider_key_list(provider_id=
-"openrouter-stt")` lists that same row. One `provider_key_create` call covers
-the LLM, the workflow and QA judge models, STT, TTS, the knowledge-base
-embedder and image generation. It never fills the `realtime` slot: OpenRouter
-has no speech-to-speech model.
+A vendor account key works for every entry of that vendor that takes the same
+key, so the entries share it: one entry is the key's **home** and the others
+name it in `credential_provider`. A key created for any member is stored under
+the home, and `provider_key_list(provider_id=)` for any member lists it (a key
+stored under another member before the vendor's entries shared one home is
+listed and accepted too). A key of another vendor is always refused.
 
-`openrouter-stt` is batch transcription (no interim results; each turn is
-uploaded after end-of-speech, adding roughly half a second to two seconds),
-and `openrouter-tts` is non-streaming like `openai-tts`. For the lowest
-latency keep LiveKit Inference for STT and TTS and use OpenRouter for the
-LLM. `openrouter/auto` is not tool-safe, so the default model is
-`openai/gpt-4.1-mini`.
+| Home | Also served by the same key |
+|---|---|
+| `openrouter-llm` | `openrouter-embedding`, `openrouter-image-gen` (and `openrouter-stt`, `openrouter-tts`) |
+| `deepgram-stt` | `deepgram-flux-stt`, `deepgram-tts` |
+| `cartesia-tts` | `cartesia-stt` |
+| `elevenlabs-tts` | `elevenlabs-stt` |
+| `openai-llm` | `openai-realtime`, `openai-gptlive-realtime`, `openai-responses-llm`, `openai-stt`, `openai-tts`, `openai-embedding`, `openai-image-gen` |
+| `google-llm` | `google-realtime`, `google-image-gen` (the Gemini API key; `google-stt`/`google-tts` take a service account) |
+| `groq-llm`, `baseten-llm`, `xai-llm`, `mistral-llm`, `aws-bedrock-llm` | that vendor's speech (and, for xAI, realtime) entries |
+| `gnani-stt`, `gradium-stt`, `sarvam-stt`, `slng-stt`, `smallestai-stt`, `speechmatics-stt` | that vendor's `-tts` entry |
+
+One Deepgram key therefore runs Nova or Flux transcription and the Aura
+voice; one OpenRouter key covers the LLM, the workflow and QA judge models,
+the knowledge-base embedder and image generation. Palabra, Simplismart,
+Soniox, Telnyx, NVIDIA and Azure speech keep one key per entry for now.
+
+OpenRouter's `openrouter-stt` (batch transcription, each turn uploaded after
+end-of-speech) and `openrouter-tts` (one request per sentence) do not stream,
+which adds seconds to every spoken reply, so they are **unlisted**
+(`listed: false`, with `unlisted_note`): the console no longer offers them or
+counts them on the key's tags. They still validate and run for an agent that
+already uses one. For the lowest latency keep LiveKit Inference (or Deepgram
+and Cartesia keys) for speech and use OpenRouter for the LLM.
+`openrouter/auto` is not tool-safe, so the default model is
+`openai/gpt-4.1-mini`. OpenRouter never fills the `realtime` slot.
 
 ## Creating a key
 
@@ -54,7 +69,11 @@ pasted inline — either way it goes to the vault and the response
 `test=true` runs a live probe (`CredentialTestResult`) before you rely on it.
 
 `provider_key_list(provider_id=)` and `provider_key_test(key_id)` manage
-existing keys; `provider_settings(provider_id, enabled=, default_key_id=)`
+existing keys. Every test is recorded on the key (`last_test_at`,
+`last_test_ok` — `null` when the provider has no automatic test —
+`last_test_message`), including the one `test=true` runs, and `last_used_at`
+says when a session, a tool call, a catalog read or an embed last used it (to
+within a minute); `provider_settings(provider_id, enabled=, default_key_id=)`
 turns a provider off workspace-wide or sets which key an agent uses when it
 doesn't pick one explicitly.
 

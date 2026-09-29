@@ -48,3 +48,31 @@ touches `api/data/lkap.db`).
 3. `cd api && uv run alembic upgrade head` on the dev database; `uv run alembic current` shows
    `v6_002_datasets (head)`.
 4. Restart the api (new routes and the `dataset_import` job) and the worker (the `dataset` tool kind).
+
+## `v6_003_credential_last_used` (V6-32)
+
+**Chain.** `… → v5_008_memory → v6_002_datasets → v6_003_credential_last_used` (`down_revision =
+"v6_002_datasets"`; `uv run alembic heads` in `api/` shows `v6_003_credential_last_used` as the only head).
+If `v6_001_inference_credentials` is ever built (ask #102) it re-points after this revision.
+
+**What it does.** Adds a nullable `credentials.last_used_at` (`DateTime`, `ADD COLUMN` on both dialects; no
+rebuild). The downgrade drops it (SQLite: native `ALTER TABLE … DROP COLUMN`, as `v5_009`), losing only the
+"last used" times.
+
+**Rehearsed (2026-09-30), SQLite, scratch copy of `api/tests/fixtures/v1_seed.sqlite`** (never
+`api/data/lkap.db`):
+
+| Step | Result |
+|---|---|
+| `alembic upgrade head` (from the v1 seed, every revision) | ok; `current` = `v6_003_credential_last_used (head)` |
+| `alembic downgrade v6_002_datasets` | ok; `current` = `v6_002_datasets` |
+| `alembic upgrade head` | ok; `current` = `v6_003_credential_last_used (head)` |
+| `alembic check` | "No new upgrade operations detected." (models and migration agree) |
+
+`api/tests/test_migration_v6_003.py` repeats it in the suite (rows and `ix_credentials_workspace` kept, the
+column added empty, dropped on downgrade, back on a second upgrade); `test_migrations.py` passes with it.
+
+**Not rehearsed here.** Postgres (the CI `test-postgres` job) and a copy of the dev database (the package never
+touches it). **Apply before the api restart**: the model maps the column, so the new api fails every key query
+on an un-migrated database.
+

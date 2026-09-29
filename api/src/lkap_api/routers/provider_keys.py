@@ -24,7 +24,13 @@ from lkap_contracts.api_models import (
     CredentialTestResult,
     CredentialUpdate,
 )
-from lkap_contracts.providers import MCP_OAUTH_PROVIDER_ID, ProviderSpec, credential_home, get
+from lkap_contracts.providers import (
+    MCP_OAUTH_PROVIDER_ID,
+    ProviderSpec,
+    credential_family,
+    credential_home,
+    get,
+)
 from lkap_contracts.tool_providers import TOOL_PROVIDER_ACCOUNT
 from lkap_contracts.tools import McpOAuthAuth
 from sqlalchemy import func, select
@@ -71,6 +77,10 @@ def _to_out(row: Credential) -> CredentialOut:
         fingerprint=row.fingerprint,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        last_test_at=row.last_test_at,
+        last_test_ok=row.last_test_ok,
+        last_test_message=row.last_test_message,
+        last_used_at=row.last_used_at,
     )
 
 
@@ -185,8 +195,8 @@ async def list_credentials(
     ctx: AdminCtxDep,
     provider_id: str | None = Query(
         default=None,
-        description="Filter by registry provider id; a provider that shares another's key (every "
-        "OpenRouter entry) lists the rows stored under that credential home",
+        description="Filter by registry provider id; a provider that shares its vendor's key (every "
+        "OpenRouter entry, Deepgram's transcribers and voice, …) lists every row of that key family",
     ),
 ) -> CredentialPage:
     """Return the workspace's credentials, newest first.
@@ -201,9 +211,11 @@ async def list_credentials(
     stmt = select(Credential).where(*visible)
     count_stmt = select(func.count()).select_from(Credential).where(*visible)
     if provider_id:
-        home = credential_home(provider_id)
-        stmt = stmt.where(Credential.provider_id == home)
-        count_stmt = count_stmt.where(Credential.provider_id == home)
+        # V6-32: the whole family, so a row stored under any member (before the vendor's entries
+        # shared one home) is still offered to every member.
+        family = credential_family(provider_id)
+        stmt = stmt.where(Credential.provider_id.in_(family))
+        count_stmt = count_stmt.where(Credential.provider_id.in_(family))
     rows = (await db.execute(stmt.order_by(Credential.created_at.desc()))).scalars().all()
     total = (await db.execute(count_stmt)).scalar_one()
     return CredentialPage(items=[_to_out(r) for r in rows], total=total)
@@ -239,7 +251,7 @@ async def update_credential(
     """Update label and/or secrets; omitting `secrets` keeps the stored values."""
     row = await _load(db, ctx, credential_id)
     _refuse_connection_row(row)
-    if payload.provider_id and credential_home(payload.provider_id) != row.provider_id:
+    if payload.provider_id and credential_home(payload.provider_id) != credential_home(row.provider_id):
         raise UnprocessableEntityError("a credential's provider cannot be changed; create a new one")
     if payload.secrets is not None:
         _refuse_hand_made_sign_in(row.provider_id)
@@ -394,11 +406,19 @@ async def test_credential(
     client: HttpClientDep,
     ctx: AdminCtxDep,
 ) -> CredentialTestResult:
-    """Verify a stored credential against its vendor."""
+    """Verify a stored credential against its vendor and record the outcome on the row.
+
+    V6-32: every outcome is recorded (``last_test_at``/``last_test_ok``/``last_test_message``,
+    returned on ``CredentialOut``), not only an adapter's, so the key list shows the test run
+    right after adding a key. A provider with no automatic test is recorded with
+    ``last_test_ok = None``. The check is the first of the key family (the row's own entry, then
+    the home, then the others) that has one: a Deepgram key stored under ``deepgram-tts`` is
+    checked the way a ``deepgram-stt`` key is.
+    """
     row = await _load(db, ctx, credential_id)
     if row.provider_id in HIDDEN_PROVIDER_IDS:
         raise NotFoundError(f"unknown credential '{credential_id}'")
-    spec = _spec_for(row.provider_id)
+    spec = _test_spec(_spec_for(row.provider_id))
 
     if credential_tests.has_adapter(spec) and credential_tests.is_cache_fresh(row.last_test_at):
         return credential_tests.cached_result(
@@ -407,22 +427,48 @@ async def test_credential(
 
     secrets = vault.decrypt(row.ciphertext)
     result = await credential_tests.run(spec, secrets, client)
-    if result is not None:
-        row.last_test_at = result.checked_at
-        row.last_test_ok = result.ok
-        row.last_test_message = result.message
-        await db.flush()
-        return result
+    if result is None:
+        result = await _table_test(spec, secrets, client, credential_id=credential_id)
+    row.last_test_at = result.checked_at or utcnow()
+    row.last_test_ok = None if _is_untestable(spec) else result.ok
+    row.last_test_message = result.message
+    await db.flush()
+    return result
 
+
+def _is_untestable(spec: ProviderSpec) -> bool:
+    return not credential_tests.has_adapter(spec) and spec.id not in _TEST_CALLS
+
+
+def _test_spec(spec: ProviderSpec) -> ProviderSpec:
+    """The family member whose check tests this key (the entry itself when it has one)."""
+    home = credential_home(spec)
+    others = sorted(credential_family(spec) - {spec.id, home})
+    for provider_id in [spec.id, home, *others]:
+        candidate = get(provider_id)
+        if not _is_untestable(candidate):
+            return candidate
+    return spec
+
+
+async def _table_test(
+    spec: ProviderSpec, secrets: dict[str, str], client: httpx.AsyncClient, *, credential_id: str
+) -> CredentialTestResult:
+    """The ``_TEST_CALLS`` check (one authenticated GET), or the "no automated test" answer."""
+    checked_at = utcnow()
     call = _TEST_CALLS.get(spec.id)
     if call is None:
-        return CredentialTestResult(ok=True, message=f"no automated test implemented for '{spec.id}'")
+        return CredentialTestResult(
+            ok=True, message=f"no automated test implemented for '{spec.id}'", checked_at=checked_at
+        )
     url, style = call
     try:
         response = await client.get(url, timeout=10.0, **_auth_request(style, secrets))
     except httpx.HTTPError as exc:
         log.warning("credential_test_failed", credential_id=credential_id, provider_id=spec.id)
-        return CredentialTestResult(ok=False, message=f"request failed: {type(exc).__name__}")
+        return CredentialTestResult(
+            ok=False, message=f"request failed: {type(exc).__name__}", checked_at=checked_at
+        )
     ok = response.status_code < 400
     log.info(
         "credential_tested",
@@ -430,7 +476,9 @@ async def test_credential(
         provider_id=spec.id,
         status_code=response.status_code,
     )
-    return CredentialTestResult(ok=ok, message=f"{spec.vendor} responded with HTTP {response.status_code}")
+    return CredentialTestResult(
+        ok=ok, message=f"{spec.vendor} responded with HTTP {response.status_code}", checked_at=checked_at
+    )
 
 
 def _bootstrap_label(provider_id: str) -> str:
@@ -466,7 +514,8 @@ async def seed_bootstrap_credentials(db: Any, vault: Vault, raw_json: str | None
         existing = (
             await db.execute(
                 select(Credential.id).where(
-                    Credential.workspace_id == DEFAULT_WORKSPACE_ID, Credential.provider_id == home
+                    Credential.workspace_id == DEFAULT_WORKSPACE_ID,
+                    Credential.provider_id.in_(credential_family(spec)),
                 )
             )
         ).first()

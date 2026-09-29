@@ -44,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
 from lkap_api.db.models import Credential, KnowledgeBase
 from lkap_api.errors import UnprocessableEntityError
+from lkap_api.key_usage import mark_used
 from lkap_api.logging import get_logger
 from lkap_api.settings import DEFAULT_EMBED_MODEL, Settings
 from lkap_api.vault import Vault
@@ -448,12 +449,13 @@ async def resolve_embedder(settings: Settings, db: AsyncSession, vault: Vault) -
     if credential is None:
         raise UnprocessableEntityError(f"LKAP_EMBEDDER references unknown credential '{credential_id}'")
     home = provider_registry.credential_home(spec)
-    if not legacy and credential.provider_id != home:
+    if not legacy and provider_registry.credential_home(credential.provider_id) != home:
         raise UnprocessableEntityError(
             f"LKAP_EMBEDDER credential '{credential_id}' belongs to provider "
             f"'{credential.provider_id}', not '{home}'"
         )
     secrets = vault.decrypt(credential.ciphertext)
+    await mark_used(db, [credential.id])
     base_url = _base_url_default(spec)
     model = spec.default_model or OPENAI_EMBEDDING_MODEL
     if base_url is None:

@@ -78,6 +78,7 @@ from lkap_api.custom_models.probes import (
 from lkap_api.custom_models.probes.base import SAMPLE_MAX
 from lkap_api.db.models import Credential, ProviderCatalogCache, utcnow
 from lkap_api.errors import NotFoundError, UnprocessableEntityError
+from lkap_api.key_usage import mark_used
 from lkap_api.logging import get_logger
 from lkap_api.vault import Vault
 
@@ -488,6 +489,7 @@ async def run_model_test(
                 "credential_id"
             )
         raw = vault.decrypt(credential.ciphertext)
+        await mark_used(db, [credential.id])
         key = _Key(
             secrets=normalize_secrets(spec, raw),
             scrub_values=list(raw.values()),

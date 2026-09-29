@@ -87,6 +87,7 @@ from lkap_api.errors import ApiError, ConflictError, NotFoundError
 from lkap_api.jobs.deps import JobsDep
 from lkap_api.jobs.reconcile import enqueue_reconcile
 from lkap_api.jobs.service import JobsService
+from lkap_api.key_usage import mark_used
 from lkap_api.logging import get_logger
 from lkap_api.mcp_oauth.tokens import (
     NeedsReauth,
@@ -238,6 +239,7 @@ async def _decrypt(
         .all()
     )
     found = {row.id: vault.decrypt(row.ciphertext) for row in rows}
+    await mark_used(db, found)  # V6-32: the key list's "Last used"
     missing = ids - set(found)
     if missing:
         raise ConflictError(

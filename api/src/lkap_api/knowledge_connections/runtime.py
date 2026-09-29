@@ -57,6 +57,7 @@ from lkap_api.kb.rerankers.voyage import VoyageReranker
 from lkap_api.kb.stores.pinecone import PineconeStore
 from lkap_api.kb.stores.qdrant import QdrantStore, sparse_encoder
 from lkap_api.kb.stores.weaviate import WeaviateStore
+from lkap_api.key_usage import mark_used
 from lkap_api.knowledge_connections.http import ConnectorError
 from lkap_api.knowledge_connections.settings import (
     AnySettings,
@@ -164,6 +165,7 @@ async def load_connection(
             raise ConnectorError(
                 f"the key of knowledge connection '{row.name}' cannot be read", auth=True
             ) from exc
+        await mark_used(session, [credential.id])
         api_key = str(secrets.get("api_key") or "") or None
     return LoadedConnection(
         id=row.id,

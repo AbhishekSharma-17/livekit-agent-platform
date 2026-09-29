@@ -26,7 +26,8 @@ policy lookup (`policy_lookup` on the `Demo — Policy directory` lookup table,
 created once per workspace), the details intake and the hand-over; and two
 knowledge bases ("Claims intake · Policy lines", "Claims intake · Intake
 playbook"). Check `kb_get` for `ready` before relying on them. The sketch
-needs a Google key (`google-image-gen`); it is optional — without one the
+needs a Google key (the Gemini API key, stored under `google-llm`; a key added
+from any Google entry serves it); it is optional — without one the
 `image_gen` slot is left empty and everything else works. Add it later with
 `provider_key_create`.
 

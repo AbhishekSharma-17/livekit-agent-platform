@@ -19,7 +19,7 @@ from decimal import Decimal
 from typing import Any
 
 from lkap_contracts.api_models import CatalogItem, ProviderModelOut
-from lkap_contracts.providers import ModelCapabilities, ProviderSpec, credential_home
+from lkap_contracts.providers import ModelCapabilities, ProviderSpec, credential_family, credential_home
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -98,13 +98,23 @@ async def get_row(
 ) -> ProviderModel | None:
     """The workspace's row for ``model_id`` under ``spec``'s home and kind, if any."""
     home, kind, _ = record_key(spec, model_id)
-    row: ProviderModel | None = await db.scalar(
-        select(ProviderModel).where(
-            ProviderModel.workspace_id == workspace_id,
-            ProviderModel.provider_home == home,
-            ProviderModel.kind == kind,
-            ProviderModel.model_id == model_id,
+    # V6-32: a row recorded under another member of the key family (before the vendor's entries
+    # shared one home) is the same record; the one under the home wins when both exist.
+    row: ProviderModel | None = (
+        (
+            await db.execute(
+                select(ProviderModel)
+                .where(
+                    ProviderModel.workspace_id == workspace_id,
+                    ProviderModel.provider_home.in_(credential_family(spec)),
+                    ProviderModel.kind == kind,
+                    ProviderModel.model_id == model_id,
+                )
+                .order_by((ProviderModel.provider_home == home).desc(), ProviderModel.updated_at.desc())
+            )
         )
+        .scalars()
+        .first()
     )
     return row
 
@@ -123,13 +133,12 @@ async def list_rows(
         custom_only: Leave out ids the registry lists (``spec.models``/``default_model``).
         limit: At most this many rows.
     """
-    home = credential_home(spec)
     rows = (
         await db.execute(
             select(ProviderModel)
             .where(
                 ProviderModel.workspace_id == workspace_id,
-                ProviderModel.provider_home == home,
+                ProviderModel.provider_home.in_(credential_family(spec)),
                 ProviderModel.kind == spec.kind,
             )
             .order_by(
@@ -140,7 +149,13 @@ async def list_rows(
         )
     ).scalars()
     listed = registry_ids(spec) if custom_only else frozenset()
-    out = [row for row in rows if row.model_id not in listed]
+    seen: set[str] = set()
+    out: list[ProviderModel] = []
+    for row in rows:  # most recently tested first, so a family duplicate (V6-32) keeps the fresher
+        if row.model_id in listed or row.model_id in seen:
+            continue
+        seen.add(row.model_id)
+        out.append(row)
     return out[:limit]
 
 
@@ -198,11 +213,28 @@ async def declare(
 
 
 async def records_for_workspace(db: AsyncSession, *, workspace_id: str) -> dict[RecordKey, ProviderModelOut]:
-    """Every record of the workspace keyed by ``(home, kind, model_id)`` (one query, for validation)."""
+    """Every record of the workspace keyed by ``(home, kind, model_id)`` (one query, for validation).
+
+    V6-32: a row's stored ``provider_home`` is mapped to the current home of its key family, so
+    a model tested before its vendor's entries shared one key still counts as tested. When two
+    rows meet on one key, the one tested last wins.
+    """
     rows = (
         await db.execute(select(ProviderModel).where(ProviderModel.workspace_id == workspace_id))
     ).scalars()
-    return {(row.provider_home, row.kind, row.model_id): to_out(row) for row in rows}
+    records: dict[RecordKey, ProviderModelOut] = {}
+    for row in rows:
+        key = (credential_home(row.provider_home), row.kind, row.model_id)
+        current = records.get(key)
+        if current is None or _tested_later(row, current):
+            records[key] = to_out(row)
+    return records
+
+
+def _tested_later(row: ProviderModel, current: ProviderModelOut) -> bool:
+    if current.last_test_at is None:
+        return row.last_test_at is not None or row.provider_home == credential_home(row.provider_home)
+    return row.last_test_at is not None and row.last_test_at > current.last_test_at
 
 
 # ---------------------------------------------------------------- catalog sightings
@@ -247,7 +279,7 @@ async def _rows_for(db: AsyncSession, *, workspace_id: str, spec: ProviderSpec) 
             await db.execute(
                 select(ProviderModel).where(
                     ProviderModel.workspace_id == workspace_id,
-                    ProviderModel.provider_home == credential_home(spec),
+                    ProviderModel.provider_home.in_(credential_family(spec)),
                     ProviderModel.kind == spec.kind,
                 )
             )

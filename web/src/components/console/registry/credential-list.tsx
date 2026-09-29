@@ -235,14 +235,19 @@ export function CredentialList() {
         cell: (row) => <UsageCell usage={usage.get(row.id) ?? NO_USAGE} />,
       },
       {
-        id: "created",
-        header: "Created",
+        id: "added",
+        header: "Added",
         cell: (row) => <RelativeTime iso={row.created_at} className="text-[0.8125rem] text-muted-foreground" />,
+      },
+      {
+        id: "used",
+        header: "Last used",
+        cell: (row) => <LastUsed credential={row} />,
       },
       {
         id: "test",
         header: "Last test",
-        cell: (row) => (row.provider_id === COMPOSIO_PROVIDER_ID ? <ComposioTestStatus /> : <TestStatus credentialId={row.id} />),
+        cell: (row) => (row.provider_id === COMPOSIO_PROVIDER_ID ? <ComposioTestStatus /> : <TestStatus credential={row} />),
       },
       {
         id: "actions",
@@ -270,8 +275,14 @@ export function CredentialList() {
               <Fingerprint value={row.fingerprint} />
               <UsageCell usage={usage.get(row.id) ?? NO_USAGE} />
             </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-[2.125rem] text-[0.8125rem] text-muted-foreground">
+              <span>
+                Added <RelativeTime iso={row.created_at} />
+              </span>
+              <LastUsed credential={row} withLabel />
+            </div>
             <div className="pl-[2.125rem]">
-              {row.provider_id === COMPOSIO_PROVIDER_ID ? <ComposioTestStatus /> : <TestStatus credentialId={row.id} />}
+              {row.provider_id === COMPOSIO_PROVIDER_ID ? <ComposioTestStatus /> : <TestStatus credential={row} />}
             </div>
           </div>
         )}
@@ -383,9 +394,63 @@ function UsageCell({ usage }: { usage: CredentialUsage }) {
   );
 }
 
-/** Result chip for 10 s after a test, then a quiet "Tested … ago". */
-function TestStatus({ credentialId }: { credentialId: string }) {
-  const { last, pending } = useCredentialTest(credentialId);
+/**
+ * "Last used" (V6-32, `CredentialOut.last_used_at`): when a call, a tool, a catalog read or an
+ * embed last used the key. `withLabel` spells the column name out for the mobile card.
+ */
+function LastUsed({ credential, withLabel = false }: { credential: CredentialOut; withLabel?: boolean }) {
+  if (!credential.last_used_at) {
+    return <span className="text-[0.8125rem] text-muted-foreground">Not used yet</span>;
+  }
+  return (
+    <span className="text-[0.8125rem] text-muted-foreground">
+      {withLabel ? "Last used " : null}
+      <RelativeTime iso={credential.last_used_at} />
+    </span>
+  );
+}
+
+/** The first sentence of a vendor message, short enough for a table cell (the full text is the tooltip). */
+export function shortTestMessage(message: string | null | undefined, max = 60): string {
+  const text = (message ?? "").trim().split(/(?<=\.)\s/)[0] ?? "";
+  return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
+}
+
+/**
+ * The key's recorded test (V6-32): "Works · tested 2 days ago", "Failed · 29 Sep · <reason>",
+ * "No automatic test for this provider" or "Not tested yet". The api records every test
+ * (including the one run while adding the key) on the key itself, so this survives a reload;
+ * `useCredentialTest` only adds the live "Testing…" state and the 10 s result chip.
+ */
+export function RecordedTest({ credential }: { credential: Pick<CredentialOut, "last_test_at" | "last_test_ok" | "last_test_message"> }) {
+  const testedAt = credential.last_test_at;
+  if (!testedAt) return <span className="text-[0.8125rem] text-muted-foreground">Not tested yet</span>;
+  if (credential.last_test_ok === true) {
+    return (
+      <span className="text-[0.8125rem] text-muted-foreground" title={credential.last_test_message ?? undefined}>
+        <span className="text-success-text">Works</span> · tested <RelativeTime iso={testedAt} />
+      </span>
+    );
+  }
+  if (credential.last_test_ok === false) {
+    const reason = shortTestMessage(credential.last_test_message);
+    return (
+      <span className="text-[0.8125rem] text-muted-foreground" title={credential.last_test_message ?? undefined}>
+        <span className="text-danger-text">Failed</span> · <RelativeTime iso={testedAt} />
+        {reason ? ` · ${reason}` : null}
+      </span>
+    );
+  }
+  return (
+    <span className="text-[0.8125rem] text-muted-foreground" title={credential.last_test_message ?? undefined}>
+      {OUTCOME_LABEL["not-implemented"]}
+    </span>
+  );
+}
+
+/** Result chip for 10 s after a test, then the key's recorded test (`RecordedTest`). */
+function TestStatus({ credential }: { credential: CredentialOut }) {
+  const { last, pending } = useCredentialTest(credential.id);
   const [fresh, setFresh] = React.useState(false);
 
   React.useEffect(() => {
@@ -410,12 +475,13 @@ function TestStatus({ credentialId }: { credentialId: string }) {
             {last.outcome === "passed" || last.outcome === "timed-out" ? OUTCOME_LABEL[last.outcome] : last.message || OUTCOME_LABEL[last.outcome]}
           </span>
         </StatusChip>
-      ) : last ? (
+      ) : last && !credential.last_test_at ? (
+        // The api has not answered with the recorded result yet (or the test timed out here).
         <span className="text-[0.8125rem] text-muted-foreground" title={last.message}>
           {OUTCOME_LABEL[last.outcome]} · <RelativeTime iso={last.testedAt} />
         </span>
       ) : (
-        <span className="text-[0.8125rem] text-muted-foreground">Not tested</span>
+        <RecordedTest credential={credential} />
       )}
     </span>
   );

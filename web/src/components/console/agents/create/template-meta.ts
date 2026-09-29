@@ -114,13 +114,20 @@ export interface TemplateBadge {
   title: string;
 }
 
-/** provider_id → display vendor / label, from `useProviders()`. */
-export type ProviderLookup = Map<string, Pick<ProviderSpec, "vendor" | "label">>;
+/** provider_id → display vendor / label (and its key's home, V6-32), from `useProviders()`. */
+export type ProviderLookup = Map<string, Pick<ProviderSpec, "vendor" | "label"> & Partial<Pick<ProviderSpec, "credential_provider">>>;
 
 export function providerLookup(providers: ProviderSpec[] | undefined): ProviderLookup {
   const map: ProviderLookup = new Map();
-  for (const spec of providers ?? []) map.set(spec.id, { vendor: spec.vendor, label: spec.label });
+  for (const spec of providers ?? []) {
+    map.set(spec.id, { vendor: spec.vendor, label: spec.label, credential_provider: spec.credential_provider });
+  }
   return map;
+}
+
+/** The provider id whose key serves `providerId` (its credential home; itself when unknown). */
+function keyHomeOf(providerId: string, providers: ProviderLookup): string {
+  return providers.get(providerId)?.credential_provider ?? providerId;
 }
 
 function vendorOf(providerId: string, providers: ProviderLookup): string {
@@ -297,8 +304,9 @@ export function gatedDifferences(
 
   const pipeline = effectivePipeline(item);
   const keys = item.template.requires?.provider_keys ?? [];
+  // A starter lists each key under its home (V6-32: the Google sketch needs the `google-llm` key).
   const purposeOf = (providerId: string, fallback: string) =>
-    keys.find((key) => key.provider_id === providerId)?.purpose || fallback;
+    keys.find((key) => keyHomeOf(key.provider_id, providers) === keyHomeOf(providerId, providers))?.purpose || fallback;
 
   const askedMode = pipeline.mode ?? "cascaded";
   const gotMode = config.pipeline?.mode ?? "cascaded";

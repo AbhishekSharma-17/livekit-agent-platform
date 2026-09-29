@@ -181,6 +181,10 @@ describe("providers section: each part by its job", () => {
       "Filters background noise",
     ]);
 
+    // Two parts share "Decides when the caller has finished", yet each card is its own landmark by name.
+    expect(screen.getByRole("region", { name: /^Decides when the caller has finished Voice activity detection$/ })).toBeTruthy();
+    expect(screen.getByRole("region", { name: /^Decides when the caller has finished Turn detection$/ })).toBeTruthy();
+
     fireEvent.click(screen.getByRole("button", { name: /Add image generation/ }));
     fireEvent.click(screen.getByRole("button", { name: /workflow model/ }));
     expect(screen.getByRole("heading", { level: 3, name: "Draws pictures" })).toBeTruthy();

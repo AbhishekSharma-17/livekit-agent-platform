@@ -95,6 +95,7 @@ export function ProviderSlotCard({
   const autoId = React.useId();
   const bodyId = `${idPrefix ?? `slot-${kind}-${autoId}`}-body`;
   const titleId = `${bodyId}-title`;
+  const nameId = `${bodyId}-name`;
   const { issueFor } = useSectionIssues();
   const fieldIssueFor = React.useCallback(
     (fieldName: string) => {
@@ -109,7 +110,9 @@ export function ProviderSlotCard({
   return (
     <Collapsible open={expanded} onOpenChange={onExpandedChange} asChild>
       <section
-        aria-labelledby={titleId}
+        // With a job, two parts can share it (voice activity and turn detection both "decide when the
+        // caller has finished"), so the technical name joins the landmark's name to keep each unique.
+        aria-labelledby={job ? `${titleId} ${nameId}` : titleId}
         data-slot="provider-slot-card"
         data-kind={kind}
         data-issue-path={issuePath}
@@ -126,7 +129,7 @@ export function ProviderSlotCard({
                 {job ?? title}
               </h3>
               {job ? (
-                <p data-slot="slot-technical-name" className="text-[0.6875rem] leading-4 tracking-[0.02em] text-muted-foreground">
+                <p id={nameId} data-slot="slot-technical-name" className="text-[0.6875rem] leading-4 tracking-[0.02em] text-muted-foreground">
                   {title}
                 </p>
               ) : null}

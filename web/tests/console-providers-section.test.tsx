@@ -215,7 +215,7 @@ describe("ProvidersSection", () => {
     render(<Harness connectionId="conn-a" pipeline={{ mode: "cascaded", llm: ref("livekit-inference-llm"), tts: ref("livekit-inference-tts") }} />);
 
     fireEvent.click(await screen.findByRole("button", { name: /Edit speech-to-text/i }));
-    const sttCard = screen.getByRole("region", { name: "Listens: turns speech into text" });
+    const sttCard = screen.getByRole("region", { name: /^Listens: turns speech into text/ });
     // No LiveKit Inference STT in this fixture, so the vendor list (and its
     // "More providers" disclosure) shows directly — no "Run it with" step.
     const more = await within(sttCard).findByText(/More providers/);
@@ -333,7 +333,7 @@ describe("ProvidersSection", () => {
       stubApi([COMPATIBLE_LLM, TTS_PROVIDER], [CONNECTION_A], role);
       render(<Harness connectionId="conn-a" pipeline={{ mode: "cascaded", llm, tts: ref("livekit-inference-tts") }} />);
       fireEvent.click(await screen.findByRole("button", { name: /Edit language model/i }));
-      return screen.getByRole("region", { name: "Thinks: understands, decides, calls tools, writes the reply" });
+      return screen.getByRole("region", { name: /^Thinks: understands, decides, calls tools, writes the reply/ });
     }
 
     it("shows a builder the base URL read-only with the reason, other options editable", async () => {

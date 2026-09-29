@@ -306,16 +306,30 @@ def test_requirements_from_pipeline_marks_image_gen_optional_and_realtime_requir
     pipeline = PipelineConfig(
         mode="realtime",
         realtime=ProviderRef(provider_id="google-realtime"),
-        image_gen=ProviderRef(provider_id="google-image-gen"),
+        image_gen=ProviderRef(provider_id="openai-image-gen"),
         stt=ProviderRef(provider_id="deepgram-stt"),  # not used in realtime mode
     )
 
     keys = requirements_from_pipeline(pipeline)
 
+    # V6-32: each vendor's key is reported under its family home.
     assert [(k.provider_id, k.optional) for k in keys] == [
-        ("google-realtime", False),
-        ("google-image-gen", True),
+        ("google-llm", False),
+        ("openai-llm", True),
     ]
+
+
+def test_requirements_from_pipeline_needs_one_google_key_for_the_voice_and_the_sketch() -> None:
+    """V6-32: the Gemini key serves realtime and image generation, so the required slot wins."""
+    pipeline = PipelineConfig(
+        mode="realtime",
+        realtime=ProviderRef(provider_id="google-realtime"),
+        image_gen=ProviderRef(provider_id="google-image-gen"),
+    )
+
+    keys = requirements_from_pipeline(pipeline)
+
+    assert [(k.provider_id, k.optional) for k in keys] == [("google-llm", False)]
 
 
 def test_requirements_from_pipeline_reports_one_shared_openrouter_key_under_its_home() -> None:

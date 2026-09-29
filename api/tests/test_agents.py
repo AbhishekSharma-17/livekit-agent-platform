@@ -226,23 +226,18 @@ def test_seeding_a_realtime_pack_without_a_credential_falls_back_to_cascaded(
 def test_seeding_a_realtime_pack_with_one_credential_keeps_realtime(
     fake_packs: dict[str, PackManifest],
 ) -> None:
+    # V6-32: one Google key (stored under any Google entry) serves the voice and the sketch.
     config = seed_config_from_manifest(
-        fake_packs["insurance_claim"],
-        credentials_by_provider={"google-realtime": ["cred-rt"], "google-image-gen": ["cred-img"]},
+        fake_packs["insurance_claim"], credentials_by_provider={"google-realtime": ["cred-google"]}
     )
 
     assert config.pipeline.mode == "realtime"
     assert config.pipeline.realtime is not None
-    assert config.pipeline.realtime.credential_id == "cred-rt"
+    assert config.pipeline.realtime.credential_id == "cred-google"
     assert config.pipeline.realtime.fields["voice"] == "Kore"
     assert config.pipeline.image_gen is not None
-    assert config.pipeline.image_gen.credential_id == "cred-img"
-    assert (
-        validate_agent_config(
-            config, credential_providers={"cred-rt": "google-realtime", "cred-img": "google-image-gen"}
-        ).ok
-        is True
-    )
+    assert config.pipeline.image_gen.credential_id == "cred-google"
+    assert validate_agent_config(config, credential_providers={"cred-google": "google-realtime"}).ok is True
 
 
 def test_ambiguous_credentials_fall_back_instead_of_guessing(

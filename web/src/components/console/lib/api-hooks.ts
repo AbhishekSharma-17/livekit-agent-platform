@@ -447,8 +447,13 @@ export function useUpdateCredential() {
 
 /** `POST /v1/credentials/{id}/test` — a cheap vendor call; `ok=false` carries the reason in `message`. */
 export function useTestCredential() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post<CredentialTestResult>(`credentials/${id}/test`),
+    // V6-32: the api records the result on the key; refetch so the list shows it.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["credentials"] });
+    },
   });
 }
 

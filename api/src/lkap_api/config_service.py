@@ -256,7 +256,12 @@ class ValidationContext:
 
     config: AgentConfig
     credential_providers: Mapping[str, str] = dataclasses.field(default_factory=dict)
-    """``{credential_id: provider_id}`` for every credential of the workspace."""
+    """``{credential_id: credential home}`` for every credential of the workspace.
+
+    V6-32: the stored ``provider_id`` mapped through ``credential_home`` (:func:`key_homes`), so
+    a row stored under any member of a key family (``deepgram-tts`` before Deepgram's entries
+    shared one home) compares equal to the family's home everywhere a validator checks an owner.
+    """
     connection: ConnectionContext | None = None
     workspace_id: str | None = None
     disabled_provider_ids: frozenset[str] = frozenset()
@@ -431,6 +436,17 @@ class _Findings:
 
 
 # ------------------------------------------------------------------------ validation
+def key_homes(credential_providers: Mapping[str, str]) -> dict[str, str]:
+    """``{credential_id: stored provider_id}`` → ``{credential_id: credential home}`` (V6-32).
+
+    A key keeps the ``provider_id`` it was stored with; a vendor's entries may since share one
+    home (Deepgram's TTS joined its STT in V6-32). Comparing homes makes a key stored under any
+    member of the family serve every member, and still refuses another vendor's key. Ids the
+    registry does not know (a connected app, a tool secret bag) pass through unchanged.
+    """
+    return {credential_id: credential_home(owner) for credential_id, owner in credential_providers.items()}
+
+
 def validate_agent_config(
     config: AgentConfig,
     *,
@@ -459,7 +475,7 @@ def validate_agent_config(
     return validate(
         ValidationContext(
             config=config,
-            credential_providers=credential_providers,
+            credential_providers=key_homes(credential_providers),
             connection=connection,
             workspace_id=workspace_id,
             disabled_provider_ids=disabled_provider_ids,
@@ -835,7 +851,7 @@ def _validate_credential(
         home = credential_home(spec)
         if owner is None:
             findings.add("error", label, f"unknown credential '{ref.credential_id}'")
-        elif owner != home:
+        elif credential_home(owner) != home:  # V6-32: any member of the key family
             findings.add(
                 "error",
                 label,
@@ -2115,7 +2131,7 @@ def _agent_openai_key(config: AgentConfig, credential_providers: Mapping[str, st
             home = credential_providers.get(ref.credential_id)
         else:
             home = credential_home(ref.provider_id)
-        if home in OPENAI_KEY_HOMES:
+        if home is not None and credential_home(home) in OPENAI_KEY_HOMES:
             return ref.credential_id
     return None
 
@@ -2210,7 +2226,7 @@ def _check_openai_key(ctx: ValidationContext, path: str, credential_id: str, fin
     owner = ctx.credential_providers.get(credential_id)
     if owner is None:
         findings.add("error", path, f"unknown credential '{credential_id}'")
-    elif owner not in OPENAI_KEY_HOMES:
+    elif credential_home(owner) not in OPENAI_KEY_HOMES:
         findings.add("error", path, f"credential '{credential_id}' is a '{owner}' key, not an OpenAI key")
 
 
@@ -2615,7 +2631,7 @@ async def validation_context_for(
         .tuples()
         .all()
     )
-    credential_providers = {row[0]: row[1] for row in credential_rows}
+    credential_providers = key_homes({row[0]: row[1] for row in credential_rows})
     connection_statuses = {
         row[0]: row[1] or "unknown"
         for row in (
@@ -2863,11 +2879,19 @@ def _unambiguous_credential(
     """Return the single credential for the ref's provider, or ``None``.
 
     ``credentials_by_provider`` is keyed by each row's *stored* provider id,
-    which for a provider with a credential home is the home (R-V4-7).
+    which for a provider with a credential home is the home (R-V4-7) — or, for
+    a row stored before its vendor's entries shared one home, any member of the
+    family (V6-32), so the candidates are gathered across the whole family.
     """
     if ref is None:
         return None
-    candidates = credentials_by_provider.get(credential_home(ref.provider_id), [])
+    home = credential_home(ref.provider_id)
+    candidates = [
+        credential_id
+        for provider_id, ids in credentials_by_provider.items()
+        if credential_home(provider_id) == home
+        for credential_id in ids
+    ]
     return candidates[0] if len(candidates) == 1 else None
 
 

@@ -787,8 +787,23 @@ class ProviderSpec(BaseModel):
         description=(
             "The registry id whose credential rows this provider uses (its credential home, R-V4-7). "
             "Unset means the provider is its own home. The home exists, has no home of its own and "
-            "declares the same secret field names."
+            "declares the same secret field names. V6-32: every entry of a vendor whose entries take "
+            "the same account key names one home (`credential_family`), and a row stored under any "
+            "member of the family serves the whole family."
         ),
+    )
+    listed: bool = Field(
+        True,
+        description=(
+            "V6-32: whether the console offers this entry in its pickers and counts it on a key's "
+            "tags. `False` keeps the entry valid and runnable for a stored agent that already uses "
+            "it (validation, resolution and the worker are unchanged); `unlisted_note` says why in "
+            "plain words."
+        ),
+    )
+    unlisted_note: str | None = Field(
+        None,
+        description="V6-32: the plain-words reason an entry is not offered (`listed` is `False`).",
     )
 
     @model_validator(mode="after")
@@ -1587,6 +1602,13 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 #: The one registry entry that holds the OpenRouter credential (R-V4-7).
 OPENROUTER_CREDENTIAL_HOME = "openrouter-llm"
 
+_OPENROUTER_SPEECH_UNLISTED = (
+    "Not offered for new agents: OpenRouter's speech-to-text and text-to-speech wait for a whole "
+    "turn or sentence instead of streaming, which adds seconds to every reply on a live call. Use "
+    "the OpenRouter key for language models, image generation and embeddings; agents that already "
+    "use this entry keep working."
+)
+
 
 def _openrouter_key() -> FieldSpec:
     return _api_key("OpenRouter API key", env="OPENROUTER_API_KEY")
@@ -1687,6 +1709,8 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         package="livekit-plugins-openai",
         python_class="livekit.plugins.openai.STT",
         credential_provider=OPENROUTER_CREDENTIAL_HOME,
+        listed=False,
+        unlisted_note=_OPENROUTER_SPEECH_UNLISTED,
         secret_fields=[_openrouter_key()],
         fields=[
             _openrouter_base_url(),
@@ -1717,6 +1741,8 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         package="livekit-plugins-openai",
         python_class="lkap_agent.providers.openrouter.OpenRouterTTS",
         credential_provider=OPENROUTER_CREDENTIAL_HOME,
+        listed=False,
+        unlisted_note=_OPENROUTER_SPEECH_UNLISTED,
         secret_fields=[_openrouter_key()],
         fields=[
             _openrouter_base_url(),
@@ -4338,12 +4364,79 @@ def speech_streams(spec: ProviderSpec, fields: dict[str, Any] | None = None) -> 
     return capabilities.streaming
 
 
+#: V6-32: one vendor account key per family, stored under the family's **home** (R-V4-7's
+#: mechanism, widened from OpenRouter and Deepgram Flux). ``{member: home}``; every member takes
+#: the same secret fields as its home (``test_registry.py`` pins it). The home is the vendor's
+#: language-model entry when it has one, else the entry most keys were already added from (the
+#: first-shipped Deepgram STT, Cartesia and ElevenLabs TTS), else its speech-to-text entry.
+#: Verified against the installed plugin source (``os.environ`` key lookup and the ``api_key``
+#: kwarg): Deepgram, Cartesia, ElevenLabs, OpenAI, Google (Gemini API key only: ``google-stt`` and
+#: ``google-tts`` take service-account credentials). The rest share the same ``env_fallback``
+#: on every member (V2-05's check against the 1.8.2 source) and the same constructor kwarg
+#: (``agent/tests/fixtures/plugin_signatures.json``). Palabra, Simplismart, Soniox, Telnyx, NVIDIA
+#: and Azure speech record no environment variable on at least one member and are left separate
+#: until their plugins can be read (docs/v6/_asks.md #313).
+_FAMILY_HOMES: dict[str, str] = {
+    # Deepgram: Nova (home), Flux (V6-02) and Aura TTS.
+    "deepgram-tts": "deepgram-stt",
+    # Cartesia, ElevenLabs.
+    "cartesia-stt": "cartesia-tts",
+    "elevenlabs-stt": "elevenlabs-tts",
+    # OpenAI: one platform key for every OpenAI entry (Azure OpenAI is another vendor).
+    "openai-realtime": "openai-llm",
+    "openai-gptlive-realtime": "openai-llm",
+    "openai-responses-llm": "openai-llm",
+    "openai-stt": "openai-llm",
+    "openai-tts": "openai-llm",
+    "openai-embedding": "openai-llm",
+    "openai-image-gen": "openai-llm",
+    # Google: the Gemini API key.
+    "google-realtime": "google-llm",
+    "google-image-gen": "google-llm",
+    # Same env_fallback on every member.
+    "groq-stt": "groq-llm",
+    "groq-tts": "groq-llm",
+    "baseten-stt": "baseten-llm",
+    "baseten-tts": "baseten-llm",
+    "xai-realtime": "xai-llm",
+    "xai-stt": "xai-llm",
+    "xai-tts": "xai-llm",
+    "mistral-stt": "mistral-llm",
+    "aws-polly-tts": "aws-bedrock-llm",
+    "gnani-tts": "gnani-stt",
+    "gradium-tts": "gradium-stt",
+    "sarvam-tts": "sarvam-stt",
+    "slng-tts": "slng-stt",
+    "smallestai-tts": "smallestai-stt",
+    "speechmatics-tts": "speechmatics-stt",
+}
+
+
+def _with_family_home(spec: ProviderSpec) -> ProviderSpec:
+    """Return ``spec`` with its V6-32 family home, unless it already names one."""
+    home = _FAMILY_HOMES.get(spec.id)
+    if home is None or spec.credential_provider is not None:
+        return spec
+    return spec.model_copy(update={"credential_provider": home})
+
+
 REGISTRY: list[ProviderSpec] = [
-    _with_streaming(_with_language_capabilities(_live_verified(spec)))
+    _with_family_home(_with_streaming(_with_language_capabilities(_live_verified(spec))))
     for spec in [*_MVP, *_OPENROUTER, *_FULL, *_NEW, *_DEFERRED]
 ]
 
 _BY_ID: dict[str, ProviderSpec] = {spec.id: spec for spec in REGISTRY}
+
+
+def _families() -> dict[str, frozenset[str]]:
+    members: dict[str, set[str]] = {}
+    for spec in REGISTRY:
+        home = spec.credential_provider or spec.id
+        members.setdefault(home, {home}).add(spec.id)
+    return {home: frozenset(ids) for home, ids in members.items()}
+
+
+_FAMILIES: dict[str, frozenset[str]] = _families()
 
 
 def credential_home(spec_or_id: ProviderSpec | str) -> str:
@@ -4366,6 +4459,31 @@ def credential_home(spec_or_id: ProviderSpec | str) -> str:
     if spec is None:
         return spec_or_id
     return spec.credential_provider or spec.id
+
+
+def credential_family(spec_or_id: ProviderSpec | str) -> frozenset[str]:
+    """Every registry id whose key is stored under the same home as this one (V6-32).
+
+    A credential row keeps the ``provider_id`` it was stored with, and a home
+    can move when a vendor's entries start sharing one key (``deepgram-tts``
+    joined ``deepgram-stt``'s family in V6-32), so a lookup matches the whole
+    family rather than the home alone: a row stored under any member serves
+    every member. An id the registry does not know is its own one-member
+    family.
+
+    Args:
+        spec_or_id: A :class:`ProviderSpec` or a registry id.
+
+    Returns:
+        The home and every entry that names it, as a frozen set.
+    """
+    home = credential_home(spec_or_id)
+    return _FAMILIES.get(home, frozenset({home}))
+
+
+def shares_credential(provider_id: str, other_id: str) -> bool:
+    """Whether a key stored under ``provider_id`` serves ``other_id`` (same family, V6-32)."""
+    return credential_home(provider_id) == credential_home(other_id)
 
 
 def get(provider_id: str) -> ProviderSpec:

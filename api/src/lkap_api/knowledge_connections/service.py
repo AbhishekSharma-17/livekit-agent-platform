@@ -139,7 +139,7 @@ async def _credential(db: AsyncSession, ctx: WorkspaceContext, kind: str, creden
             f"unknown credential '{credential_id}'", details={"field": "credential_id"}
         )
     expected = credential_home(KNOWLEDGE_CONNECTION_PROVIDER_IDS[kind])
-    if row.provider_id != expected:
+    if credential_home(row.provider_id) != expected:
         raise UnprocessableEntityError(
             f"credential '{credential_id}' is a '{row.provider_id}' key; this connection needs a "
             f"'{expected}' key",

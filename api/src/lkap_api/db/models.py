@@ -527,6 +527,9 @@ class Credential(Base):
     last_test_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
     last_test_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     last_test_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: V6-32 (migration ``v6_003_credential_last_used``): when a session, tool call, catalog read
+    #: or embed last decrypted the key, stamped at most once a minute (``credential_usage``).
+    last_used_at: Mapped[dt.datetime | None] = mapped_column(UtcDateTime, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
         UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow

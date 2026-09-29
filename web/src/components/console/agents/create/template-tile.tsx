@@ -99,8 +99,10 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
   const effectiveKeyProviderIds = React.useMemo(() => {
     if (!registry || registry.length === 0) return keyProviderIds;
     const expanded = new Set(keyProviderIds);
+    // V6-32: a key keeps the provider id it was stored with, so compare homes on both sides.
+    const homesHeld = new Set([...keyProviderIds].map((id) => credentialHome(id, registry)));
     for (const spec of registry) {
-      if (keyProviderIds.has(credentialHome(spec))) expanded.add(spec.id);
+      if (homesHeld.has(credentialHome(spec))) expanded.add(spec.id);
     }
     return expanded;
   }, [keyProviderIds, registry]);

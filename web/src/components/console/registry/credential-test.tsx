@@ -74,12 +74,12 @@ const IDLE: CredentialTestState = { last: null, pending: false };
 /**
  * Run `POST /v1/credentials/{id}/test` and remember the last result.
  *
- * `CredentialOut` has no "last tested" field, so the state is kept in the
- * react-query cache under `["credential-test", id]` for this browser
- * session: every component showing the same key (the credentials page's
- * row menu and result cell, the dialog, the slot's picker) sees the same
- * pending flag and result. When the api persists a last-tested time
- * (V2-06), read it here.
+ * The live state is kept in the react-query cache under
+ * `["credential-test", id]`: every component showing the same key (the
+ * credentials page's row menu and result cell, the dialog, the slot's picker)
+ * sees the same pending flag and result. Since V6-32 the api also records
+ * every result on the key (`CredentialOut.last_test_*`, shown by the list's
+ * `RecordedTest` after a reload) and the mutation refetches the key list.
  */
 export function useCredentialTest(id: string | null | undefined) {
   const queryClient = useQueryClient();

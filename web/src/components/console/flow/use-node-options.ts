@@ -137,7 +137,8 @@ export function useNodeOptions(agent: AgentOut): {
           (provider) =>
             (provider.kind === "llm" || provider.kind === "tts") &&
             (provider.availability ?? "available") === "available" &&
-            provider.enabled !== false,
+            provider.enabled !== false &&
+            provider.listed !== false, // V6-32: a stored override still shows (node-form)
         )
         .map((provider) => ({
           id: provider.id,

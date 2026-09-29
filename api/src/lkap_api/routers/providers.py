@@ -36,7 +36,7 @@ from lkap_contracts.providers import (
     CatalogKind,
     ProviderKind,
     ProviderSpec,
-    credential_home,
+    credential_family,
     get,
     validate_model_id,
 )
@@ -52,6 +52,7 @@ from lkap_api.custom_models import (
 from lkap_api.db.models import Credential, LiveKitConnection, WorkspaceProvider
 from lkap_api.deps import AdminCtxDep, DbDep, HttpClientDep, VaultDep
 from lkap_api.errors import NotFoundError, UnprocessableEntityError
+from lkap_api.key_usage import mark_used
 
 router = APIRouter(prefix="/v1/providers", tags=["providers"])
 
@@ -101,14 +102,15 @@ async def _credential_for(
     Tenant-scoped in the query itself (not a post-fetch check) so the guard
     `lkap_api.db.guard` will eventually enforce autouse (ask #13) never flags
     this file — the same recipe ask #25 asks of `routers/provider_keys.py`.
-    Rows are matched against the provider's credential home (R-V4-7), so an
-    `openrouter-stt` lookup finds the key stored under `openrouter-llm`.
+    Rows are matched against the provider's key family (R-V4-7, V6-32), so an
+    `openrouter-stt` lookup finds the key stored under `openrouter-llm`, and a
+    `deepgram-tts` lookup a key stored under `deepgram-stt`.
     """
     result: Credential | None = await db.scalar(
         select(Credential).where(
             Credential.id == credential_id,
             Credential.workspace_id == workspace_id,
-            Credential.provider_id == credential_home(provider_id),
+            Credential.provider_id.in_(credential_family(provider_id)),
         )
     )
     return result
@@ -246,7 +248,7 @@ async def _resolve_credential(
             await db.execute(
                 select(Credential).where(
                     Credential.workspace_id == workspace_id,
-                    Credential.provider_id == credential_home(spec),
+                    Credential.provider_id.in_(credential_family(spec)),
                 )
             )
         )
@@ -309,6 +311,8 @@ async def get_provider_catalog(
         db, workspace_id=ctx.workspace_id, spec=spec, credential_id=credential_id
     )
     secrets = vault.decrypt(credential.ciphertext) if credential is not None else None
+    if credential is not None:
+        await mark_used(db, [credential.id])
     if search_vendor and q:
         searched = await catalog_service.search_vendor(
             client, spec=spec, kind=resolved_kind, secrets=secrets, query=q

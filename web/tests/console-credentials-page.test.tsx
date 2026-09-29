@@ -218,10 +218,83 @@ describe("CredentialList", () => {
     expect(within(row).getByText("OpenRouter")).toBeTruthy();
     // The Kind column shows a chip per kind the shared key actually covers
     // — not just "Language models", the literal kind of its own registry
-    // entry, which is what made it look LLM-only.
-    for (const kind of ["Speech-to-text", "Language models", "Text-to-speech", "Image generation", "Embeddings"]) {
+    // entry, which is what made it look LLM-only. V6-32: OpenRouter's speech
+    // entries are not offered (they do not stream), so they are not tags.
+    for (const kind of ["Language models", "Image generation", "Embeddings"]) {
       expect(within(row).getByText(kind)).toBeTruthy();
     }
+    expect(within(row).queryByText("Speech-to-text")).toBeNull();
+    expect(within(row).queryByText("Text-to-speech")).toBeNull();
+  });
+
+  it("shows one Deepgram key as covering speech-to-text and text-to-speech (V6-32)", async () => {
+    const deepgram: CredentialOut = {
+      id: "cred_dg",
+      provider_id: "deepgram-stt",
+      label: "Deepgram key",
+      fingerprint: "…dg01",
+      created_at: "2026-09-30T10:00:00Z",
+      updated_at: "2026-09-30T10:00:00Z",
+    };
+    stubApi((call) =>
+      call.url.includes("/credentials") && call.method === "GET" ? { status: 200, body: { items: [deepgram], total: 1 } } : undefined,
+    );
+    renderPage();
+    const table = await screen.findByRole("table", { name: "Credentials" });
+    const row = within(table).getAllByRole("row")[1];
+    expect(within(row).getByText("Deepgram")).toBeTruthy();
+    expect(within(row).getByText("Speech-to-text")).toBeTruthy();
+    expect(within(row).getByText("Text-to-speech")).toBeTruthy();
+  });
+
+  it("shows the recorded test, when the key was added and when it was last used (V6-32)", async () => {
+    // The "Not tested" bug: the list never read the test the api had recorded on the key.
+    const recorded: CredentialOut[] = [
+      {
+        ...credentials[0],
+        last_test_at: "2026-09-29T09:00:00Z",
+        last_test_ok: true,
+        last_test_message: "ElevenLabs responded with HTTP 200",
+        last_used_at: "2026-09-29T10:00:00Z",
+      },
+      {
+        ...credentials[1],
+        last_test_at: "2026-09-29T09:00:00Z",
+        last_test_ok: false,
+        last_test_message: "Incorrect API key provided. You can find your key in the dashboard.",
+      },
+      { ...credentials[2] },
+    ];
+    stubApi((call) =>
+      call.url.includes("/credentials") && call.method === "GET" ? { status: 200, body: { items: recorded, total: 3 } } : undefined,
+    );
+    renderPage();
+    const table = await screen.findByRole("table", { name: "Credentials" });
+    expect(within(table).getByRole("columnheader", { name: "Added" })).toBeTruthy();
+    expect(within(table).getByRole("columnheader", { name: "Last used" })).toBeTruthy();
+    const rows = within(table).getAllByRole("row").slice(1);
+    // Sorted by kind: OpenAI (language models), ElevenLabs (speech), the tool secret.
+    expect(rows[0].textContent).toContain("Failed");
+    expect(rows[0].textContent).toContain("Incorrect API key provided.");
+    expect(rows[0].textContent).not.toContain("dashboard");
+    expect(rows[0].textContent).toContain("Not used yet");
+    expect(rows[1].textContent).toContain("Works · tested");
+    expect(rows[1].textContent).not.toContain("Not used yet");
+    expect(rows[2].textContent).toContain("Not tested yet");
+  });
+
+  it("refetches the list after a test so the recorded result shows (V6-32)", async () => {
+    const calls = stubApi((call) =>
+      call.url.endsWith("/credentials/cred_llm/test") ? { status: 200, body: { ok: true, message: "OpenAI responded with HTTP 200" } } : undefined,
+    );
+    renderPage();
+    const table = await screen.findByRole("table", { name: "Credentials" });
+    const row = within(table).getAllByRole("row")[1];
+    const listReads = () => calls.filter((c) => c.method === "GET" && /\/credentials(\?|$)/.test(c.url)).length;
+    const before = listReads();
+    fireEvent.keyDown(within(row).getByRole("button", { name: "Actions for OpenAI team key" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Test" }));
+    await waitFor(() => expect(listReads()).toBeGreaterThan(before));
   });
 
   it("shows an empty state with the add action when there are no keys", async () => {

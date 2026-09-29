@@ -21,6 +21,7 @@ import { ModelTestControls } from "@/components/console/registry/model-test-pane
 import {
   inferenceProviderFor,
   isInferenceProvider,
+  isListed,
   isRecommendedProvider,
   isVerified,
   notForLiveCallsChip,
@@ -219,9 +220,14 @@ export function ProviderSlotEditor({
   const ofKind = React.useMemo(
     () =>
       registry.filter(
-        (p) => p.kind === kind && slotAvailability(p) !== "removed" && (constraints.include?.(p) ?? true),
+        (p) =>
+          p.kind === kind &&
+          slotAvailability(p) !== "removed" &&
+          // V6-32: an unlisted entry is offered only to the slot that already uses it.
+          (isListed(p) || p.id === value?.provider_id) &&
+          (constraints.include?.(p) ?? true),
       ),
-    [registry, kind, constraints],
+    [registry, kind, constraints, value?.provider_id],
   );
   const inference = constraints.inference === "off" ? undefined : inferenceProviderFor(kind, ofKind);
   const current = value ? ofKind.find((p) => p.id === value.provider_id) : undefined;

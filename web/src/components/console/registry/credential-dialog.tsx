@@ -28,6 +28,7 @@ import {
   KIND_LABEL,
   KIND_ORDER,
   credentialDisplay,
+  isListed,
   isSelectableForCredentials,
   suggestedCredentialLabel,
 } from "@/components/console/registry/provider-meta";
@@ -256,7 +257,7 @@ export function CredentialDialog({
   const pickable = React.useMemo(
     () =>
       registry
-        .filter((p) => p.requires_credential !== false && isSelectableForCredentials(p))
+        .filter((p) => p.requires_credential !== false && isSelectableForCredentials(p) && isListed(p))
         .sort((a, b) => a.label.localeCompare(b.label)),
     [registry],
   );

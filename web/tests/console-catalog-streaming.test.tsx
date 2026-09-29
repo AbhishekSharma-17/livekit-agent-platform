@@ -262,12 +262,20 @@ describe("ProviderSlotEditor renders the streaming/not-for-live-calls/Recommende
   });
 
   it("shows both the streaming chip and 'Not for live calls' on OpenRouter's STT vendor card", () => {
-    withClient(<ProviderSlotEditor kind="stt" value={null} onChange={vi.fn()} providers={REGISTRY} idPrefix="t-stt-or" />);
-    fireEvent.click(screen.getByRole("radio", { name: /your own key/i }));
+    // V6-32: OpenRouter's STT is unlisted, so only a slot that already uses it shows its card.
+    const stored = { provider_id: "openrouter-stt", credential_id: null, model: null, fields: {} };
+    withClient(<ProviderSlotEditor kind="stt" value={stored} onChange={vi.fn()} providers={REGISTRY} idPrefix="t-stt-or" />);
     const card = document.querySelector('[data-provider-id="openrouter-stt"]') as HTMLElement;
     expect(card).toBeTruthy();
     expect(within(card).getByText("Waits for the whole sentence")).toBeTruthy();
     expect(within(card).getByText("Not for live calls")).toBeTruthy();
+  });
+
+  it("no longer offers OpenRouter's STT to an empty slot (V6-32)", () => {
+    withClient(<ProviderSlotEditor kind="stt" value={null} onChange={vi.fn()} providers={REGISTRY} idPrefix="t-stt-or-new" />);
+    fireEvent.click(screen.getByRole("radio", { name: /your own key/i }));
+    expect(document.querySelector('[data-provider-id="openrouter-stt"]')).toBeNull();
+    expect(document.querySelector('[data-provider-id="deepgram-stt"]')).toBeTruthy();
   });
 
   it("reflects the stored fields on the selected vendor card, not just the entry's default (a streaming_field turned on)", () => {

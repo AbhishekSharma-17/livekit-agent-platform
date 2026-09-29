@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api import net_guard
 from lkap_api.db.models import Credential
+from lkap_api.key_usage import mark_used
 from lkap_api.qa.llm_client import JudgeLLM, OpenAiCompatibleJudgeLLM
 from lkap_api.settings import get_settings
 from lkap_api.vault import Vault
@@ -84,6 +85,7 @@ async def resolve_judge(
         return None, f"unknown credential_id: {ref.credential_id}"
 
     secrets = vault.decrypt(credential.ciphertext)
+    await mark_used(session, [credential.id])
     api_key = secrets.get("api_key") or next(iter(secrets.values()), "")
     base_url = str(ref.fields.get("base_url") or _OPENAI_COMPATIBLE_DEFAULT_BASE_URL[ref.provider_id])
     blocked = net_guard.check_url(base_url, net_guard.policy_from_settings(get_settings()))

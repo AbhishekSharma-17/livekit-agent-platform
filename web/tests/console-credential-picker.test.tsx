@@ -365,7 +365,7 @@ describe("isOpenAiKeyHome parity with OPENAI_KEY_HOMES (ask #297)", () => {
   const REGISTRY_EXPORT = path.resolve(__dirname, "../../contracts/generated/providers.json");
   const exported = JSON.parse(readFileSync(REGISTRY_EXPORT, "utf8")) as { providers: ProviderSpec[] };
 
-  it("names exactly the same ids OPENAI_KEY_HOMES computes (eight at today's registry contents)", () => {
+  it("names exactly the same ids OPENAI_KEY_HOMES computes (one since V6-32: openai-llm)", () => {
     // The same filter written out by hand, so this test fails the moment
     // `isOpenAiKeyHome`'s own logic drifts from it — not a fixed list.
     const expected = exported.providers
@@ -381,8 +381,8 @@ describe("isOpenAiKeyHome parity with OPENAI_KEY_HOMES (ask #297)", () => {
     expect(actual).toEqual(expected);
     // A concrete pin, so a future registry change that silently drops every
     // OpenAI home still fails loudly here instead of passing vacuously.
-    expect(actual).toContain("openai-llm");
-    expect(actual.length).toBeGreaterThanOrEqual(6);
+    // V6-32: every OpenAI entry shares the one platform key stored under `openai-llm`.
+    expect(actual).toEqual(["openai-llm"]);
   });
 
   it("never matches a provider with no OpenAI vendor, or one sharing another entry's key", () => {

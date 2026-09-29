@@ -710,7 +710,7 @@
         }
       ],
       "default": null,
-      "description": "The registry id whose credential rows this provider uses (its credential home, R-V4-7). Unset means the provider is its own home. The home exists, has no home of its own and declares the same secret field names.",
+      "description": "The registry id whose credential rows this provider uses (its credential home, R-V4-7). Unset means the provider is its own home. The home exists, has no home of its own and declares the same secret field names. V6-32: every entry of a vendor whose entries take the same account key names one home (`credential_family`), and a row stored under any member of the family serves the whole family.",
       "title": "Credential Provider"
     },
     "default_credential_id": {
@@ -809,6 +809,12 @@
     "label": {
       "title": "Label",
       "type": "string"
+    },
+    "listed": {
+      "default": true,
+      "description": "V6-32: whether the console offers this entry in its pickers and counts it on a key's tags. `False` keeps the entry valid and runnable for a stored agent that already uses it (validation, resolution and the worker are unchanged); `unlisted_note` says why in plain words.",
+      "title": "Listed",
+      "type": "boolean"
     },
     "models": {
       "default": [],
@@ -923,6 +929,19 @@
       ],
       "default": null,
       "title": "Test"
+    },
+    "unlisted_note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "V6-32: the plain-words reason an entry is not offered (`listed` is `False`).",
+      "title": "Unlisted Note"
     },
     "v": {
       "default": 2,

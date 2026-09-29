@@ -67,6 +67,15 @@ const PROVIDERS: ProvidersResponse = {
     { id: "livekit-inference-llm", kind: "llm", label: "LiveKit Inference LLM", vendor: "LiveKit", package: "", python_class: "" },
     { id: "livekit-inference-tts", kind: "tts", label: "LiveKit Inference TTS", vendor: "LiveKit", package: "", python_class: "" },
     {
+      id: "google-llm",
+      kind: "llm",
+      label: "Google Gemini",
+      vendor: "Google",
+      package: "",
+      python_class: "",
+      requires_credential: true,
+    },
+    {
       id: "google-image-gen",
       kind: "image_gen",
       label: "Google image generation",
@@ -74,6 +83,8 @@ const PROVIDERS: ProvidersResponse = {
       package: "",
       python_class: "",
       requires_credential: true,
+      // V6-32: one Gemini API key serves every Google Gemini entry, stored under `google-llm`.
+      credential_provider: "google-llm",
     },
   ],
 };
@@ -507,7 +518,10 @@ describe("template-meta helpers", () => {
 
     // The insurance pack recommends image generation; a keyless workspace drops it.
     const insurance = templateById("insurance_claim");
-    const providers = new Map([["google-image-gen", { vendor: "Google", label: "Google image generation" }]]);
+    const providers = new Map([
+      ["google-llm", { vendor: "Google", label: "Google Gemini" }],
+      ["google-image-gen", { vendor: "Google", label: "Google image generation", credential_provider: "google-llm" }],
+    ]);
     const withoutImages = gatedDifferences(insurance, { instructions: "", pipeline: { mode: "cascaded" } }, providers);
     expect(withoutImages).toEqual(["Running on LiveKit Inference — add a Google key for incident sketches."]);
 

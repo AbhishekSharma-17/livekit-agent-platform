@@ -241,8 +241,12 @@ describe("ProviderSlotEditor", () => {
     withClient(<Harness kind="stt" initial={{ provider_id: "deepgram-stt", credential_id: null, model: null, fields: {} }} />);
     const vendors = screen.getByRole("radiogroup", { name: "Vendor" });
     const radios = within(vendors).getAllByRole("radio");
-    const selectableStt = REGISTRY.filter((p) => p.kind === "stt" && p.status === "mvp" && !p.id.startsWith("livekit-inference"));
+    // V6-32: an unlisted entry (OpenRouter's STT) is not offered to a slot that does not use it.
+    const selectableStt = REGISTRY.filter(
+      (p) => p.kind === "stt" && p.status === "mvp" && !p.id.startsWith("livekit-inference") && p.listed !== false,
+    );
     expect(radios).toHaveLength(selectableStt.length);
+    expect(document.querySelector('[data-provider-id="openrouter-stt"]')).toBeNull();
 
     const unavailable = REGISTRY.filter((p) => p.kind === "stt" && p.status !== "mvp" && p.availability !== "removed");
     const toggle = screen.getByRole("button", { name: `More providers (${unavailable.length})` });
@@ -252,6 +256,14 @@ describe("ProviderSlotEditor", () => {
     expect(item).not.toBeNull();
     expect(item!.querySelector("input")).toBeNull();
     expect(screen.getAllByText(unavailableCopy(sample).chip).length).toBeGreaterThan(0);
+  });
+
+  it("keeps offering an unlisted provider to the slot that already uses it (V6-32)", () => {
+    withClient(<Harness kind="stt" initial={{ provider_id: "openrouter-stt", credential_id: null, model: null, fields: {} }} />);
+    const vendors = screen.getByRole("radiogroup", { name: "Vendor" });
+    const current = document.querySelector('[data-provider-id="openrouter-stt"]');
+    expect(current).not.toBeNull();
+    expect(within(vendors).getAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked)).toBe(true);
   });
 
   it("shows a small Verified chip for verified providers (informational only)", () => {

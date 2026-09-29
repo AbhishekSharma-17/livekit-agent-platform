@@ -280,7 +280,13 @@ class CredentialUpdate(BaseModel):
 
 
 class CredentialOut(BaseModel):
-    """A stored credential, without any secret material."""
+    """A stored credential, without any secret material.
+
+    V6-32: the last key test (every ``POST /v1/credentials/{id}/test`` is
+    recorded, including the one run right after adding the key) and when a
+    session, a tool call, a catalog read or a knowledge-base embed last used
+    the key. All four are ``None`` until it happens.
+    """
 
     id: str
     provider_id: str
@@ -288,6 +294,18 @@ class CredentialOut(BaseModel):
     fingerprint: str
     created_at: datetime
     updated_at: datetime
+    last_test_at: datetime | None = None
+    last_test_ok: bool | None = Field(
+        None,
+        description=(
+            "`true` the key worked, `false` it failed, `null` untested or the provider has no automatic test"
+        ),
+    )
+    last_test_message: str | None = None
+    last_used_at: datetime | None = Field(
+        None,
+        description="When a session, tool call, catalog read or embed last used the key (to within a minute)",
+    )
 
 
 class CredentialTestResult(BaseModel):

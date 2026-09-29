@@ -183,6 +183,15 @@ export function connectionDisabledReason(
   return unavailableCopy(spec, { connection }).reason;
 }
 
+/**
+ * Whether the console offers `spec` for new choices (V6-32, `ProviderSpec.listed`): an unlisted
+ * entry (OpenRouter's speech entries) never appears in a picker or on a key's tags, but an agent
+ * that already uses it keeps showing and running it. `undefined` (an older payload) is listed.
+ */
+export function isListed(spec: Pick<ProviderSpec, "listed">): boolean {
+  return spec.listed !== false;
+}
+
 /** Available and enabled for the workspace, ignoring per-connection install state (credential dialog: "which vendors take a key"). */
 export function isSelectableForCredentials(spec: ProviderSpec): boolean {
   return (spec.availability ?? "available") === "available" && enabledFor(spec);
@@ -245,12 +254,13 @@ export interface CredentialDisplay {
  * complete `usedBy` list.
  */
 export function credentialDisplay(
-  spec: Pick<ProviderSpec, "id" | "label" | "vendor" | "kind" | "credential_provider">,
+  spec: Pick<ProviderSpec, "id" | "label" | "vendor" | "kind" | "credential_provider" | "listed">,
   registry: ProviderSpec[] = [],
 ): CredentialDisplay {
   const homeId = spec.credential_provider ?? spec.id;
   const home = registry.find((p) => p.id === homeId) ?? (homeId === spec.id ? spec : undefined);
-  const aliases = home ? registry.filter((p) => p.credential_provider === home.id) : [];
+  // V6-32: an unlisted member (OpenRouter's speech entries) is not a tag the key advertises.
+  const aliases = home ? registry.filter((p) => p.credential_provider === home.id && isListed(p)) : [];
   const isShared = Boolean(spec.credential_provider) || aliases.length > 0;
 
   if (!isShared) {
@@ -258,7 +268,8 @@ export function credentialDisplay(
   }
 
   const baseline = home ?? spec;
-  const kinds = new Set<ProviderKind>([baseline.kind, spec.kind, ...aliases.map((a) => a.kind)]);
+  const kinds = new Set<ProviderKind>([baseline.kind, ...aliases.map((a) => a.kind)]);
+  if (isListed(spec)) kinds.add(spec.kind);
   const ordered = Array.from(kinds).sort((a, b) => kindRank(a) - kindRank(b));
   return { title: vendorTitle(baseline), usedBy: ordered.map((k) => KIND_LABEL[k]) };
 }

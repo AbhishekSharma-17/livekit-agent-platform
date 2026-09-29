@@ -142,6 +142,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lkap_api.connections.probe import effective_capabilities
 from lkap_api.custom_models.capabilities import resolve_capabilities
+from lkap_api.custom_models.reasoning_checks import reasoning_issues
 from lkap_api.db.models import (
     Credential,
     Dataset,
@@ -546,6 +547,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(amd_and_transfer_issues(ctx))
     findings.extend(guardrails_issues(ctx))
     findings.extend(canvas_vision_issues(ctx))  # V6-12
+    findings.extend(reasoning_issues(ctx))  # V6-31
     findings.extend(extraction_rules_issues(ctx))
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))

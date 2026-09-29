@@ -7,6 +7,13 @@ Bedrock, Gemini (generation methods), Fireworks and ElevenLabs. OpenAI, Groq
 and Cerebras lists carry none, which is why "Test model" and the admin's
 declaration exist. The readers go by the item's shape, so an unfamiliar or
 partial item contributes nothing rather than raising.
+
+V6-31 adds the reasoning part of the view, read from OpenRouter's record (the one vendor list
+that publishes it per model): ``reasoning`` (``reasoning`` in ``supported_parameters``, else a
+``reasoning`` record or an ``internal_reasoning`` price), ``reasoning_efforts`` (the record's
+``reasoning.supported_efforts`` when ``reasoning_effort`` is a supported parameter, lowest first)
+and ``request_parameters`` (``supported_parameters`` as listed). The registry adds
+``ModelSpec.reasoning``/``reasoning_efforts`` for the models it lists.
 """
 
 from __future__ import annotations
@@ -15,12 +22,28 @@ from collections.abc import Mapping
 from typing import Any, Literal
 
 from lkap_contracts.api_models import CatalogItem, ProviderModelOut
-from lkap_contracts.providers import ModelCapabilities, ProviderSpec, vision_support
+from lkap_contracts.providers import (
+    REASONING_EFFORT_FIELD,
+    REASONING_EFFORTS,
+    ModelCapabilities,
+    ProviderSpec,
+    vision_support,
+)
 
 Source = Literal["declared", "detected", "catalog", "registry"]
 
 #: The capability fields resolved one by one (``source`` is derived).
-FIELDS: tuple[str, ...] = ("vision", "tools", "audio_in", "audio_out", "streaming", "context_tokens")
+FIELDS: tuple[str, ...] = (
+    "vision",
+    "tools",
+    "audio_in",
+    "audio_out",
+    "streaming",
+    "context_tokens",
+    "reasoning",
+    "reasoning_efforts",
+    "request_parameters",
+)
 
 
 def _contains(values: Any, needle: str) -> bool | None:
@@ -37,9 +60,40 @@ def _bool(value: Any) -> bool | None:
     return value if isinstance(value, bool) else None
 
 
+def _strings(value: Any) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    return [item for item in value if isinstance(item, str)]
+
+
+def _openrouter_reasoning(meta: Mapping[str, Any]) -> dict[str, Any]:
+    """The reasoning part of an OpenRouter model record (V6-31); empty for any other shape.
+
+    Only a record with a ``supported_parameters`` list counts: that list is what OpenRouter's
+    ``require_parameters`` routing checks, so it is the one answer the worker may act on.
+    """
+    parameters = _strings(meta.get("supported_parameters"))
+    if parameters is None:
+        return {}
+    record = meta.get("reasoning")
+    pricing = meta.get("pricing")
+    reasoning = (
+        "reasoning" in parameters
+        or isinstance(record, dict)
+        or (isinstance(pricing, dict) and "internal_reasoning" in pricing)
+    )
+    efforts: list[str] | None = []
+    if reasoning and REASONING_EFFORT_FIELD in parameters:
+        # The record's `supported_efforts` lists them; a record without it (or a catalog cached
+        # before V6-31 kept `reasoning`) leaves the efforts unknown, and none is sent by default.
+        listed = _strings(record.get("supported_efforts")) if isinstance(record, dict) else None
+        efforts = [effort for effort in REASONING_EFFORTS if effort in listed] if listed else None
+    return {"reasoning": reasoning, "reasoning_efforts": efforts, "request_parameters": parameters}
+
+
 def catalog_capabilities(meta: Mapping[str, Any]) -> ModelCapabilities:
     """What one live catalog item's raw ``meta`` says about the model (unknown stays ``None``)."""
-    caps: dict[str, Any] = {}
+    caps: dict[str, Any] = _openrouter_reasoning(meta)
 
     def put(name: str, value: bool | int | None) -> None:
         if value is not None and caps.get(name) is None:
@@ -95,11 +149,17 @@ def registry_capabilities(spec: ProviderSpec, model_id: str | None) -> ModelCapa
     """What the registry knows: ``ModelSpec.supports_video`` → vision, ``tool_calling`` → tools.
 
     ``tools`` comes from the provider-level flag and only for the kinds that
-    call tools (llm, realtime); ``vision`` only for a model the registry lists.
+    call tools (llm, realtime); ``vision`` only for a model the registry lists;
+    ``reasoning``/``reasoning_efforts`` (V6-31) only for a listed model that records them.
     """
+    listed = next((model for model in spec.models if model.id == model_id), None)
+    reasoning = listed.reasoning if listed is not None else None
+    efforts = list(listed.reasoning_efforts) if listed is not None and reasoning is not None else None
     return ModelCapabilities(
         vision=vision_support(spec.id, model_id),
         tools=spec.capabilities.tool_calling if spec.kind in ("llm", "realtime") else None,
+        reasoning=reasoning,
+        reasoning_efforts=efforts,
     )
 
 

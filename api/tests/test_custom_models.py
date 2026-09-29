@@ -340,6 +340,9 @@ async def test_declaring_capabilities_round_trips_an_id_with_slashes(admin_clien
         "streaming": None,
         "context_tokens": None,
         "source": "declared",
+        "reasoning": None,  # V6-31
+        "reasoning_efforts": None,
+        "request_parameters": None,
     }
 
 

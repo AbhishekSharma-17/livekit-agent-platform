@@ -24,7 +24,7 @@ answer by voice instead: the model then calls `resolve_choice`.
 from __future__ import annotations
 
 import json
-from typing import Any, Final
+from typing import Annotated, Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from lkap_contracts.ui_protocol import UiPatchOp
@@ -32,6 +32,7 @@ from packs.base import PackSessionContext
 from pydantic import BaseModel, Field, ValidationError
 
 from lkap_agent.tools.builtin.request_form import BACKGROUND_FORM_MODES
+from lkap_agent.tools.json_args import json_list
 from lkap_agent.ui.blocks import (
     VOICE_ONLY_CHANNELS,
     choice_selection_error,
@@ -66,6 +67,12 @@ class ChoiceOptionIn(BaseModel):
     id: str = Field(description="Short machine id of the option, e.g. minor.")
     label: str = Field(description="What the caller sees, e.g. Yes, minor injuries.")
     hint: str = Field(default="", description="Optional short line under the label.")
+
+
+#: JSON text of the options is read too (V6-30, F-2).
+ChoiceOptionList = Annotated[
+    list[ChoiceOptionIn], json_list('{"id": "minor", "label": "Yes, minor injuries"}')
+]
 
 
 def choice_labels(state: dict[str, Any], selected: list[str]) -> list[str]:
@@ -119,7 +126,7 @@ def build_request_choice_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
     async def request_choice(
         context: RunContext[Any],
         prompt: str,
-        options: list[ChoiceOptionIn],
+        options: ChoiceOptionList,
         multi: bool = False,
         block_id: str = "",
     ) -> str | None:

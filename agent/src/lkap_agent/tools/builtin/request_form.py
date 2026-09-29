@@ -26,7 +26,7 @@ ids the session really stored for that field.
 from __future__ import annotations
 
 import json
-from typing import Any, Final
+from typing import Annotated, Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from lkap_contracts.agent_config import PipelineMode
@@ -41,6 +41,7 @@ from lkap_contracts.ui_protocol import (
 from packs.base import PackSessionContext
 from pydantic import BaseModel, Field
 
+from lkap_agent.tools.json_args import json_list
 from lkap_agent.ui.blocks import describe_blocks, pick_block, session_block_specs
 
 __all__ = [
@@ -76,6 +77,12 @@ class FormField(BaseModel):
         description="For type file only: image/* or application/pdf (empty: photos and PDFs).",
     )
     max_files: int = Field(default=1, ge=1, le=MAX_UPLOAD_FILES, description="For type file only.")
+
+
+#: JSON text of the fields is read too (V6-30, F-2).
+FormFieldList = Annotated[
+    list[FormField], json_list('{"name": "policy_number", "label": "Policy number", "required": true}')
+]
 
 
 def fields_to_schema(fields: list[FormField]) -> dict[str, Any]:
@@ -156,7 +163,7 @@ def build_request_form_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
     """Build the `request_form` tool bound to `ctx`."""
     inventory = describe_blocks(session_block_specs(ctx.ui, ctx.config.panel), ["form"])
 
-    async def request_form(context: RunContext[Any], block_id: str, fields: list[FormField]) -> str | None:
+    async def request_form(context: RunContext[Any], block_id: str, fields: FormFieldList) -> str | None:
         """Show the user a form in their side panel and wait for them to submit it.
 
         Args:

@@ -22,7 +22,7 @@ default) or the business timezone (``"agent"``).
 from __future__ import annotations
 
 import json
-from typing import Any, Final
+from typing import Annotated, Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from lkap_contracts.ui_protocol import MAX_SLOTS, TimeSlot, UiPatchOp
@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field, ValidationError
 from lkap_agent.locale import fallback_locale, session_locale
 from lkap_agent.tools.builtin.request_choice import VIA_VOICE
 from lkap_agent.tools.builtin.request_form import BACKGROUND_FORM_MODES
+from lkap_agent.tools.json_args import json_list
 from lkap_agent.ui.blocks import (
     VOICE_ONLY_CHANNELS,
     describe_blocks,
@@ -71,6 +72,13 @@ def slot_answer(state: dict[str, Any], selected: str) -> dict[str, Any] | None:
     if slot.get("label"):
         answer["label"] = slot["label"]
     return answer
+
+
+#: JSON text of the slots is read too (V6-30, F-2).
+SlotList = Annotated[
+    list[SlotIn],
+    json_list('{"id": "mon_am", "start": "2026-10-05T09:00:00+01:00", "end": "2026-10-05T10:00:00+01:00"}'),
+]
 
 
 def _checked_slots(slots: list[SlotIn]) -> list[dict[str, Any]]:
@@ -116,7 +124,7 @@ def build_request_slot_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
         return answer
 
     async def request_slot(
-        context: RunContext[Any], prompt: str, slots: list[SlotIn], block_id: str = ""
+        context: RunContext[Any], prompt: str, slots: SlotList, block_id: str = ""
     ) -> str | None:
         """Show the caller times they can book and wait for their pick.
 

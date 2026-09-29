@@ -13,7 +13,7 @@ the tool answers ``{"visible": false}`` and the model describes the options.
 from __future__ import annotations
 
 import json
-from typing import Any, Final
+from typing import Annotated, Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from lkap_contracts.blocks import CardsBlockConfig
@@ -21,6 +21,7 @@ from lkap_contracts.ui_protocol import MAX_CARDS, Card, CardsBlockState, https_u
 from packs.base import PackSessionContext
 from pydantic import BaseModel, Field, ValidationError
 
+from lkap_agent.tools.json_args import json_list
 from lkap_agent.ui.blocks import VOICE_ONLY_CHANNELS, describe_blocks, pick_block, session_block_specs
 
 __all__ = ["CardActionIn", "CardFactIn", "CardIn", "build_show_cards_tool"]
@@ -43,6 +44,11 @@ class CardActionIn(BaseModel):
     label: str = Field(description="Button text, e.g. Choose Gold.")
 
 
+#: JSON text of a card's facts and buttons is read too (V6-30, F-2).
+CardFactList = Annotated[list[CardFactIn], json_list('{"label": "Excess", "value": "100 GBP"}')]
+CardActionList = Annotated[list[CardActionIn], json_list('{"name": "choose", "label": "Choose Gold"}')]
+
+
 class CardIn(BaseModel):
     """One card the model shows."""
 
@@ -53,9 +59,13 @@ class CardIn(BaseModel):
     image_asset_id: str = Field(
         default="", description="Optional id of a picture already shown in this call."
     )
-    facts: list[CardFactIn] = Field(default=[], description="Up to eight label/value lines.")
+    facts: CardFactList = Field(default=[], description="Up to eight label/value lines.")
     badges: list[str] = Field(default=[], description="Up to five short badges, e.g. Recommended.")
-    actions: list[CardActionIn] = Field(default=[], description="Up to three buttons.")
+    actions: CardActionList = Field(default=[], description="Up to three buttons.")
+
+
+#: JSON text of the cards is read too (V6-30, F-2).
+CardList = Annotated[list[CardIn], json_list('{"id": "gold", "title": "Gold cover", "facts": []}')]
 
 
 def _config(spec_config: dict[str, Any]) -> CardsBlockConfig:
@@ -102,7 +112,7 @@ def build_show_cards_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
         return model.model_dump(mode="json")
 
     async def show_cards(
-        context: RunContext[Any], cards: list[CardIn], replace: bool = True, block_id: str = ""
+        context: RunContext[Any], cards: CardList, replace: bool = True, block_id: str = ""
     ) -> str:
         """Show options side by side as cards in the caller's side panel.
 

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import re
 import time
-from typing import Any, Final, Literal, get_args
+from typing import Annotated, Any, Final, Literal, get_args
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from lkap_contracts.blocks import NotebookSectionConfig
@@ -35,6 +35,7 @@ from lkap_contracts.ui_protocol import (
 from packs.base import PackSessionContext
 from pydantic import BaseModel, Field, ValidationError
 
+from lkap_agent.tools.json_args import json_list
 from lkap_agent.ui.blocks import (
     new_notebook_entry_id,
     notebook_section_ops,
@@ -45,7 +46,7 @@ from lkap_agent.ui.blocks import (
 )
 
 from .set_checklist import CHECKLIST_ID_PATTERN, MAX_HINT_CHARS, MAX_LABEL_CHARS, QUIET_MODES
-from .set_details import DetailIn, detail_item
+from .set_details import DETAIL_EXAMPLE, DetailIn, detail_item
 
 __all__ = [
     "NOTE_KEY_PATTERN",
@@ -76,6 +77,13 @@ class NotebookItemIn(BaseModel):
     done: bool = Field(default=False, description="True once it is already provided.")
     blocking: bool = Field(default=False, description="True when the call cannot finish without it.")
     hint: str = Field(default="", description="An optional short hint shown under the item.")
+
+
+#: One checklist item as the model writes it (V6-30).
+NOTEBOOK_ITEM_EXAMPLE: Final[str] = '{"id": "photos", "label": "Photos of the damage", "done": false}'
+#: The two list parameters; JSON text of either is read too (V6-30, F-2).
+NotebookItemList = Annotated[list[NotebookItemIn] | None, json_list(NOTEBOOK_ITEM_EXAMPLE)]
+NotebookFieldList = Annotated[list[DetailIn] | None, json_list(DETAIL_EXAMPLE)]
 
 
 def _clean(text: str, limit: int) -> str:
@@ -228,8 +236,8 @@ def build_notebook_write_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
         context: RunContext[Any],
         section_id: str,
         text: str = "",
-        items: list[NotebookItemIn] | None = None,
-        fields: list[DetailIn] | None = None,
+        items: NotebookItemList = None,
+        fields: NotebookFieldList = None,
         mode: Literal["append", "replace"] = "append",
         key: str = "",
         tone: str = "",
@@ -286,6 +294,7 @@ def build_notebook_write_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
             "Write in the notebook in the caller's side panel as the call goes: a note in a notes "
             "section (text), the items of a checklist section (items), or the facts of a summary "
             "section (fields). Write quietly; do not read the notebook aloud. Use notebook_check "
-            f"to tick a checklist item. Notebook sections: {inventory}."
+            "to tick a checklist item. Items and fields are lists of objects, e.g. "
+            f"items=[{NOTEBOOK_ITEM_EXAMPLE}] or fields=[{DETAIL_EXAMPLE}]. Notebook sections: {inventory}."
         ),
     )

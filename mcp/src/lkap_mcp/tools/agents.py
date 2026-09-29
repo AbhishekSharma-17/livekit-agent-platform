@@ -11,7 +11,8 @@ tool relays. ``mode`` is never sent: the api derives it from ``config.flow``
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Any, Literal
+import re
+from typing import Annotated, Any, Final, Literal
 
 from lkap_contracts.agent_config import AgentConfig, AgentLimits, panel_preset
 from lkap_contracts.common import Issue
@@ -42,6 +43,34 @@ _LIST_KEYS = (
     "session_count",
     "last_session_at",
 )
+
+
+#: The opening line a kit puts around its instruction text (`lkap_contracts.kits.kit_markers`).
+_KIT_MARKER_RE: Final[re.Pattern[str]] = re.compile(r"<!-- kit:([A-Za-z0-9_-]{1,64}):[A-Za-z0-9_-]{0,64} -->")
+
+
+def dropped_kit_sections(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
+    """The kits whose marked instruction text ``before`` has and ``after`` no longer has (V6-30, F-6).
+
+    A merge patch that sets ``instructions`` replaces the whole text, kit sections included, and
+    the agent then runs its kits' tools without the kits' guidance.
+    """
+    old = set(_KIT_MARKER_RE.findall(str(before.get("instructions") or "")))
+    new = set(_KIT_MARKER_RE.findall(str(after.get("instructions") or "")))
+    return sorted(old - new)
+
+
+def dropped_kit_warning(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
+    """A warning naming the kits whose instruction text a config change removed (empty: none)."""
+    kits = dropped_kit_sections(before, after)
+    if not kits:
+        return []
+    names = ", ".join(kits)
+    return [
+        f"the new instructions no longer hold the text the {names} kit{'s' if len(kits) != 1 else ''} "
+        "added; keep each <!-- kit:... --> section in the instructions, or run kit_add again for "
+        "each kit (it restores only what is missing)"
+    ]
 
 
 def config_issues(error: ValidationError) -> list[Issue]:
@@ -270,7 +299,8 @@ def register(registry: Registry) -> None:
         warnings: list[str] = []
         issues: list[Issue] = []
         if patch:
-            merged = merge_patch(agent.get("config") or {}, patch)
+            seeded = agent.get("config") or {}
+            merged = merge_patch(seeded, patch)
             try:
                 AgentConfig.model_validate(merged)
             except ValidationError as error:
@@ -282,6 +312,8 @@ def register(registry: Registry) -> None:
                 except ApiFailure as failure:
                     issues = failure.to_result().issues
                     warnings.append(f"the patch was not applied: {failure.message}")
+                else:
+                    warnings += dropped_kit_warning(seeded, merged)
         validation, more = await validate_saved(ctx, agent["id"])
         next_steps = list(DEFAULT_CREATE_NEXT_STEPS)
         if template_id:
@@ -392,6 +424,8 @@ def register(registry: Registry) -> None:
                 result.error.message = f"{failure.message}; nothing was saved"
             return result
         validation, warnings = await validate_saved(ctx, updated["id"])
+        if "config" in body:
+            warnings += dropped_kit_warning(agent.get("config") or {}, body["config"])
         if agent.get("config_version") != updated.get("config_version"):
             warnings.append(
                 f"config_version {agent.get('config_version')} -> {updated.get('config_version')}; "

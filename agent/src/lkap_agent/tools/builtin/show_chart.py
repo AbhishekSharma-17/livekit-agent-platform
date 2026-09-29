@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Final
+from typing import Annotated, Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from lkap_contracts.blocks import ChartBlockConfig
@@ -22,6 +22,7 @@ from lkap_contracts.ui_protocol import MAX_CHART_POINTS, ChartBlockState
 from packs.base import PackSessionContext
 from pydantic import BaseModel, Field, ValidationError
 
+from lkap_agent.tools.json_args import json_list
 from lkap_agent.tools.untrusted import strip_control
 from lkap_agent.ui.blocks import VOICE_ONLY_CHANNELS, describe_blocks, pick_block, session_block_specs
 
@@ -41,6 +42,12 @@ class ChartPointIn(BaseModel):
     series: str = Field(default="", description="Optional: which line or bar group it belongs to.")
 
 
+#: One point as the model writes it (V6-30).
+CHART_POINT_EXAMPLE: Final[str] = '{"label": "Q1", "value": 405000, "series": "West"}'
+#: JSON text of the points is read too (V6-30, F-2).
+ChartPointList = Annotated[list[ChartPointIn], json_list(CHART_POINT_EXAMPLE)]
+
+
 def _text(value: str) -> str | None:
     text = " ".join(strip_control(value).split())
     return text or None
@@ -52,7 +59,7 @@ def build_show_chart_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
 
     async def show_chart(
         context: RunContext[Any],
-        points: list[ChartPointIn],
+        points: ChartPointList,
         kind: str = "",
         title: str = "",
         unit: str = "",
@@ -132,6 +139,6 @@ def build_show_chart_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
         description=(
             "Show numbers as a chart on the caller's screen: one big number, bars, lines, a pie or "
             "a gauge, at most 200 points. Say in a sentence what it shows; the numbers are on "
-            f"screen. Chart blocks: {inventory}."
+            f"screen. Points are objects, e.g. points=[{CHART_POINT_EXAMPLE}]. Chart blocks: {inventory}."
         ),
     )

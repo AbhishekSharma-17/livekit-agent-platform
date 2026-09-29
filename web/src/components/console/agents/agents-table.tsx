@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { BotIcon, CopyIcon, ExternalLinkIcon, MoreHorizontalIcon, TrashIcon } from "lucide-react";
+import { ArchiveRestoreIcon, BotIcon, CopyIcon, ExternalLinkIcon, MoreHorizontalIcon, TrashIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +33,14 @@ import {
 } from "@/components/ui/select";
 import { EmptyState, Icon, RelativeTime, ResponsiveTable, StatusChip, VendorMark } from "@/components/shared";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
-import { useAgents, useDeleteAgent, usePacks, useProviders, useUpdateAgent } from "@/components/console/lib/api-hooks";
+import {
+  useAgents,
+  useDeleteAgent,
+  usePacks,
+  useProviders,
+  useRestoreAgent,
+  useUpdateAgent,
+} from "@/components/console/lib/api-hooks";
 import { errorMessage, ErrorBanner } from "@/components/console/shared/error-banner";
 import { useWriteAccess } from "@/components/console/lib/roles";
 import { NewAgentButton } from "@/components/console/agents/create/new-agent-button";
@@ -48,13 +55,28 @@ const PIPELINE_MODE_LABEL: Record<string, string> = {
   half_cascade: "Half-cascade",
 };
 
+/**
+ * "All", "Live" and "Draft" list the active agents only; "Archived" lists the archived ones
+ * (V6-30, F-5: an archived agent used to show under "All" with a Live chip).
+ */
 const STATUS_FILTERS = [
   { value: "", label: "All" },
   { value: "live", label: "Live" },
   { value: "draft", label: "Draft" },
+  { value: "archived", label: "Archived" },
 ] as const;
 
 type StatusFilter = (typeof STATUS_FILTERS)[number]["value"];
+
+function isArchived(agent: AgentOut): boolean {
+  return Boolean(agent.archived_at);
+}
+
+/** Archived wins over Live: an archived agent never shows the Live chip. */
+function AgentStatusChip({ agent }: { agent: AgentOut }) {
+  if (isArchived(agent)) return <StatusChip tone="neutral">Archived</StatusChip>;
+  return <StatusChip tone={agent.published ? "live" : "neutral"}>{agent.published ? "Live" : "Draft"}</StatusChip>;
+}
 
 /**
  * The Connection column: the bound connection's name and type, looked up in
@@ -151,10 +173,13 @@ export function AgentsTable() {
     return Array.from(ids).sort();
   }, [agents]);
 
+  const archivedCount = React.useMemo(() => agents.filter(isArchived).length, [agents]);
+
   const filtered = React.useMemo(() => {
     const needle = q.trim().toLowerCase();
     return agents
       .filter((agent) => {
+        if ((status === "archived") !== isArchived(agent)) return false;
         if (status === "live" && !agent.published) return false;
         if (status === "draft" && agent.published) return false;
         if (pack && agent.pack_id !== pack) return false;
@@ -238,9 +263,7 @@ export function AgentsTable() {
     {
       id: "status",
       header: "Status",
-      cell: (agent) => (
-        <StatusChip tone={agent.published ? "live" : "neutral"}>{agent.published ? "Live" : "Draft"}</StatusChip>
-      ),
+      cell: (agent) => <AgentStatusChip agent={agent} />,
     },
     {
       id: "updated",
@@ -252,9 +275,16 @@ export function AgentsTable() {
       header: <span className="sr-only">Actions</span>,
       align: "end",
       interactive: true,
-      cell: (agent) => <AgentRowMenu agent={agent} deleteAgent={deleteAgent} />,
+      cell: (agent) =>
+        isArchived(agent) ? (
+          <RestoreAgentButton agent={agent} />
+        ) : (
+          <AgentRowMenu agent={agent} deleteAgent={deleteAgent} />
+        ),
     },
   ];
+
+  const onlyArchived = status !== "archived" && archivedCount > 0 && archivedCount === agents.length;
 
   return (
     <div className="space-y-4">
@@ -313,26 +343,40 @@ export function AgentsTable() {
           />
         )}
         empty={
-          <EmptyState
-            icon={BotIcon}
-            title="No agents match"
-            description="Try a different search term or clear the filters."
-            compact
-            action={
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setQ("");
-                  setStatus("");
-                  setPack("");
-                }}
-              >
-                Clear filters
-              </Button>
-            }
-          />
+          onlyArchived ? (
+            <EmptyState
+              icon={BotIcon}
+              title="No active agents"
+              description="Every agent here is archived. Open Archived to see them or restore one."
+              compact
+              action={
+                <Button type="button" variant="ghost" size="sm" onClick={() => setStatus("archived")}>
+                  Show archived
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              icon={BotIcon}
+              title="No agents match"
+              description="Try a different search term or clear the filters."
+              compact
+              action={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setQ("");
+                    setStatus("");
+                    setPack("");
+                  }}
+                >
+                  Clear filters
+                </Button>
+              }
+            />
+          )
         }
       />
     </div>
@@ -360,7 +404,7 @@ function AgentCard({
           <p className="truncate font-medium text-foreground">{agent.name}</p>
           <p className="truncate font-mono text-xs text-muted-foreground">/{agent.slug}</p>
         </div>
-        <StatusChip tone={agent.published ? "live" : "neutral"}>{agent.published ? "Live" : "Draft"}</StatusChip>
+        <AgentStatusChip agent={agent} />
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <span>{packLabels.get(agent.pack_id) ?? agent.pack_id}</span>
@@ -378,9 +422,69 @@ function AgentCard({
       </div>
       <div className="flex items-center justify-between gap-2 pt-1">
         <RelativeTime iso={agent.updated_at} className="text-xs text-muted-foreground" />
-        <AgentRowMenu agent={agent} deleteAgent={deleteAgent} />
+        {isArchived(agent) ? (
+          <RestoreAgentButton agent={agent} />
+        ) : (
+          <AgentRowMenu agent={agent} deleteAgent={deleteAgent} />
+        )}
       </div>
     </div>
+  );
+}
+
+/**
+ * An archived agent's one action (V6-30): Restore, confirmed in a dialog. It clears
+ * `archived_at` (`POST /agents/{id}/unarchive`); a published agent's public link then answers
+ * again, which the dialog says.
+ */
+function RestoreAgentButton({ agent }: { agent: AgentOut }) {
+  const restore = useRestoreAgent();
+  const { canWrite } = useWriteAccess();
+  const [open, setOpen] = React.useState(false);
+
+  async function confirmRestore() {
+    try {
+      await restore.mutateAsync(agent.id);
+      toast.success(`${agent.name} restored.`);
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setOpen(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={!canWrite}
+        aria-label={`Restore ${agent.name}`}
+        onClick={() => setOpen(true)}
+      >
+        <Icon as={ArchiveRestoreIcon} size="sm" />
+        Restore
+      </Button>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Restore &quot;{agent.name}&quot;?</DialogTitle>
+          <DialogDescription>
+            {agent.published
+              ? `It moves back to your agents. It is still published, so /s/${agent.slug} answers calls again.`
+              : "It moves back to your agents as a draft."}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button type="button" disabled={restore.isPending} onClick={() => void confirmRestore()}>
+            {restore.isPending ? "Working…" : "Restore"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -342,6 +342,18 @@ export function useDeleteAgent() {
   });
 }
 
+/** `POST /agents/{id}/unarchive` (V6-30): clears `archived_at`, so the agent is active again. */
+export function useRestoreAgent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<AgentOut>(`agents/${id}/unarchive`),
+    onSuccess: (agent) => {
+      queryClient.setQueryData(keys.agent(agent.id), agent);
+      void queryClient.invalidateQueries({ queryKey: keys.agents });
+    },
+  });
+}
+
 export function useValidateAgent(id: string) {
   return useMutation({
     mutationFn: () => api.post<ValidationResult>(`agents/${id}/validate`),

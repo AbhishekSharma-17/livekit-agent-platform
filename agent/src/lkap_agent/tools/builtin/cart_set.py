@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from typing import Any, Final
+from typing import Annotated, Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from lkap_contracts.blocks import CartBlockConfig
@@ -26,6 +26,7 @@ from lkap_contracts.ui_protocol import CURRENCY_PATTERN, CartAdjustment, CartBlo
 from packs.base import PackSessionContext
 from pydantic import BaseModel, Field, ValidationError
 
+from lkap_agent.tools.json_args import json_list
 from lkap_agent.tools.untrusted import strip_control
 from lkap_agent.ui.blocks import VOICE_ONLY_CHANNELS, describe_blocks, pick_block, session_block_specs
 
@@ -51,6 +52,14 @@ class CartAdjustmentIn(BaseModel):
 
     label: str = Field(description="e.g. Discount, Tax or Delivery.")
     amount: float = Field(description="The amount; a discount is negative, e.g. -10.")
+
+
+#: One line and one adjustment as the model writes them (V6-30).
+CART_LINE_EXAMPLE: Final[str] = '{"id": "filter", "name": "Water filter", "quantity": 2, "unit_price": 24.5}'
+CART_ADJUSTMENT_EXAMPLE: Final[str] = '{"label": "Discount", "amount": -5}'
+#: JSON text of either list is read too (V6-30, F-2).
+CartLineList = Annotated[list[CartLineIn], json_list(CART_LINE_EXAMPLE)]
+CartAdjustmentList = Annotated[list[CartAdjustmentIn] | None, json_list(CART_ADJUSTMENT_EXAMPLE)]
 
 
 def _text(value: str) -> str:
@@ -89,8 +98,8 @@ def build_cart_set_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
 
     async def cart_set(
         context: RunContext[Any],
-        lines: list[CartLineIn],
-        adjustments: list[CartAdjustmentIn] | None = None,
+        lines: CartLineList,
+        adjustments: CartAdjustmentList = None,
         currency: str = "",
         block_id: str = "",
     ) -> str | None:
@@ -158,6 +167,7 @@ def build_cart_set_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
         description=(
             "Show a cart on the caller's screen: its lines (name, quantity, price of one) and any "
             "discount, tax or fee; the platform adds up the totals. It orders or charges nothing. "
+            f"Lines are objects, e.g. lines=[{CART_LINE_EXAMPLE}], adjustments=[{CART_ADJUSTMENT_EXAMPLE}]. "
             f"Cart blocks: {inventory}."
         ),
     )

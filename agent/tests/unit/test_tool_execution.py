@@ -961,7 +961,11 @@ async def test_wrap_tool_runs_a_pack_tool_through_the_policy_and_keeps_its_schem
 
 def _builtin_ctx(**tools_fields: Any) -> FakePackSessionContext:
     config = default_agent_config()
-    config = config.model_copy(update={"tools": config.tools.model_copy(update=tools_fields)})
+    # V6-30: `search_knowledge` is registered only with a knowledge base attached.
+    knowledge = config.knowledge.model_copy(update={"kb_ids": ["kb-1"]})
+    config = config.model_copy(
+        update={"tools": config.tools.model_copy(update=tools_fields), "knowledge": knowledge}
+    )
     return FakePackSessionContext(config=config)
 
 

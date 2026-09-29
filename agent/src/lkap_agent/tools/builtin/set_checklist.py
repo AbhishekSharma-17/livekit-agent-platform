@@ -12,13 +12,15 @@ about it (the `request_form` pattern, D-W2-9i).
 
 from __future__ import annotations
 
-from typing import Any, Final
+from typing import Annotated, Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool
 from lkap_contracts.agent_config import PipelineMode
 from lkap_contracts.ui_protocol import ChecklistItem
 from packs.base import PackSessionContext
 from pydantic import BaseModel, Field
+
+from lkap_agent.tools.json_args import json_list
 
 __all__ = [
     "CHECKLIST_ID_PATTERN",
@@ -50,6 +52,12 @@ class ChecklistItemIn(BaseModel):
     hint: str = Field(default="", description="An optional short hint shown under the item.")
 
 
+#: JSON text of the items is read too (V6-30, F-2).
+ChecklistItemList = Annotated[
+    list[ChecklistItemIn], json_list('{"id": "photos", "label": "Photos of the damage", "done": false}')
+]
+
+
 def _clean(text: str, limit: int) -> str:
     return " ".join(text.split())[:limit]
 
@@ -64,7 +72,7 @@ def build_set_checklist_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
     """Build the `set_checklist` tool bound to `ctx`."""
 
     async def set_checklist(
-        context: RunContext[Any], items: list[ChecklistItemIn], keep_done: bool = True
+        context: RunContext[Any], items: ChecklistItemList, keep_done: bool = True
     ) -> str | None:
         """Replace the checklist of what the caller still needs to provide.
 

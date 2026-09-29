@@ -23,15 +23,21 @@ when the session can hold a picture (`build_builtin_tools`).
 from __future__ import annotations
 
 import json
-from typing import Any, Final
+from typing import Annotated, Any, Final
 
 from livekit.agents import FunctionTool, RunContext, ToolError, function_tool, llm
 from packs.base import PackSessionContext
 
 from lkap_agent.tools.builtin.describe_current_frame import TEXT_ONLY_MODEL_ERROR, _llm_vision
+from lkap_agent.tools.json_args import json_list
 from lkap_agent.vision import DescribeTask, ExtractField, VisionAnswerError, describe_image
 
 __all__ = ["DESCRIBE_ASSET_TIMEOUT_S", "UNTRUSTED_NOTE", "build_describe_asset_tool", "vision_llm"]
+
+#: JSON text of the fields is read too (V6-30, F-2).
+ExtractFieldList = Annotated[
+    list[ExtractField] | None, json_list('{"name": "policy_number", "description": "the policy number"}')
+]
 
 #: Per model call (the repair round gets the same again).
 DESCRIBE_ASSET_TIMEOUT_S: Final[float] = 45.0
@@ -58,7 +64,7 @@ def build_describe_asset_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
         context: RunContext[Any],
         asset_id: str,
         task: DescribeTask = "describe",
-        fields: list[ExtractField] | None = None,
+        fields: ExtractFieldList = None,
         question: str = "",
     ) -> str:
         """Read a photo the caller sent or pinned: describe it, extract fields, or read an ID card.

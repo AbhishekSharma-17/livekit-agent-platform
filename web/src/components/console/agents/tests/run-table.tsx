@@ -59,7 +59,7 @@ export function RunTable({ runs, selectedRunId, onSelect }: RunTableProps) {
             aria-pressed={selectedRunId === run.id}
             className={cn(
               "flex w-full flex-wrap items-center justify-between gap-2 rounded border border-border px-3 py-2 text-left transition-colors duration-(--duration-base) hover:bg-muted",
-              selectedRunId === run.id && "border-brand-border bg-brand-subtle/40",
+              selectedRunId === run.id && "border-brand-border bg-brand-subtle",
             )}
           >
             <span className="flex flex-wrap items-center gap-2">

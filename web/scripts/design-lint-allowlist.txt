@@ -22,26 +22,6 @@ allow raw-shadow       2  src/components/ui/sidebar.tsx
 allow colour-literal   1  src/components/shared/vendor-mark.tsx   # keep: per-vendor computed tint (AUDIT C6)
 
 # S1 agents (45 in 23 files)
-allow opacity-colour   4  src/components/console/agents/create/create-agent-dialog.tsx
-allow opacity-colour   1  src/components/console/agents/create/template-preview.tsx
-allow opacity-colour   6  src/components/console/agents/create/template-tile.tsx
-allow opacity-colour   1  src/components/console/agents/editor/cost-estimate-dialog.tsx
-allow opacity-colour   2  src/components/console/agents/editor/sections/conversation-section.tsx
-allow opacity-colour   1  src/components/console/agents/editor/sections/guardrails-section.tsx
-allow opacity-colour   1  src/components/console/agents/editor/sections/memory-section.tsx
-allow opacity-colour   1  src/components/console/agents/editor/sections/privacy-section.tsx
-allow opacity-colour   3  src/components/console/agents/editor/summary-rail.tsx
-allow opacity-colour   1  src/components/console/agents/guardrails/pattern-tester.tsx
-allow opacity-colour   1  src/components/console/agents/guardrails/rule-dialog.tsx
-allow opacity-colour   1  src/components/console/agents/providers-section/pipeline-summary-line.tsx
-allow opacity-colour   1  src/components/console/agents/providers-section/providers-section.tsx
-allow stroke-width     1  src/components/console/agents/providers-section/providers-section.tsx
-allow stroke-width     1  src/components/console/agents/tabs/providers-tab.tsx
-allow opacity-colour   3  src/components/console/agents/tabs/tools-tab.tsx
-allow opacity-colour   1  src/components/console/agents/test-chat/add-to-website-dialog.tsx
-allow opacity-colour   1  src/components/console/agents/tests/run-table.tsx
-allow opacity-colour   1  src/components/console/flow/flow-canvas.tsx
-allow opacity-colour   1  src/components/console/flow/version-history.tsx
 
 # S2 connect (17 in 9 files)
 allow opacity-colour   2  src/components/console/connections/connections-table.tsx

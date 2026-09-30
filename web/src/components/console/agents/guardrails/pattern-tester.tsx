@@ -86,7 +86,7 @@ export function PatternTester({ pattern, ignoreCase }: { pattern: string; ignore
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded border border-border bg-muted/30 p-3">
+    <div className="flex flex-col gap-2 rounded border border-border bg-muted p-3">
       <Field
         label="Test this pattern"
         htmlFor="guardrail-pattern-sample"

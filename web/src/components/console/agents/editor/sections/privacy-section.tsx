@@ -163,7 +163,7 @@ export function PrivacySection() {
                     <label
                       key={tier.value}
                       htmlFor={id}
-                      className="flex items-start gap-2.5 rounded border border-border p-3 text-sm has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle/40"
+                      className="flex items-start gap-2.5 rounded border border-border p-3 text-sm has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle"
                     >
                       <RadioGroupItem
                         id={id}

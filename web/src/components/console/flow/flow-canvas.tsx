@@ -767,7 +767,7 @@ function InspectorFrame({
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">{children}</div>
       {deleteButton ? (
-        <footer className="flex shrink-0 border-t border-border bg-muted/50 px-4 py-3">{deleteButton}</footer>
+        <footer className="flex shrink-0 border-t border-border bg-muted px-4 py-3">{deleteButton}</footer>
       ) : null}
     </aside>
   );

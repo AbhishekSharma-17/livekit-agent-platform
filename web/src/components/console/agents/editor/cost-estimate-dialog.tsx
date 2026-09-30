@@ -79,7 +79,7 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="flex flex-col gap-6">
-            <section aria-label="Estimated cost" className="flex flex-col gap-1 rounded-lg border border-border bg-muted/30 p-4">
+            <section aria-label="Estimated cost" className="flex flex-col gap-1 rounded-lg border border-border bg-muted p-4">
               {isLoading && !estimate ? (
                 <p className="text-sm text-text-secondary">Estimating…</p>
               ) : perMinute ? (

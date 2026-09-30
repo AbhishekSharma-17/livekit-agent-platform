@@ -183,7 +183,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
                 : null;
           return (
             <React.Fragment key={group.label}>
-              <SectionRow compact className="bg-muted/40">
+              <SectionRow compact className="bg-muted">
                 <p className="text-xs font-medium text-text-secondary">{group.label}</p>
               </SectionRow>
               {group.tools.map((name) => {
@@ -204,7 +204,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
           );
         })}
 
-        <SectionRow compact className="bg-muted/40">
+        <SectionRow compact className="bg-muted">
           <p className="text-xs font-medium text-text-secondary">Team notifications</p>
         </SectionRow>
         <SectionRow>
@@ -216,7 +216,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
           />
         </SectionRow>
 
-        <SectionRow compact className="bg-muted/40">
+        <SectionRow compact className="bg-muted">
           <p className="text-xs font-medium text-text-secondary">Network</p>
         </SectionRow>
         <SectionRow>

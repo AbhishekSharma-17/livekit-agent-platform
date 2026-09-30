@@ -106,7 +106,7 @@ export function MemorySection() {
                     <label
                       key={option.value}
                       htmlFor={id}
-                      className="flex items-start gap-2.5 rounded border border-border p-3 text-sm has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle/40 has-[:disabled]:opacity-60"
+                      className="flex items-start gap-2.5 rounded border border-border p-3 text-sm has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle has-[:disabled]:opacity-60"
                     >
                       <RadioGroupItem id={id} value={option.value} className="mt-0.5" />
                       <span className="flex flex-col gap-0.5">

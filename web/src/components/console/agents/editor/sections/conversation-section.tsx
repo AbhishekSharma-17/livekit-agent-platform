@@ -146,7 +146,7 @@ export function ConversationSection() {
                       htmlFor={id}
                       className={cn(
                         "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors duration-(--duration-base)",
-                        selected ? "border-brand-border bg-brand-subtle/40 ring-1 ring-brand-border" : "border-border hover:border-foreground/20",
+                        selected ? "border-brand-border bg-brand-subtle ring-1 ring-brand-border" : "border-border hover:border-border-strong",
                       )}
                     >
                       <span className="min-w-0 flex-1">

@@ -120,7 +120,7 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
                       onClick={() => setSelected(item.config_version)}
                       className={cn(
                         "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:cursor-default",
-                        active ? "bg-muted" : "hover:bg-muted/60",
+                        active ? "bg-brand-subtle" : "hover:bg-muted",
                       )}
                     >
                       <span className="flex min-w-0 flex-col">

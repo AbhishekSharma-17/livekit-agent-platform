@@ -139,7 +139,7 @@ export function RuleDialog({ open, onOpenChange, initial, otherNames, stageLabel
                   <label
                     key={option.value}
                     htmlFor={id}
-                    className="flex items-start gap-2.5 rounded border border-border p-2.5 text-sm has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle/40"
+                    className="flex items-start gap-2.5 rounded border border-border p-2.5 text-sm has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle"
                   >
                     <RadioGroupItem id={id} value={option.value} className="mt-0.5" />
                     <span className="flex flex-col gap-0.5">

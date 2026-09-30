@@ -193,13 +193,13 @@ export function NextStepsCard({ className }: { className?: string }) {
   }
 
   const itemClass =
-    "group/step flex w-full items-start gap-2.5 rounded-sm px-4 py-2 text-left text-label leading-[1.125rem] outline-none transition-colors duration-(--duration-base) ease-out hover:bg-brand-subtle/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
+    "group/step flex w-full items-start gap-2.5 rounded-sm px-4 py-2 text-left text-label leading-[1.125rem] outline-none transition-colors duration-(--duration-base) ease-out hover:bg-card focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
   return (
     <section
       aria-labelledby={headingId}
       data-slot="next-steps"
-      className={cn("shrink-0 overflow-hidden rounded-lg border border-brand-border bg-brand-subtle/30", className)}
+      className={cn("shrink-0 overflow-hidden rounded-lg border border-brand-border bg-brand-subtle", className)}
     >
       <div className="flex items-start gap-2 px-4 pt-3 pb-2">
         <Icon as={ListChecksIcon} size="sm" className="mt-0.5 text-brand" />
@@ -427,7 +427,7 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
                   title={`${meta.label}: ${on ? "on" : "off"}`}
                   className={cn(
                     "inline-flex size-7 items-center justify-center rounded-sm border",
-                    on ? "border-brand-border bg-brand-subtle text-brand" : "border-border text-text-secondary/60",
+                    on ? "border-brand-border bg-brand-subtle text-brand" : "border-border text-text-tertiary",
                   )}
                 >
                   <Icon as={meta.icon} size="sm" label={`${meta.label}: ${on ? "on" : "off"}`} />

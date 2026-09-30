@@ -9,8 +9,9 @@ import {
   MessagesSquareIcon,
   PlusIcon,
   TriangleAlertIcon,
-  UserRoundIcon,
   type LucideIcon,
+  UserRoundIcon,
+  WaypointsIcon,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -417,12 +418,12 @@ function Group({ title, description, children }: { title: string; description?: 
   );
 }
 
-const MODES: { value: Exclude<PipelineMode, never>; title: string; description: string; icon: LucideIcon | "dots" }[] = [
+const MODES: { value: Exclude<PipelineMode, never>; title: string; description: string; icon: LucideIcon }[] = [
   {
     value: "cascaded",
     title: "Cascaded",
     description: "Separate speech-to-text, language model and text-to-speech. Most flexible; works with LiveKit Inference without keys.",
-    icon: "dots",
+    icon: WaypointsIcon,
   },
   {
     value: "realtime",
@@ -480,7 +481,7 @@ function ModeCards({
                 aria-hidden="true"
                 className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded bg-muted text-text-secondary"
               >
-                {mode.icon === "dots" ? <LinkedDots /> : <Icon as={mode.icon} size="md" />}
+                <Icon as={mode.icon} size="md" />
               </span>
               <span className="flex min-w-0 flex-col gap-1">
                 <span className="text-sm font-semibold text-foreground">{mode.title}</span>
@@ -492,18 +493,6 @@ function ModeCards({
         })}
       </div>
     </div>
-  );
-}
-
-/** "Three linked dots" (§4.4) — no Lucide glyph says cascade. */
-function LinkedDots() {
-  return (
-    <svg viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-      <circle cx="3" cy="8" r="1.75" />
-      <circle cx="8" cy="8" r="1.75" />
-      <circle cx="13" cy="8" r="1.75" />
-      <path d="M4.75 8h1.5M9.75 8h1.5" />
-    </svg>
   );
 }
 
@@ -702,7 +691,7 @@ function AvatarOptionsFields({
           <Icon
             as={UserRoundIcon}
             size="lg"
-            className="text-stage-foreground/60"
+            className="text-stage-foreground opacity-60"
             style={frame.objectFit === "cover" ? { transform: "translateY(-20%)" } : undefined}
           />
         </div>

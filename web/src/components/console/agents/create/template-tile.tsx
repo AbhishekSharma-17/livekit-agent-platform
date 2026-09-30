@@ -37,7 +37,7 @@ export function TemplateChipPill({ chip }: { chip: keyof typeof TEMPLATE_CHIP_ME
       data-chip={chip}
       aria-label={meta.label}
       title={meta.help}
-      className="inline-flex h-6 items-center gap-1 rounded-pill border border-border bg-background px-2 text-caption leading-none font-medium text-foreground/80"
+      className="inline-flex h-6 items-center gap-1 rounded-pill border border-border bg-background px-2 text-caption leading-none font-medium text-text-secondary"
     >
       <Icon as={meta.icon} size="sm" className="size-3 text-text-secondary" />
       <span aria-hidden="true">{meta.label}</span>
@@ -120,8 +120,8 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
         "group/tile relative flex flex-col rounded-lg border bg-card text-foreground transition-[border-color,background-color,box-shadow] duration-(--duration-base) ease-out",
         "has-focus-visible:ring-2 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-background",
         selected
-          ? "border-brand-border bg-brand-subtle/40 shadow-xs ring-1 ring-brand-border"
-          : "border-border hover:border-foreground/20 hover:bg-muted/40",
+          ? "border-brand-border bg-brand-subtle ring-1 ring-brand-border"
+          : "border-border hover:border-border-strong hover:bg-muted",
         className,
       )}
     >
@@ -131,13 +131,13 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
             aria-hidden="true"
             className={cn(
               "inline-flex size-9 shrink-0 items-center justify-center rounded border transition-colors duration-(--duration-base)",
-              selected ? "border-brand-border bg-brand-subtle text-brand" : "border-border bg-muted/60 text-text-secondary",
+              selected ? "border-brand-border bg-card text-brand" : "border-border bg-muted text-text-secondary",
             )}
           >
             <Icon as={category.icon} size="md" />
           </span>
           <span className="min-w-0 flex-1">
-            <span id={`${uid}-name`} className="block text-sm leading-5 font-semibold text-foreground">
+            <span id={`${uid}-name`} className="block text-body font-semibold text-foreground">
               {template.name}
             </span>
             <span id={`${uid}-tagline`} className="mt-0.5 block text-label leading-[1.125rem] text-pretty text-text-secondary">
@@ -170,7 +170,7 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
               <span
                 data-slot="template-estimate"
                 title={`Estimate at list prices as of ${item.estimate?.as_of}, before your own usage`}
-                className="inline-flex h-5 items-center rounded-sm bg-muted px-1.5 text-caption leading-none font-medium tracking-[0.01em] whitespace-nowrap text-text-secondary"
+                className="inline-flex h-5 items-center rounded-sm bg-muted px-1.5 text-caption leading-none font-medium tracking-[0.01em] whitespace-nowrap text-text-secondary tabular-nums"
               >
                 {estimateUsd} · estimate
               </span>
@@ -185,7 +185,7 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
         ) : null}
       </label>
       {selected && children ? (
-        <div data-slot="template-tile-preview" className="border-t border-brand-border/60 px-3.5 py-3.5 lg:hidden">
+        <div data-slot="template-tile-preview" className="border-t border-brand-border px-3.5 py-3.5 lg:hidden">
           {children}
         </div>
       ) : null}

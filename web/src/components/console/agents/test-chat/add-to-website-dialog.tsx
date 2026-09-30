@@ -108,7 +108,7 @@ export function AddToWebsiteDialog({
         <DialogBody className="gap-4">
           {/* The copy button has its own gutter inside the box, so the scrolling
               snippet never slides underneath it. */}
-          <div className="flex min-w-0 items-start rounded border border-border bg-muted/40">
+          <div className="flex min-w-0 items-start rounded border border-border bg-muted">
             <pre
               tabIndex={0}
               aria-label="Widget snippet"

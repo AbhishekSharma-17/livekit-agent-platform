@@ -68,7 +68,7 @@ export function PipelineSummaryLine({ pipeline, providers, connection, variant =
   return (
     <div
       data-slot="pipeline-summary"
-      className={cn("flex max-w-[65ch] flex-col gap-1 rounded-lg border border-border bg-muted/40 px-4 py-3", className)}
+      className={cn("flex max-w-[65ch] flex-col gap-1 rounded-lg border border-border bg-muted px-4 py-3", className)}
     >
       <span className="text-xs font-medium text-text-secondary">How this agent works</span>
       <p className="text-sm leading-5 text-pretty text-foreground">{summary.text}</p>

@@ -4,10 +4,12 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeftIcon, CircleAlertIcon, FlaskConicalIcon } from "lucide-react";
+import { ArrowLeftIcon, FlaskConicalIcon } from "lucide-react";
 
 import { Field } from "@/components/shared/field";
 import { Icon } from "@/components/shared/icon";
+import { LoadingRegion } from "@/components/shared/loading-state";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,7 +31,6 @@ import { ErrorBanner, errorMessage } from "@/components/console/shared/error-ban
 import { useConnections } from "@/hooks/useConnections";
 import type { AgentCreate, PanelPreset, TemplateOut } from "@/contracts/lkap-contracts";
 import { ApiError, api } from "@/lib/api";
-import { cn } from "@/lib/utils";
 
 import { TemplatePreview } from "./template-preview";
 import { TemplateChipPill, TemplateTile } from "./template-tile";
@@ -331,13 +332,13 @@ function ChooseStep({
             Starter
           </p>
           {error ? (
-            <ErrorBanner message={`Couldn't load starters — ${errorMessage(error)}`} onRetry={onRetry} />
+            <ErrorBanner error={error} context={{ action: "load starters" }} onRetry={onRetry} />
           ) : isLoading ? (
-            <div role="status" aria-label="Loading starters" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-2">
+            <LoadingRegion label="Loading starters" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-2">
               {Array.from({ length: 6 }, (_, i) => (
                 <Skeleton key={i} className="h-36 w-full rounded-lg" />
               ))}
-            </div>
+            </LoadingRegion>
           ) : (
             <RadioGroup
               value={selectedId}
@@ -349,8 +350,8 @@ function ChooseStep({
                 <React.Fragment key={item.template.id}>
                   {index === firstExample && firstExample > 0 ? (
                     <div className="col-span-full mt-2 flex items-center gap-3" data-slot="gallery-divider">
-                      <span className="inline-flex items-center gap-1.5 text-caption font-semibold tracking-[0.06em] text-text-secondary uppercase">
-                        <Icon as={FlaskConicalIcon} size="sm" className="size-3.5" />
+                      <span className="inline-flex items-center gap-1.5 text-caption font-medium tracking-[0.04em] text-text-tertiary uppercase">
+                        <Icon as={FlaskConicalIcon} size="sm" />
                         Advanced example
                       </span>
                       <span aria-hidden="true" className="h-px flex-1 bg-border" />
@@ -370,7 +371,7 @@ function ChooseStep({
             </RadioGroup>
           )}
           {gallery?.source === "packs" ? (
-            <p className="text-xs text-text-secondary">
+            <p className="text-caption text-text-secondary">
               This server lists packs rather than starters. Update the server to see every starter.
             </p>
           ) : null}
@@ -378,7 +379,7 @@ function ChooseStep({
 
         <aside
           aria-label="Starter preview"
-          className="hidden border-l border-border bg-muted/30 lg:col-span-5 lg:block lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain"
+          className="hidden border-l border-border bg-muted lg:col-span-5 lg:block lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain"
         >
           <div className="px-5 py-5">
             {selected ? (
@@ -397,14 +398,14 @@ function ChooseStep({
 
       <DialogFooter className="sm:items-center">
         {selected ? (
-          <p className="mr-auto hidden min-w-0 truncate text-xs text-text-secondary sm:block" aria-live="polite">
+          <p className="mr-auto hidden min-w-0 truncate text-caption text-text-secondary sm:block" aria-live="polite">
             Selected: <span className="font-medium text-foreground">{selected.template.name}</span>
           </p>
         ) : null}
-        <Button type="button" variant="outline" onClick={onCancel}>
+        <Button type="button" variant="secondary" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="button" onClick={onContinue} disabled={!selected}>
+        <Button type="button" variant="primary" onClick={onContinue} disabled={!selected}>
           Continue
         </Button>
       </DialogFooter>
@@ -506,15 +507,15 @@ function NameStep({
 
       <DialogBody>
         <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
-          <div className="flex items-start gap-3 rounded-lg border border-brand-border bg-brand-subtle/40 p-3.5">
+          <div className="flex items-start gap-3 rounded-lg border border-brand-border bg-brand-subtle p-3.5">
             <span
               aria-hidden="true"
-              className="inline-flex size-9 shrink-0 items-center justify-center rounded border border-brand-border bg-brand-subtle text-brand"
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded border border-brand-border bg-card text-brand"
             >
               <Icon as={category.icon} size="md" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-foreground">{template.name}</p>
+              <p className="text-body font-semibold text-foreground">{template.name}</p>
               <p className="mt-0.5 text-label leading-[1.125rem] text-text-secondary">{template.tagline}</p>
               {(template.chips ?? []).length > 0 ? (
                 <span role="list" aria-label="Capabilities" className="mt-2.5 flex flex-wrap gap-1.5">
@@ -524,7 +525,7 @@ function NameStep({
                 </span>
               ) : null}
             </div>
-            <Button type="button" variant="link" size="sm" onClick={onBack} className="h-auto shrink-0 px-0 text-xs">
+            <Button type="button" variant="link" onClick={onBack} className="shrink-0">
               Change
             </Button>
           </div>
@@ -599,26 +600,17 @@ function NameStep({
           ) : null}
 
           {error ? (
-            <div
-              ref={errorRef}
-              role="alert"
-              data-slot="create-agent-issues"
-              className="overflow-hidden rounded-lg border border-destructive-solid/30 bg-destructive-subtle"
-            >
-              <p className="flex items-center gap-2 px-4 pt-3 text-sm font-semibold text-destructive-text">
-                <Icon as={CircleAlertIcon} size="md" />
-                {error.title}
-              </p>
-              <ul className="flex flex-col gap-2 px-4 py-3">
+            <Alert ref={errorRef} tone="danger" title={error.title} data-slot="create-agent-issues">
+              <ul className="mt-1 flex flex-col gap-2">
                 {error.lines.map((line, index) => (
-                  <li key={`${line.path ?? ""}-${index}`} className="text-label leading-[1.125rem] text-destructive-text">
+                  <li key={`${line.path ?? ""}-${index}`}>
                     <p className="text-pretty break-words">{line.message}</p>
-                    {line.path ? <p className="mt-0.5 font-mono text-xs break-all opacity-80">{line.path}</p> : null}
+                    {line.path ? <p className="mt-0.5 font-mono text-caption break-all">{line.path}</p> : null}
                   </li>
                 ))}
               </ul>
               {error.needsKeys ? (
-                <p className="border-t border-destructive-solid/20 px-4 py-2.5 text-label leading-[1.125rem] text-destructive-text">
+                <p className="mt-2 border-t border-destructive-border pt-2">
                   This connection can&apos;t use LiveKit Inference.{" "}
                   <Link href="/console/providers" className="font-medium underline underline-offset-2">
                     Add a provider key
@@ -627,17 +619,17 @@ function NameStep({
                   or pick a LiveKit Cloud connection, then try again.
                 </p>
               ) : null}
-            </div>
+            </Alert>
           ) : null}
         </div>
       </DialogBody>
 
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onBack} disabled={pending}>
+        <Button type="button" variant="secondary" onClick={onBack} disabled={pending}>
           Back
         </Button>
-        <Button type="submit" disabled={pending} className={cn(pending && "cursor-progress")}>
-          {pending ? "Creating…" : "Create agent"}
+        <Button type="submit" variant="primary" busy={pending} busyLabel="Creating…">
+          Create agent
         </Button>
       </DialogFooter>
     </form>

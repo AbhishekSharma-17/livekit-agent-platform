@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronRightIcon, CircleDashedIcon, MessageCircleIcon } from "lucide-react";
+import { ChevronDownIcon, CircleDashedIcon, MessageCircleIcon } from "lucide-react";
 
 import { Icon } from "@/components/shared/icon";
 import { VendorMark } from "@/components/shared/vendor-mark";
@@ -28,14 +28,14 @@ import {
 function Fact({ term, children }: { term: string; children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-baseline gap-3 py-2 first:pt-0 last:pb-0">
-      <dt className="text-xs font-medium text-text-secondary">{term}</dt>
+      <dt className="text-caption font-medium text-text-tertiary">{term}</dt>
       <dd className="min-w-0 text-label leading-[1.125rem] text-foreground">{children}</dd>
     </div>
   );
 }
 
 function SubHeading({ children }: { children: React.ReactNode }) {
-  return <p className="text-caption font-semibold tracking-[0.06em] text-text-secondary uppercase">{children}</p>;
+  return <p className="text-caption font-medium tracking-[0.04em] text-text-tertiary uppercase">{children}</p>;
 }
 
 /** The last path segment of a model id (`deepgram/nova-3` → `nova-3`). */
@@ -95,11 +95,11 @@ export function TemplatePreview({ item, providers, variant = "pane", className }
     >
       {variant === "pane" ? (
         <header className="flex flex-col gap-2">
-          <span className="inline-flex items-center gap-1.5 text-caption font-semibold tracking-[0.06em] text-brand uppercase">
-            <Icon as={category.icon} size="sm" className="size-3.5" />
+          <span className="inline-flex items-center gap-1.5 text-caption font-medium tracking-[0.04em] text-text-tertiary uppercase">
+            <Icon as={category.icon} size="sm" />
             {category.label}
           </span>
-          <h3 id={headingId} className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
+          <h3 id={headingId} className="text-title font-semibold tracking-[-0.008em] text-foreground">
             {template.name}
           </h3>
           <p className="text-label leading-5 text-pretty text-text-secondary">{template.description}</p>
@@ -161,7 +161,7 @@ export function TemplatePreview({ item, providers, variant = "pane", className }
             {prompts.map((prompt) => (
               <li
                 key={prompt}
-                className="flex items-start gap-2 rounded bg-muted/60 px-2.5 py-1.5 text-label leading-[1.125rem] text-foreground"
+                className="flex items-start gap-2 rounded border border-border bg-card px-2.5 py-1.5 text-label leading-[1.125rem] text-foreground"
               >
                 <Icon as={MessageCircleIcon} size="sm" className="mt-0.5 text-text-secondary" />
                 <span className="min-w-0 text-pretty">“{prompt}”</span>
@@ -187,18 +187,18 @@ export function TemplatePreview({ item, providers, variant = "pane", className }
 
       {instructions && variant === "pane" ? (
         <Collapsible className="group/instructions rounded border border-border">
-          <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded px-3 py-2 text-left text-xs font-medium text-text-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+          <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded px-3 py-2 text-left text-caption font-medium text-text-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
             <Icon
-              as={ChevronRightIcon}
+              as={ChevronDownIcon}
               size="sm"
-              className="transition-transform duration-(--duration-base) group-data-[state=open]/instructions:rotate-90"
+              className="transition-transform duration-(--duration-base) group-data-[state=open]/instructions:rotate-180"
             />
             Instructions
           </CollapsibleTrigger>
           <CollapsibleContent>
             <p
               tabIndex={0}
-              className="max-h-56 overflow-y-auto border-t border-border px-3 py-2.5 text-xs leading-5 whitespace-pre-wrap text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              className="max-h-56 overflow-y-auto border-t border-border px-3 py-2.5 text-caption leading-5 whitespace-pre-wrap text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
             >
               {instructions}
             </p>

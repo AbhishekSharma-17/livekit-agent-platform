@@ -24,6 +24,7 @@ Nothing in `components/shared/**` imports screen code. The permission helpers re
 - **Dialogs only.** No sheet or drawer primitive exists (D7); large forms use `DialogContent size="lg|xl"`.
 - **Errors.** Everything a person reads goes through `friendlyError` (`console/lib/friendly-error.ts`);
   `errorMessage()` returns its text. The raw detail is on `.raw` for logs only.
+- **Sign-in errors (S8).** `/login` wraps it in `app/login/sign-in-errors.ts`: the shared 401 copy ("Your session has ended") is wrong where you sign in, so auth, rate-limit, server and invite failures get their own plain copy there (never saying whether the email or the password was wrong); everything else falls through to `friendlyError`.
 
 ## Inventory
 

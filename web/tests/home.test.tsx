@@ -85,6 +85,21 @@ describe("Home (docs/UI_UX_SPEC.md §3.4, §7.12)", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByText("API unreachable")).toBeTruthy();
+    expect(screen.getByText(/Sign-in won.t work until the API is reachable/)).toBeTruthy();
+  });
+
+  it("makes Open console the one primary action, placed last (DESIGN-SYSTEM 6.1)", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "http://api.test");
+    stubFetch(async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) }) as Response);
+
+    render(await Home());
+
+    const actions = screen.getAllByRole("link").map((link) => [link.textContent, link.getAttribute("data-variant")]);
+    expect(actions).toEqual([
+      ["Sign in", "secondary"],
+      ["Open console", "primary"],
+    ]);
+    expect(screen.queryByText(/Sign-in won.t work/)).toBeNull();
   });
 
   it("has no footer doc links (R-V2-3a: no /docs/* route in Phase 1, docs never served from web/public/)", async () => {

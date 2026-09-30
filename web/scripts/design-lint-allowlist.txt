@@ -83,15 +83,7 @@ allow opacity-colour   1  src/components/console/sessions-v2/cost-tab.tsx
 allow opacity-colour   1  src/components/console/sessions-v2/memory-tab.tsx
 allow opacity-colour   1  src/components/console/sessions/details-disclosure.tsx
 
-# S6 settings (16 in 8 files)
-allow opacity-colour   1  src/components/console/settings/api-keys-tab.tsx
-allow opacity-colour   2  src/components/console/settings/compliance-tab.tsx
-allow opacity-colour   7  src/components/console/settings/connect-agent-dialog.tsx
-allow opacity-colour   2  src/components/console/settings/danger-tab.tsx
-allow opacity-colour   1  src/components/console/settings/knowledge-connection-dialog.tsx
-allow opacity-colour   1  src/components/console/settings/team-tab.tsx
-allow opacity-colour   1  src/components/console/settings/webhooks-tab.tsx
-allow opacity-colour   1  src/components/console/settings/workspace-prices-dialog.tsx
+# S6 settings (0 in 0 files)
 
 # S7 caller-facing (6 in 2 files)
 allow opacity-colour   2  src/components/session/session-controls.tsx

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputWithIcon } from "@/components/shared/search-field";
 import { Tag } from "@/components/shared/tag";
-import { plainStatusError } from "@/components/console/knowledge/status-error";
+import { plainStatusError } from "@/components/shared/status-error";
 import { useKbSearch } from "@/components/console/lib/api-hooks";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { EmptyState } from "@/components/console/shared/empty-state";

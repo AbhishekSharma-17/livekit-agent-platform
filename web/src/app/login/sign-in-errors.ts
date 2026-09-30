@@ -1,4 +1,4 @@
-import { friendlyError } from "@/components/console/lib/friendly-error";
+import { friendlyError } from "@/lib/friendly-error";
 import { ApiError } from "@/lib/api";
 
 /**

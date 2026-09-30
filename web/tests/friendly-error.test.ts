@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { asSentence, friendlyError, isPresentable, rawErrorDetail } from "@/components/console/lib/friendly-error";
+import { asSentence, codeMessage, friendlyError, isPresentable, rawErrorDetail, statusMessage } from "@/lib/friendly-error";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { ApiError } from "@/lib/api";
 
@@ -99,5 +99,19 @@ describe("isPresentable / asSentence", () => {
   it("capitalises and full-stops", () => {
     expect(asSentence("  the session ended ")).toBe("The session ended.");
     expect(asSentence("Done!")).toBe("Done!");
+  });
+});
+
+describe("codeMessage / statusMessage (single sentences for the caller page)", () => {
+  it("returns the same words friendlyError shows", () => {
+    expect(codeMessage("calls_busy")).toBe(friendlyError(new ApiError(409, "calls_busy", "cap reached")).message);
+    expect(statusMessage(500)).toBe(friendlyError(new ApiError(500, "internal_error", "boom")).message);
+    expect(codeMessage("calls_busy")).toBe("All lines are busy right now. Try again in a moment.");
+    expect(statusMessage(500)).toBe("Something went wrong on our side. Try again in a moment.");
+  });
+
+  it("is null for an unknown code or a status without fixed copy", () => {
+    expect(codeMessage("no_such_code")).toBeNull();
+    expect(statusMessage(418)).toBeNull();
   });
 });

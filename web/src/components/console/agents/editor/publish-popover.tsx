@@ -11,7 +11,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useUpdateAgent, useValidateAgent } from "@/components/console/lib/api-hooks";
-import { friendlyError } from "@/components/console/lib/friendly-error";
+import { friendlyError } from "@/lib/friendly-error";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { ApiError } from "@/lib/api";

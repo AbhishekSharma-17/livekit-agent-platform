@@ -29,7 +29,7 @@ import { appsErrorToast } from "@/components/console/tools/apps/use-composio";
 import { fieldsFor } from "@/components/console/tools/apps/connect-app-dialog";
 import { ActionsDialog } from "@/components/console/tools/apps/actions-dialog";
 import { RenameAccountDialog } from "@/components/console/tools/apps/rename-account-dialog";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import { LoadingRow } from "@/components/shared/loading-state";
 import { Tag } from "@/components/shared/tag";
 import { pluralize } from "@/lib/format";

@@ -22,7 +22,7 @@ Nothing in `components/shared/**` imports screen code. The permission helpers re
   empty); replace page-level primaries with a `ReadOnlyNote` that names the next step. `GatedButton`
   (disabled plus tooltip) is deprecated.
 - **Dialogs only.** No sheet or drawer primitive exists (D7); large forms use `DialogContent size="lg|xl"`.
-- **Errors.** Everything a person reads goes through `friendlyError` (`console/lib/friendly-error.ts`);
+- **Errors.** Everything a person reads goes through `friendlyError` (`src/lib/friendly-error.ts`, pure and free of console code, so the caller page can borrow its sentences through `codeMessage` / `statusMessage`);
   `errorMessage()` returns its text. The raw detail is on `.raw` for logs only.
 - **Sign-in errors (S8).** `/login` wraps it in `app/login/sign-in-errors.ts`: the shared 401 copy ("Your session has ended") is wrong where you sign in, so auth, rate-limit, server and invite failures get their own plain copy there (never saying whether the email or the password was wrong); everything else falls through to `friendlyError`.
 
@@ -54,7 +54,10 @@ Nothing in `components/shared/**` imports screen code. The permission helpers re
 | Data display (6.7) | `ui/card.tsx`, `ui/table.tsx`, `shared/list-card.tsx`, `shared/data-display.tsx`, `shared/description-list.tsx`, `shared/responsive-table.tsx`, `shared/section.tsx` | `Card*` + `CardInset`, `Table` (`framed`, `numeric`), `ListCard`, `ListCardRow`, `MetaList`, `StatCard`, `StatGrid`, `Avatar`, `initials` |
 | Navigation | `shared/segmented-control.tsx`, `ui/tabs.tsx`, `shared/theme-switcher.tsx`, `ui/kbd.tsx` | `SegmentedControl`, `Tabs*` + `TabsCount` (accent underline), `ThemeSwitcher`, `Kbd` |
 | Page (7.3) | `shared/page-header.tsx` | `Page` (`default` 1200, `wide` 1440, `narrow` 880), `PageHeader` (`back`, `eyebrow`, `badge`, `actions` with the primary last) |
-| Permissions (8.5) | `console/shared/permission.tsx`, `shared/read-only-note.tsx`, `shared/new-resource-button.tsx`, `shared/require-write.tsx` | `IfCan`, `useCan`, `readOnlyCopy`, `ReadOnlyNote`, `NewResourceButton`, `RequireWrite` |
+| Permissions (8.5) | `console/shared/permission.tsx`, `console/shared/write-gate.ts`, `shared/read-only-note.tsx`, `shared/new-resource-button.tsx`, `shared/require-write.tsx` | `IfCan`, `useCan`, `useWriteGate` (`show` / `pending` / `can`: hidden when unusable, disabled while the role loads), `readOnlyCopy`, `ReadOnlyNote`, `NewResourceButton`, `RequireWrite` |
+| Danger zone (7.4) | `console/shared/danger-zone-card.tsx` | `DangerZoneCard`: a detail page's last card, danger-outline entry and a typed `DELETE` confirmation listing what goes |
+| Phone tables (10) | `shared/stacked-table.tsx` | `STACKED_TABLE`, `STACKED_CONTROL`, `PhoneLabel`: editable tables stack into blocks below `sm` instead of scrolling sideways |
+| Worker errors | `shared/status-error.ts` | `plainStatusError(raw, fallback)`: a stored import/indexing failure reason, shown only when it reads as plain copy |
 | Icons (5) | `shared/icon.tsx` | `Icon` (sizes `xs` 12, `sm` 14, `select` 15, `md` 16, `nav` 17, `tile` 18, `lg` 20, `xl` 24, via `size-*` classes) |
 
 Earlier primitives keep their contracts: `StateMeter`, `CopyButton`, `RelativeTime`, `VendorMark`,

@@ -12,7 +12,7 @@ export interface WriteGate {
 }
 
 /**
- * The permission pattern for build-library controls (docs/ui/DESIGN-SYSTEM.md
+ * The permission pattern for a single control (docs/ui/DESIGN-SYSTEM.md
  * section 8.5, decision D12): a control the person can't use is **not
  * rendered**; while the role is still loading it renders disabled, exactly
  * like `NewResourceButton`, so nothing appears and then disappears. Page-level

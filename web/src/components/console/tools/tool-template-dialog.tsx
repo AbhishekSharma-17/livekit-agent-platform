@@ -26,7 +26,7 @@ import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { readOnlyCopy } from "@/components/console/shared/permission";
 import { ReadOnlyNote } from "@/components/shared/read-only-note";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import type { ProviderSpec, ToolTemplate, ToolTemplateDefault, ToolTemplateInstantiated } from "@/contracts/lkap-contracts";
 
 export interface ToolTemplateDialogProps {

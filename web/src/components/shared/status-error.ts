@@ -1,4 +1,4 @@
-import { isPresentable } from "@/components/console/lib/friendly-error";
+import { isPresentable } from "@/lib/friendly-error";
 
 /**
  * The reason an import or an indexing job failed, as stored by the worker

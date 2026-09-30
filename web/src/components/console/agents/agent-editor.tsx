@@ -12,7 +12,7 @@ import { useWriteAccess } from "@/components/console/lib/roles";
 import { agentEditorFormSchema, type AgentEditorForm } from "@/components/console/lib/schemas";
 import { zodResolver } from "@/components/console/lib/zod-resolver";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
-import { friendlyError } from "@/components/console/lib/friendly-error";
+import { friendlyError } from "@/lib/friendly-error";
 import { useSetBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
 import type { AgentOut, ValidationResult } from "@/contracts/lkap-contracts";
 import { pluralize } from "@/lib/format";

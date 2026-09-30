@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useState } from "react";
 
-import { friendlyError } from "@/components/console/lib/friendly-error";
+import { friendlyError } from "@/lib/friendly-error";
 import { busyLabelFor } from "@/components/shared/busy-label";
 import { FormError } from "@/components/shared/field";
 import { Button } from "@/components/ui/button";

@@ -16,7 +16,7 @@ import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-edito
 import { mcpAuthChip } from "@/components/console/tools/mcp-oauth-status";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
 import { ProviderToolEditorDialog } from "@/components/console/tools/provider-tool-editor-dialog";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import type { McpHeaderAuth, McpNoAuth, McpOAuthAuth, ProviderSpec, ProviderToolDefinition, ToolOut } from "@/contracts/lkap-contracts";
 

@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { friendlyError, type FriendlyErrorContext } from "@/components/console/lib/friendly-error";
+import { friendlyError, type FriendlyErrorContext } from "@/lib/friendly-error";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
@@ -57,7 +57,7 @@ export function ErrorBanner({
 /**
  * The person-facing text for any thrown value: plain words plus a next step,
  * never vendor text, status phrases, stack traces or ids (see
- * `console/lib/friendly-error.ts`). The raw detail is on `friendlyError(e).raw`
+ * `src/lib/friendly-error.ts`). The raw detail is on `friendlyError(e).raw`
  * for logs and development only.
  */
 export function errorMessage(error: unknown): string {

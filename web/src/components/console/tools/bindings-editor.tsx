@@ -6,7 +6,7 @@ import { PlusIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PhoneLabel, STACKED_TABLE } from "@/components/console/tools/stacked-table";
+import { PhoneLabel, STACKED_TABLE } from "@/components/shared/stacked-table";
 import {
   Select,
   SelectContent,

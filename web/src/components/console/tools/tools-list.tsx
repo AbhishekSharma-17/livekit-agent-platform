@@ -26,7 +26,7 @@ import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-
 import { ProviderToolEditorDialog } from "@/components/console/tools/provider-tool-editor-dialog";
 import { requestSummary } from "@/components/console/tools/tool-row";
 import { ToolTemplateDialog } from "@/components/console/tools/tool-template-dialog";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import type { AppConnectionOut, ProviderSpec, ProviderToolDefinition, ToolOut } from "@/contracts/lkap-contracts";
 
 /**

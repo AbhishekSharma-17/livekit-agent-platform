@@ -9,7 +9,7 @@ import { StatusPill } from "@/components/shared/status-chip";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { useKbSource } from "@/components/console/lib/api-hooks";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
-import { plainStatusError } from "@/components/console/knowledge/status-error";
+import { plainStatusError } from "@/components/shared/status-error";
 import { pluralize } from "@/lib/format";
 
 /**

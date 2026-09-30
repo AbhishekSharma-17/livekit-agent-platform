@@ -18,7 +18,7 @@ import { useDisableApps, useEnableApps, useToolProviderCategories, useToolProvid
 import { AppCardSkeleton, AppGallery } from "@/components/console/tools/apps/app-gallery";
 import { EnableComposioDialog } from "@/components/console/tools/apps/enable-composio-dialog";
 import { appsErrorMessage, appsErrorToast, composioStatusChip, useComposioStatus } from "@/components/console/tools/apps/use-composio";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import type { AppsStatusOut } from "@/contracts/lkap-contracts";
 
 /**

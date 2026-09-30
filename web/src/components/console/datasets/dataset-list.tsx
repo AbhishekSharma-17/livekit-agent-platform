@@ -15,9 +15,9 @@ import { ErrorBanner, errorMessage } from "@/components/console/shared/error-ban
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { useDatasets, useDeleteDataset } from "@/components/console/lib/api-hooks";
 import { UploadDatasetDialog } from "@/components/console/datasets/upload-dataset-dialog";
-import { plainStatusError } from "@/components/console/knowledge/status-error";
+import { plainStatusError } from "@/components/shared/status-error";
 import { Highlight, ListToolbar, SEARCH_THRESHOLD, matchesQuery, useRememberedChoice } from "@/components/shared/list-search";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import { pluralize } from "@/lib/format";
 import type { DatasetOut } from "@/contracts/lkap-contracts";
 

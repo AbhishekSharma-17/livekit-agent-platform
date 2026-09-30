@@ -3,10 +3,13 @@
  * 8.4): what happened, in plain words, and what to do next. Never the api's
  * internal text, vendor messages or configuration names.
  *
- * The console's `friendlyError()` (`components/console/lib/friendly-error.ts`)
- * can't be used here: nothing under `components/console/**` may reach the
- * `/s/[slug]` bundle (`tests/flow-bundle-split.test.ts`). This is the session's
- * own, much smaller map over the connect call's `ConnectError`.
+ * A caller is not a console user, so this is the session's own, much smaller
+ * map over the connect call's `ConnectError`. Where the shared mapper's copy
+ * fits a caller it is borrowed, not duplicated (`src/lib/friendly-error.ts`,
+ * free of console code, so the `/s/[slug]` bundle stays clear of
+ * `components/console/**`, `tests/flow-bundle-split.test.ts`): the busy
+ * sentence and the server sentence. Its other code copy is not borrowed; it
+ * speaks to builders (`livekit_error` names a vendor and a connection).
  *
  * Two answers pass through on purpose:
  * - `no_worker_running` (V6-27, ask #181): the api already wrote the message
@@ -17,13 +20,16 @@
  * In test mode (`?mode=test`, a builder from the console) everything else keeps
  * today's `describeConnectError()` text, which a builder can act on.
  */
+import { codeMessage, statusMessage } from "@/lib/friendly-error";
 import { ConnectError, describeConnectError } from "@/lib/livekit";
 
 export const CALLER_ERROR = {
   cantTakeCalls: "This agent can't take calls right now. Please try again in a few minutes.",
-  busy: "All lines are busy right now. Try again in a moment.",
+  /** The shared `calls_busy` sentence: "All lines are busy right now. Try again in a moment." */
+  busy: codeMessage("calls_busy") ?? "All lines are busy right now. Try again in a moment.",
   tooMany: "There are too many calls right now. Wait a moment, then try again.",
-  server: "Something went wrong on our side. Try again in a moment.",
+  /** The shared 500 sentence, for every 5xx: "Something went wrong on our side. Try again in a moment." */
+  server: statusMessage(500) ?? "Something went wrong on our side. Try again in a moment.",
   /** Same words as `describeConnectError`'s network failure. */
   unreachable: "Could not reach the agent service. Please try again in a moment.",
   generic: "We couldn't start the call. Try again in a moment.",

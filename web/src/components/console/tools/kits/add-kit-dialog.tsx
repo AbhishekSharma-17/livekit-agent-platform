@@ -41,7 +41,7 @@ import { CredentialPicker } from "@/components/console/registry/credential-picke
 import { readOnlyCopy } from "@/components/console/shared/permission";
 import { ReadOnlyNote } from "@/components/shared/read-only-note";
 import { Alert } from "@/components/ui/alert";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import { KIT_PREFIX_PATTERN } from "@/components/console/tools/kits/constants";
 import type {
   AgentOut,

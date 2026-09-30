@@ -18,7 +18,7 @@ import { VendorMark } from "@/components/shared/vendor-mark";
 import { ConnectAppDialog } from "@/components/console/tools/apps/connect-app-dialog";
 import { ConnectionRow } from "@/components/console/tools/apps/connection-row";
 import { useToolProviderConnections } from "@/components/console/lib/api-hooks";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import { pluralize } from "@/lib/format";
 import type { AppConnectionOut, ToolkitOut } from "@/contracts/lkap-contracts";
 

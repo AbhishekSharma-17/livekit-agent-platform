@@ -1,7 +1,7 @@
 import * as React from "react";
 
 /**
- * Editable tables in the tool editors (bindings, fixed values) stack on
+ * Editable tables (the tool editors' bindings and fixed values) stack on
  * phones instead of scrolling sideways (docs/ui/AUDIT.md M3; spec section 10:
  * no horizontal scroll at 390 px). At `sm` and up they are ordinary tables;
  * below it each row becomes a card-like block, the header row is kept for

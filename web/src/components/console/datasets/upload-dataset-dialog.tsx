@@ -32,7 +32,7 @@ import { datasetFormatFromFilename, sniffDatasetFileColumns } from "@/components
 import { readOnlyCopy } from "@/components/console/shared/permission";
 import { LoadingRow } from "@/components/shared/loading-state";
 import { ReadOnlyNote } from "@/components/shared/read-only-note";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 
 const ACCEPT_ATTR = ".csv,.tsv,.json";
 

@@ -28,7 +28,7 @@ import {
 import { useCreateTool, useUpdateTool } from "@/components/console/lib/api-hooks";
 import { readOnlyCopy } from "@/components/console/shared/permission";
 import { ReadOnlyNote } from "@/components/shared/read-only-note";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import {

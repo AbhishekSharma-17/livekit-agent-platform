@@ -13,8 +13,8 @@ import { LifecycleBadge } from "@/components/shared/status-chip";
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { KbEvalDialog } from "@/components/console/knowledge/kb-eval-dialog";
-import { plainStatusError } from "@/components/console/knowledge/status-error";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { plainStatusError } from "@/components/shared/status-error";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import {
   useEvaluateKb,
   useKbEvalRun,

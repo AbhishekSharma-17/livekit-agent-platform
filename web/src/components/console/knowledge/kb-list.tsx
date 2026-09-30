@@ -12,7 +12,7 @@ import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { CreateKbDialog } from "@/components/console/knowledge/create-kb-dialog";
 import { embedderLabel } from "@/components/console/knowledge/embedder-label";
 import { Highlight, ListToolbar, SEARCH_THRESHOLD, matchesQuery } from "@/components/shared/list-search";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import { NoMatches } from "@/components/shared/empty-state";
 import { SkeletonRows } from "@/components/shared/loading-state";
 import { RelativeTime } from "@/components/shared/relative-time";

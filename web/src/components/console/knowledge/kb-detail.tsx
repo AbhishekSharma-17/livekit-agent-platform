@@ -12,12 +12,12 @@ import { useDeleteKb, useKb, useKnowledgeConnections, useProviders } from "@/com
 import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { embedderLabel } from "@/components/console/knowledge/embedder-label";
 import { knowledgeConnectionKindLabel } from "@/components/console/settings/knowledge-connection-dialog";
-import { DangerZoneCard } from "@/components/console/knowledge/danger-zone-card";
+import { DangerZoneCard } from "@/components/console/shared/danger-zone-card";
 import { KbDocuments, type KbDocumentsHandle } from "@/components/console/knowledge/kb-documents";
 import { KbSourceCard } from "@/components/console/knowledge/kb-source-card";
 import { KbEvalsCard } from "@/components/console/knowledge/kb-evals-card";
 import { KbSearchPanel } from "@/components/console/knowledge/kb-search-panel";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import { DescriptionList } from "@/components/shared/description-list";
 import { LoadingRegion } from "@/components/shared/loading-state";
 import { Page, PageHeader } from "@/components/shared/page-header";

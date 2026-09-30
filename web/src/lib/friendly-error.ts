@@ -14,6 +14,12 @@
  *   4. auth, not-found and server statuses: fixed copy;
  *   5. errors thrown by console code (plain `Error`): the message when it reads
  *      as plain copy, otherwise a generic sentence.
+ *
+ * Pure, and free of console code, so both surfaces can import it: the console
+ * and sign-in use `friendlyError()`; the caller page (`/s/[slug]`, whose
+ * bundle must not reach `components/console/**`, `tests/flow-bundle-split.test.ts`)
+ * borrows single sentences through `codeMessage()` / `statusMessage()` where
+ * they fit a caller (`components/session/caller-error.ts`).
  */
 import { ApiError } from "@/lib/api";
 
@@ -216,6 +222,22 @@ function safeJson(value: unknown): string {
   }
 }
 
+function sentence(copy: Copy): string {
+  return copy.nextStep ? `${copy.detail} ${copy.nextStep}` : copy.detail;
+}
+
+/** The plain sentence (what happened, then what to do) for one of the api's error codes, or `null`. */
+export function codeMessage(code: string): string | null {
+  const copy = CODE_COPY[code];
+  return copy ? sentence(copy) : null;
+}
+
+/** The plain sentence for an HTTP status with fixed copy (401, 404, 500 …), or `null`. */
+export function statusMessage(status: number): string | null {
+  const copy = STATUS_COPY[status];
+  return copy ? sentence(copy) : null;
+}
+
 function copyFor(error: unknown): Copy {
   const name = errorName(error);
   if (name === "AbortError") return { detail: "The request was cancelled.", nextStep: "Try again.", action: "retry" };
@@ -254,7 +276,7 @@ function copyFor(error: unknown): Copy {
  */
 export function friendlyError(error: unknown, context: FriendlyErrorContext = {}): FriendlyError {
   const copy = copyFor(error);
-  const message = copy.nextStep ? `${copy.detail} ${copy.nextStep}` : copy.detail;
+  const message = sentence(copy);
   const title = context.action ? `Couldn't ${context.action}` : copy.detail.replace(/\.$/, "");
   return {
     title,

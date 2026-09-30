@@ -18,9 +18,9 @@ import { useDataset, useDeleteDataset } from "@/components/console/lib/api-hooks
 import { DatasetRowsPreview } from "@/components/console/datasets/dataset-rows-preview";
 import { DatasetLookupTest } from "@/components/console/datasets/dataset-lookup-test";
 import { DatasetStatus, IMPORT_FAILED_FALLBACK } from "@/components/console/datasets/dataset-list";
-import { DangerZoneCard } from "@/components/console/knowledge/danger-zone-card";
-import { plainStatusError } from "@/components/console/knowledge/status-error";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { DangerZoneCard } from "@/components/console/shared/danger-zone-card";
+import { plainStatusError } from "@/components/shared/status-error";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import { pluralize } from "@/lib/format";
 import type { DatasetOut } from "@/contracts/lkap-contracts";
 

@@ -30,7 +30,7 @@ import {
 import { readOnlyCopy } from "@/components/console/shared/permission";
 import { ReadOnlyNote } from "@/components/shared/read-only-note";
 import { LoadingRow } from "@/components/shared/loading-state";
-import { useWriteGate } from "@/components/console/tools/write-gate";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import { cn } from "@/lib/utils";
 import type { KbCreate, KnowledgeConnectionOut } from "@/contracts/lkap-contracts";
 

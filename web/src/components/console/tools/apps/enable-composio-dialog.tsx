@@ -18,7 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Alert } from "@/components/ui/alert";
-import { isPresentable } from "@/components/console/lib/friendly-error";
+import { isPresentable } from "@/lib/friendly-error";
 import { Field } from "@/components/shared/field";
 import { useCreateCredential, useEnableApps, useTestAppsKey, useUpdateCredential } from "@/components/console/lib/api-hooks";
 import { appsErrorMessage, appsErrorToast } from "@/components/console/tools/apps/use-composio";

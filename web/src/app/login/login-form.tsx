@@ -1,16 +1,22 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { KeyRoundIcon, LoaderCircleIcon, MailIcon } from "lucide-react";
+import { MailIcon } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { busyLabelFor } from "@/components/shared/busy-label";
 import { Field } from "@/components/shared/field";
-import { Icon } from "@/components/shared/icon";
-import { ApiError, api } from "@/lib/api";
+import { PasswordInput } from "@/components/shared/password-input";
+import { InputWithIcon } from "@/components/shared/search-field";
+import { api } from "@/lib/api";
 import { safeNextPath } from "@/lib/auth";
+
+import { SignInCard } from "./sign-in-card";
+import { inviteError, loginError, signInErrorText, type SignInError } from "./sign-in-errors";
 
 /**
  * The sign-in card and the invite-acceptance card (same route, different
@@ -23,6 +29,15 @@ import { safeNextPath } from "@/lib/auth";
  * origin. On success this does a **hard navigation** (`window.location.assign`,
  * not the router) so `middleware.ts` sees the fresh cookie on the very next
  * request instead of racing a client-side transition against it.
+ *
+ * States (docs/ui/DESIGN-SYSTEM.md section 8): busy (the button's gerund
+ * label, no spinner), error (plain copy plus a next step in a `role="alert"`
+ * block; typed values are kept and focus returns to the password), success
+ * (the button says where it is going while the page navigates) and offline
+ * (a notice that says what will happen).
+ *
+ * No forgot-password link (docs/ui/AUDIT.md D9): the api has no reset
+ * endpoint yet, and a link to nowhere is worse than none.
  */
 export function LoginForm() {
   const searchParams = useSearchParams();
@@ -32,181 +47,192 @@ export function LoginForm() {
   return inviteToken ? <AcceptInviteCard token={inviteToken} next={next} /> : <LoginCard next={next} />;
 }
 
-function CardShell({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="w-full max-w-sm space-y-6">
-      <div className="space-y-1.5 text-center">
-        <h1 className="font-heading text-xl font-semibold text-foreground">{title}</h1>
-        <p className="text-sm text-pretty text-muted-foreground">{description}</p>
-      </div>
-      {children}
-    </div>
+type Phase = "idle" | "submitting" | "redirecting";
+
+function subscribeToConnection(onChange: () => void) {
+  window.addEventListener("online", onChange);
+  window.addEventListener("offline", onChange);
+  return () => {
+    window.removeEventListener("online", onChange);
+    window.removeEventListener("offline", onChange);
+  };
+}
+
+/** `navigator.onLine`, live; the server (and the first client render) assume online. */
+function useOnline(): boolean {
+  return React.useSyncExternalStore(
+    subscribeToConnection,
+    () => navigator.onLine,
+    () => true,
   );
 }
 
-function ErrorAlert({ message }: { message: string }) {
+function OfflineNotice() {
   return (
-    <Alert variant="danger">
-      <AlertTitle>Couldn&apos;t sign in</AlertTitle>
-      <AlertDescription>{message}</AlertDescription>
+    <Alert tone="warning" title="You're offline" className="mb-4">
+      Signing in needs a connection. You can sign in as soon as it&apos;s back.
     </Alert>
   );
 }
 
-function submitErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  return "Something went wrong. Try again.";
+function ErrorAlert({ title, error }: { title: string; error: SignInError }) {
+  return (
+    <Alert tone="danger" title={title} className="mb-4">
+      {signInErrorText(error)}
+    </Alert>
+  );
+}
+
+/**
+ * Submit handling shared by both cards: phase, the error, and focus back on
+ * the password once the form is enabled again (the inputs are disabled while
+ * the request runs, so focusing in the same tick would not stick).
+ */
+function useSignInSubmit(send: () => Promise<void>, toError: (error: unknown) => SignInError, next: string) {
+  const [phase, setPhase] = React.useState<Phase>("idle");
+  const [error, setError] = React.useState<SignInError | null>(null);
+  const passwordRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (error && phase === "idle") passwordRef.current?.focus();
+  }, [error, phase]);
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setPhase("submitting");
+    setError(null);
+    try {
+      await send();
+      setPhase("redirecting");
+      window.location.assign(next);
+    } catch (err) {
+      setError(toError(err));
+      setPhase("idle");
+    }
+  }
+
+  return { phase, error, onSubmit, passwordRef, busy: phase !== "idle" };
 }
 
 function LoginCard({ next }: { next: string }) {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [submitting, setSubmitting] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  async function onSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
-      await api.post("auth/login", { email, password });
-      window.location.assign(next);
-    } catch (err) {
-      setError(submitErrorMessage(err));
-      setSubmitting(false);
-    }
-  }
+  const online = useOnline();
+  const { phase, error, onSubmit, passwordRef, busy } = useSignInSubmit(
+    () => api.post("auth/login", { email, password }),
+    loginError,
+    next,
+  );
 
   return (
-    <CardShell title="Sign in" description="Sign in to the LKAP console with your workspace email.">
-      <form onSubmit={onSubmit} className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm">
-        {error ? <ErrorAlert message={error} /> : null}
-        <Field label="Email" htmlFor="login-email" required>
-          <div className="relative">
-            <Icon
-              as={MailIcon}
-              size="sm"
-              className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              id="login-email"
-              aria-describedby="login-email-hint"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="pl-8"
-              disabled={submitting}
-            />
-          </div>
+    <SignInCard
+      title="Sign in"
+      description="Sign in to the LKAP console with your workspace email."
+      footer={<p>No account yet? Ask a workspace admin for an invite link.</p>}
+    >
+      {!online ? <OfflineNotice /> : null}
+      {error ? <ErrorAlert title="Couldn't sign in" error={error} /> : null}
+      <form onSubmit={onSubmit} className="flex flex-col gap-4">
+        <Field label="Email" htmlFor="login-email">
+          <InputWithIcon
+            icon={MailIcon}
+            id="login-email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            disabled={busy}
+          />
         </Field>
-        <Field label="Password" htmlFor="login-password" required>
-          <div className="relative">
-            <Icon
-              as={KeyRoundIcon}
-              size="sm"
-              className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              id="login-password"
-              aria-describedby="login-password-hint"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="pl-8"
-              disabled={submitting}
-            />
-          </div>
+        <Field label="Password" htmlFor="login-password">
+          <PasswordInput
+            ref={passwordRef}
+            id="login-password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            disabled={busy}
+          />
         </Field>
-        <Button type="submit" className="w-full" disabled={submitting}>
-          {submitting ? <Icon as={LoaderCircleIcon} size="sm" className="animate-spin" /> : null}
+        <Button
+          type="submit"
+          variant="primary"
+          size="block"
+          className="mt-1"
+          busy={busy}
+          busyLabel={phase === "redirecting" ? "Opening the console…" : busyLabelFor("Sign in")}
+        >
           Sign in
         </Button>
       </form>
-      <p className="text-center text-xs text-pretty text-muted-foreground">
-        No account yet? Ask a workspace admin for an invite link.
-      </p>
-    </CardShell>
+    </SignInCard>
   );
 }
 
 function AcceptInviteCard({ token, next }: { token: string; next: string }) {
   const [password, setPassword] = React.useState("");
   const [name, setName] = React.useState("");
-  const [submitting, setSubmitting] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [usedUp, setUsedUp] = React.useState(false);
+  const online = useOnline();
+  const { phase, error, onSubmit, passwordRef, busy } = useSignInSubmit(
+    () => api.post("auth/accept-invite", { token, password, name: name || undefined }),
+    inviteError,
+    next,
+  );
 
-  async function onSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
-      await api.post("auth/accept-invite", { token, password, name: name || undefined });
-      window.location.assign(next);
-    } catch (err) {
-      if (err instanceof ApiError && err.message.toLowerCase().includes("already been used")) {
-        setUsedUp(true);
-      }
-      setError(submitErrorMessage(err));
-      setSubmitting(false);
-    }
-  }
-
-  if (usedUp) {
+  if (error?.inviteUsed) {
     return (
-      <CardShell title="Invite already used" description="This invite link has already been redeemed.">
-        <Alert variant="warning">
-          <AlertDescription>
-            If you already have an account, <a href="/login" className="font-medium underline">sign in</a>{" "}
-            instead. Otherwise, ask a workspace admin to send a fresh invite.
-          </AlertDescription>
-        </Alert>
-      </CardShell>
+      <SignInCard title="Invite already used" description="This invite link has already been redeemed.">
+        <div className="flex flex-col gap-4">
+          <p className="text-label text-text-secondary">
+            If you already have an account, sign in instead. Otherwise, ask a workspace admin to send a fresh invite.
+          </p>
+          <Button asChild variant="primary" size="block">
+            <Link href="/login">Sign in</Link>
+          </Button>
+        </div>
+      </SignInCard>
     );
   }
 
   return (
-    <CardShell title="Accept your invite" description="Set a password to join the workspace.">
-      <form onSubmit={onSubmit} className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm">
-        {error ? <ErrorAlert message={error} /> : null}
+    <SignInCard title="Accept your invite" description="Set a password to join the workspace.">
+      {!online ? <OfflineNotice /> : null}
+      {error ? <ErrorAlert title="Couldn't join the workspace" error={error} /> : null}
+      <form onSubmit={onSubmit} className="flex flex-col gap-4">
         <Field label="Name" htmlFor="invite-name" optional>
           <Input
             id="invite-name"
             autoComplete="name"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            disabled={submitting}
+            disabled={busy}
           />
         </Field>
-        <Field label="Password" htmlFor="invite-password" required hint="At least 8 characters.">
-          <Input
+        <Field label="Password" htmlFor="invite-password" hint="At least 8 characters.">
+          <PasswordInput
+            ref={passwordRef}
             id="invite-password"
-            type="password"
             autoComplete="new-password"
             required
             minLength={8}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            disabled={submitting}
+            disabled={busy}
           />
         </Field>
-        <Button type="submit" className="w-full" disabled={submitting}>
-          {submitting ? <Icon as={LoaderCircleIcon} size="sm" className="animate-spin" /> : null}
+        <Button
+          type="submit"
+          variant="primary"
+          size="block"
+          className="mt-1"
+          busy={busy}
+          busyLabel={phase === "redirecting" ? "Opening the console…" : busyLabelFor("Join workspace")}
+        >
           Join workspace
         </Button>
       </form>
-    </CardShell>
+    </SignInCard>
   );
 }

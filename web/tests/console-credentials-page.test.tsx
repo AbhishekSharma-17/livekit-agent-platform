@@ -334,7 +334,7 @@ describe("CredentialList", () => {
     fireEvent.keyDown(within(row).getByRole("button", { name: "Actions for OpenAI team key" }), { key: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Delete OpenAI team key" });
+    const dialog = await screen.findByRole("alertdialog", { name: "Delete OpenAI team key" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete credential" }));
     const alert = await within(dialog).findByRole("alert");
     expect(alert.textContent).toContain("change those agents first");
@@ -448,7 +448,7 @@ describe("Composio row", () => {
     const row = within(table).getAllByRole("row").find((r) => within(r).queryByText("Composio key · September 2026"))!;
     fireEvent.keyDown(within(row).getByRole("button", { name: "Actions for Composio key · September 2026" }), { key: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Disable" }));
-    const dialog = await screen.findByRole("dialog", { name: "Turn off Apps?" });
+    const dialog = await screen.findByRole("alertdialog", { name: "Turn off Apps?" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Turn off" }));
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/tool-providers/composio/disable"))).toBe(true));
   });
@@ -460,6 +460,58 @@ describe("Composio row", () => {
     const row = within(table).getAllByRole("row").find((r) => within(r).queryByText("Composio key · September 2026"))!;
     fireEvent.keyDown(within(row).getByRole("button", { name: "Actions for Composio key · September 2026" }), { key: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Remove key" }));
-    expect(await screen.findByRole("dialog", { name: "Delete Composio key · September 2026" })).toBeTruthy();
+    expect(await screen.findByRole("alertdialog", { name: "Delete Composio key · September 2026" })).toBeTruthy();
+  });
+});
+
+describe("CredentialList search and permissions (docs/ui/DESIGN-SYSTEM.md sections 8, 9)", () => {
+  beforeEach(() => {
+    const data = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      get length() {
+        return data.size;
+      },
+      clear: () => data.clear(),
+      getItem: (key: string) => data.get(key) ?? null,
+      key: (index: number) => Array.from(data.keys())[index] ?? null,
+      removeItem: (key: string) => void data.delete(key),
+      setItem: (key: string, value: string) => void data.set(key, String(value)),
+    } satisfies Storage);
+  });
+
+  const SIX: CredentialOut[] = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot"].map((label, index) => ({
+    ...credentials[1]!,
+    id: `cred_${index}`,
+    label: `${label} key`,
+  }));
+
+  it("offers search once there are 6 keys, and a distinct no-matches state", async () => {
+    stubApi((call) => (call.url.includes("/credentials") ? { status: 200, body: { items: SIX, total: SIX.length } } : undefined));
+    renderPage();
+    const search = await screen.findByRole("searchbox", { name: "Search credentials" });
+    fireEvent.change(search, { target: { value: "echo" } });
+    const table = within(screen.getByRole("table", { name: "Credentials" }));
+    expect(table.getAllByRole("row")).toHaveLength(2);
+    fireEvent.change(search, { target: { value: "zulu" } });
+    expect(await screen.findByText("No credentials match “zulu”")).toBeTruthy();
+  });
+
+  it("gives a builder a read-only note instead of Add credential, and no row actions (D12)", async () => {
+    stubApi((call) =>
+      call.url.includes("/auth/me")
+        ? {
+            status: 200,
+            body: {
+              user: { id: "u2", email: "builder@example.test" },
+              workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: "builder" }],
+            },
+          }
+        : undefined,
+    );
+    renderPage();
+    const table = within(await screen.findByRole("table", { name: "Credentials" }));
+    expect(await screen.findByText("Ask an admin to add credentials.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add credential" })).toBeNull();
+    await waitFor(() => expect(table.queryByRole("button", { name: "Actions for OpenAI team key" })).toBeNull());
   });
 });

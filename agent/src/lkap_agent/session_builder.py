@@ -115,9 +115,18 @@ from lkap_contracts.agent_config import (
     ResolvedProvider,
     ThinkingSound,
     effective_languages,
+    transcriber_ends_turns,
 )
 from lkap_contracts.api_models import MemoryRecallIn, MemoryRecallOut
-from lkap_contracts.providers import ModelCapabilities, ProviderSpec, by_kind
+from lkap_contracts.providers import (
+    STICKY_ROUTING_FIELD,
+    VAD_MIN_SILENCE_FIELD,
+    VAD_MIN_SILENCE_WITH_TURN_DETECTOR,
+    ModelCapabilities,
+    ProviderSpec,
+    by_kind,
+    stt_end_of_turn,
+)
 from lkap_contracts.providers import get as get_spec
 from lkap_contracts.turn_handling import resolve_turn_handling
 
@@ -192,6 +201,9 @@ _INFERENCE_TURN_DETECTOR_ID: Final[str] = "inference-turn-detector"
 #: The local plugin detector (`MultilingualModel(unlikely_threshold=...)`, the only kwarg it
 #: takes: `tests/fixtures/plugin_signatures.json`).
 _PLUGIN_TURN_DETECTOR_ID: Final[str] = "turn-detector-plugin"
+
+#: The OpenRouter language-model entry whose `sticky_routing` field :func:`_apply_sticky_routing` reads.
+_OPENROUTER_LLM_ID: Final[str] = "openrouter-llm"
 
 # Voice-safe prompt templates for the SDK's async-tool executor (docs/v4/BACKGROUND-TOOLS.md
 # D-V4-35). livekit-agents 1.8.2 (`voice/tool_executor.py`) renders each with `str.format`
@@ -273,6 +285,8 @@ def prepare_resolved(resolved: ResolvedAgentConfig) -> ResolvedAgentConfig:
 
     * **Turn detector settings** (`PipelineConfig.turn_detector`, V5-07): see
       :func:`_apply_turn_detector_settings`.
+    * **VAD silence floor** (V6-34): see :func:`_apply_vad_silence_floor`.
+    * **OpenRouter sticky routing** (V6-34): see :func:`_apply_sticky_routing`.
     * **Telephony noise cancellation** (the `telephony` preset on a phone call,
       V5-07): see :func:`_apply_telephony_noise_cancellation`.
     * **Language detection** (`voice.auto_detect`, V5-31): the STT slot is built
@@ -305,6 +319,8 @@ def prepare_resolved(resolved: ResolvedAgentConfig) -> ResolvedAgentConfig:
             update={"kwargs": {**detector.kwargs, "version": "v1-mini"}}
         )
     _apply_turn_detector_settings(resolved, slots)
+    _apply_vad_silence_floor(resolved, slots)
+    _apply_sticky_routing(resolved, slots)
     _apply_telephony_noise_cancellation(resolved, slots)
     apply_stt_detection(resolved, slots)
     return resolved.model_copy(update={"resolved": slots, "config": with_language_rule(resolved.config)})
@@ -332,26 +348,99 @@ def has_captions_block(resolved: ResolvedAgentConfig) -> bool:
 
 
 def stt_decides_turns(resolved: ResolvedAgentConfig) -> bool:
-    """Whether the session's transcriber ends the caller's turns itself (V6-02, D-V6-5).
+    """Whether the session's transcriber ends the caller's turns itself (V6-02 D-V6-5, V6-34).
 
-    True when the resolved `stt` slot's registry entry declares
-    `capabilities.end_of_turn` (Deepgram Flux). `SessionBuilder.build` then runs
-    the session with `turn_detection="stt"` unless an explicit `turn_detection`
-    slot was configured.
+    `lkap_contracts.agent_config.transcriber_ends_turns` on the resolved `stt`
+    slot: a cascaded pipeline without a stored `turn_detection` slot whose
+    transcriber's entry always ends turns (Deepgram Flux direct, as since V6-02),
+    or whose model can and the agent opted in (LiveKit Inference Flux with the
+    `fast` preset or `turn_detector.mode: "stt"`). Never on the text channel.
+    `SessionBuilder.build` then runs the session with `turn_detection="stt"`.
     """
     stt = resolved.resolved.get("stt")
-    if stt is None:
+    if stt is None or is_text_channel(resolved):
         return False
-    try:
-        spec = get_spec(stt.provider_id)
-    except KeyError:
-        return False
-    return spec.kind == "stt" and spec.capabilities.end_of_turn
+    return transcriber_ends_turns(
+        resolved.config.pipeline, stt_provider_id=stt.provider_id, stt_model=stt.model
+    )
+
+
+def _stt_can_end_turns(resolved: ResolvedAgentConfig) -> bool:
+    """Whether the resolved transcriber could end turns at all (to explain why it does not)."""
+    stt = resolved.resolved.get("stt")
+    return stt is not None and stt_end_of_turn(stt.provider_id, stt.model) is not None
 
 
 def _client_side_turns(resolved: ResolvedAgentConfig) -> bool:
     """Whether the session runs its own turn detection (every audio mode except `realtime`)."""
     return resolved.config.pipeline.mode != "realtime" and not is_text_channel(resolved)
+
+
+def _livekit_detector_runs(resolved: ResolvedAgentConfig, slots: dict[Any, ResolvedProvider]) -> bool:
+    """Whether the session will run a LiveKit turn detector after VAD (V6-34).
+
+    Client-side turns that the transcriber does not end, with either no
+    `turn_detection` slot (the worker's default `inference.TurnDetector`) or an
+    Inference/plugin detector slot. A realtime model in `half_cascade` may still
+    drop it (`SessionBuilder._keeps_server_side_turns`); counting it here only
+    errs towards the SDK's VAD floor.
+    """
+    if not _client_side_turns(resolved) or stt_decides_turns(resolved):
+        return False
+    detector = slots.get("turn_detection")
+    return detector is None or detector.provider_id in (_INFERENCE_TURN_DETECTOR_ID, _PLUGIN_TURN_DETECTOR_ID)
+
+
+def _apply_vad_silence_floor(resolved: ResolvedAgentConfig, slots: dict[Any, ResolvedProvider]) -> None:
+    """Raise a configured VAD's `min_silence_duration` to the turn detector's floor (in place, V6-34).
+
+    livekit-agents 1.8.3 refuses a VAD whose `min_silence_duration` is below
+    0.25 s next to its audio turn detector (`voice/audio_recognition.py`
+    `_check_vad_silence_requirement` raises `ValueError` when the session
+    starts), so a value the api already warned about is lifted to the floor
+    here instead of failing the call. With the transcriber ending turns the VAD
+    only notices barge-in, and any value is kept.
+    """
+    vad = slots.get("vad")
+    if vad is None:
+        return
+    value = vad.kwargs.get(VAD_MIN_SILENCE_FIELD)
+    if not isinstance(value, int | float) or value >= VAD_MIN_SILENCE_WITH_TURN_DETECTOR:
+        return
+    if not _livekit_detector_runs(resolved, slots):
+        return
+    logger.warning(
+        "the VAD's silence is below what the turn detector needs; using the minimum",
+        configured=value,
+        used=VAD_MIN_SILENCE_WITH_TURN_DETECTOR,
+    )
+    kwargs = {**vad.kwargs, VAD_MIN_SILENCE_FIELD: VAD_MIN_SILENCE_WITH_TURN_DETECTOR}
+    slots["vad"] = vad.model_copy(update={"kwargs": kwargs})
+
+
+def _apply_sticky_routing(resolved: ResolvedAgentConfig, slots: dict[Any, ResolvedProvider]) -> None:
+    """Turn `openrouter-llm`'s `sticky_routing` into OpenRouter's routing hints (in place, V6-34).
+
+    With the field on, every OpenRouter language-model slot sends the agent's id
+    as `user` and as `prompt_cache_key` (`LLM.with_openrouter(user=...,
+    prompt_cache_key=...)`, livekit-plugins-openai 1.8.3 `llm.py:454,460`).
+    OpenRouter keys sticky routing on `prompt_cache_key` when no `session_id`
+    is sent, so the agent's calls keep reaching the host whose prompt cache is
+    warm. The agent id is an opaque platform id: nothing about the caller is
+    sent. The field itself never reaches the constructor (the factory drops it).
+    """
+    routing_id = resolved.agent_id
+    for slot, provider in list(slots.items()):
+        if (
+            provider.provider_id != _OPENROUTER_LLM_ID
+            or provider.kwargs.get(STICKY_ROUTING_FIELD) is not True
+        ):
+            continue
+        kwargs = {k: v for k, v in provider.kwargs.items() if k != STICKY_ROUTING_FIELD}
+        if routing_id:
+            kwargs.setdefault("user", routing_id)
+            kwargs.setdefault("prompt_cache_key", routing_id)
+        slots[slot] = provider.model_copy(update={"kwargs": kwargs})
 
 
 def _apply_turn_detector_settings(resolved: ResolvedAgentConfig, slots: dict[Any, ResolvedProvider]) -> None:
@@ -368,12 +457,16 @@ def _apply_turn_detector_settings(resolved: ResolvedAgentConfig, slots: dict[Any
 
     Nothing happens without settings, in `realtime` mode or on the text channel
     (no client-side turns; `SessionBuilder.build` would ignore the slot).
+    `mode="stt"` (V6-34) places no detector: when the transcriber ends the turn
+    nothing is synthesized, and with a model that cannot it counts as unset.
     """
     settings = resolved.config.pipeline.turn_detector
     if settings is None or not _client_side_turns(resolved):
         return
+    if settings.mode == "stt" and stt_decides_turns(resolved):
+        return
     wanted = turn_detector_kwargs(
-        mode=settings.mode,
+        mode=None if settings.mode == "stt" else settings.mode,
         unlikely_threshold=settings.unlikely_threshold,
         connection_mode=resolved.connection.capabilities.turn_detector_mode,
     )
@@ -613,16 +706,22 @@ class SessionBuilder:
             if uses_realtime_model and detector is not None and self._keeps_server_side_turns(model):
                 logger.info("realtime model keeps server-side turn detection; no client turn detector")
                 detector = None
-            if stt is not None and stt_decides_turns(resolved):
+            if stt is not None and _stt_can_end_turns(resolved):
                 # V6-02 (D-V6-5): the transcriber's end-of-turn replaces the platform's detector
                 # unless the admin configured a `turn_detection` slot. The check reads the stored
                 # config, not `providers.turn_detection`: `prepare_resolved` synthesizes a detector
                 # slot from `pipeline.turn_detector` settings (always on a `local` connection).
-                if config.pipeline.turn_detection is None:
+                # V6-34: a model that can end turns (Inference Flux) does so only when opted in.
+                if stt_decides_turns(resolved):
                     logger.info("the transcriber decides when the caller's turn ends", turn_detection="stt")
                     detector = STT_TURN_DETECTION
-                else:
+                elif config.pipeline.turn_detection is not None:
                     logger.info("the configured turn detector overrides the transcriber's end-of-turn")
+                else:
+                    logger.info(
+                        "the transcriber can end turns but the agent did not ask for it; "
+                        "the turn detector decides (the fast preset or turn_detector.mode 'stt' opt in)"
+                    )
         else:
             if providers.vad is not None or providers.turn_detection is not None:
                 logger.warning(
@@ -634,7 +733,12 @@ class SessionBuilder:
 
         auto_inject = auto_inject_active(config)
         turn_handling = build_turn_handling(
-            resolve_turn_handling(config.pipeline.conversation_preset, config.pipeline.turn_handling),
+            # V6-34: the `fast` preset resolves by who ends the turn in this session.
+            resolve_turn_handling(
+                config.pipeline.conversation_preset,
+                config.pipeline.turn_handling,
+                stt_turns=detector == STT_TURN_DETECTION,
+            ),
             allow_interruptions=config.voice.allow_interruptions,
             turn_detector=detector,
             disable_preemptive=auto_inject,

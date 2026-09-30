@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { SimpleSelect } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   CopyButton,
@@ -56,7 +57,6 @@ import {
   normalizeE164,
   sipEnabled,
 } from "./model";
-import { NativeSelect } from "./native-select";
 
 /**
  * Numbers (V2-17, V4-05): the number → agent map. A number is either typed in
@@ -271,18 +271,14 @@ export function RefreshFromLiveKit({ connections }: { connections: ConnectionOut
   return (
     <>
       {capable.length > 1 ? (
-        <NativeSelect
+        <SimpleSelect
           aria-label="Connection to refresh"
+          size="sm"
           value={connectionId}
-          className="h-8 max-w-44"
-          onChange={(e) => setChosen(e.target.value)}
-        >
-          {capable.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </NativeSelect>
+          className="w-44 max-w-full"
+          onValueChange={setChosen}
+          options={capable.map((c) => ({ value: c.id, label: c.name }))}
+        />
       ) : null}
       <Button
         type="button"
@@ -383,19 +379,32 @@ export function InboundAgentPicker({
   const choices = hosted ? agentsOnConnection(agents, connections, number.connection_id) : agents;
   const current = number.inbound_agent_id ?? "";
   const listed = choices.some((a) => a.id === current) ? choices : [...choices, ...agents.filter((a) => a.id === current)];
-  const blocked = hosted
-    ? "This number is no longer in your LiveKit project"
-    : "Bind the number to an inbound trunk to route its calls";
+  const currentName = agents.find((a) => a.id === current)?.name ?? (current ? "Unknown agent" : "Nobody");
+
+  // Read-only views instead of a disabled control (docs/ui/DESIGN-SYSTEM.md section 8.5).
+  if (!canWrite || !routable) {
+    const blocked = !routable
+      ? hosted
+        ? "No longer in your LiveKit project"
+        : "Needs an inbound trunk to route calls"
+      : null;
+    return (
+      <div className="min-w-0" data-slot="inbound-agent">
+        <p className="truncate text-label text-foreground">{currentName}</p>
+        {blocked ? <p className="text-caption text-text-secondary">{blocked}</p> : null}
+      </div>
+    );
+  }
+
   return (
-    <NativeSelect
+    <SimpleSelect
       aria-label={`Inbound agent for ${number.e164}`}
       value={current}
-      disabled={!canWrite || !routable || update.isPending}
-      title={!canWrite ? writeAccessReason("admin") : routable ? undefined : blocked}
-      className="max-w-56"
-      onChange={(e) =>
+      disabled={update.isPending}
+      className="w-56 max-w-full"
+      onValueChange={(next) =>
         update.mutate(
-          { id: number.id, body: { inbound_agent_id: e.target.value || null } },
+          { id: number.id, body: { inbound_agent_id: next || null } },
           {
             onSuccess: (saved) => {
               toast.success(saved.inbound_agent_id ? `${saved.e164} routed` : `${saved.e164} no longer routed`);
@@ -405,14 +414,8 @@ export function InboundAgentPicker({
           },
         )
       }
-    >
-      <option value="">Nobody</option>
-      {listed.map((agent) => (
-        <option key={agent.id} value={agent.id}>
-          {agent.name}
-        </option>
-      ))}
-    </NativeSelect>
+      options={[{ value: "", label: "Nobody" }, ...listed.map((agent) => ({ value: agent.id, label: agent.name }))]}
+    />
   );
 }
 
@@ -535,29 +538,24 @@ function NumberDialog({
               <Input id="number-e164" value={e164} placeholder="+15551234567" onChange={(e) => setE164(e.target.value)} />
             </Field>
             <Field label="Trunk" htmlFor="number-trunk" optional>
-              <NativeSelect id="number-trunk" value={trunkId} onChange={(e) => setTrunkId(e.target.value)}>
-                <option value="">None</option>
-                {trunks.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.direction})
-                  </option>
-                ))}
-              </NativeSelect>
+              <SimpleSelect
+                id="number-trunk"
+                value={trunkId}
+                onValueChange={setTrunkId}
+                options={[
+                  { value: "", label: "None" },
+                  ...trunks.map((t) => ({ value: t.id, label: `${t.name} (${t.direction})` })),
+                ]}
+              />
             </Field>
             <Field label="Inbound agent" htmlFor="number-agent" optional hint="Needs an inbound trunk">
-              <NativeSelect
+              <SimpleSelect
                 id="number-agent"
                 value={agentId}
                 disabled={trunk?.direction !== "inbound"}
-                onChange={(e) => setAgentId(e.target.value)}
-              >
-                <option value="">Nobody</option>
-                {agents.map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </option>
-                ))}
-              </NativeSelect>
+                onValueChange={setAgentId}
+                options={[{ value: "", label: "Nobody" }, ...agents.map((agent) => ({ value: agent.id, label: agent.name }))]}
+              />
             </Field>
             <Field label="Label" htmlFor="number-label" optional>
               <Input id="number-label" value={label} onChange={(e) => setLabel(e.target.value)} />

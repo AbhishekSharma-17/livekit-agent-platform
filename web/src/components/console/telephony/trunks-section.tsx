@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { SimpleSelect } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, Field, Icon, ResponsiveTable, Section, StatusChip } from "@/components/shared";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
@@ -30,7 +31,6 @@ import type { ConnectionOut, TrunkOut } from "@/contracts/lkap-contracts";
 
 import { useCreateTrunk, useDeleteTrunk, useSyncTrunk, useTrunks } from "./hooks";
 import { E164_PATTERN, type ProviderHint, sipEnabled, splitNumbers, type TrunkDirection } from "./model";
-import { NativeSelect } from "./native-select";
 const PROVIDER_LABEL: Record<ProviderHint, string> = { twilio: "Twilio", telnyx: "Telnyx", other: "Other" };
 
 /**
@@ -305,41 +305,37 @@ export function TrunkDialog({
           <DialogBody className="gap-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Direction" htmlFor="trunk-direction">
-                <NativeSelect
+                <SimpleSelect
                   id="trunk-direction"
                   value={direction}
-                  onChange={(e) => setDirection(e.target.value as TrunkDirection)}
-                >
-                  <option value="inbound">Inbound (receive calls)</option>
-                  <option value="outbound">Outbound (place calls)</option>
-                </NativeSelect>
+                  onValueChange={(next) => setDirection(next as TrunkDirection)}
+                  options={[
+                    { value: "inbound", label: "Inbound (receive calls)" },
+                    { value: "outbound", label: "Outbound (place calls)" },
+                  ]}
+                />
               </Field>
               <Field label="Connection" htmlFor="trunk-connection">
-                <NativeSelect
+                <SimpleSelect
                   id="trunk-connection"
                   value={chosenConnection}
-                  onChange={(e) => setConnectionId(e.target.value)}
-                >
-                  {sipConnections.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </NativeSelect>
+                  onValueChange={setConnectionId}
+                  options={sipConnections.map((c) => ({ value: c.id, label: c.name }))}
+                />
               </Field>
               <Field label="Name" htmlFor="trunk-name" required>
                 <Input id="trunk-name" value={name} onChange={(e) => setName(e.target.value)} required />
               </Field>
               <Field label="Carrier" htmlFor="trunk-provider">
-                <NativeSelect
+                <SimpleSelect
                   id="trunk-provider"
                   value={provider}
-                  onChange={(e) => setProvider(e.target.value as ProviderHint)}
-                >
-                  <option value="twilio">Twilio</option>
-                  <option value="telnyx">Telnyx</option>
-                  <option value="other">Other</option>
-                </NativeSelect>
+                  onValueChange={(next) => setProvider(next as ProviderHint)}
+                  options={(Object.keys(PROVIDER_LABEL) as ProviderHint[]).map((hint) => ({
+                    value: hint,
+                    label: PROVIDER_LABEL[hint],
+                  }))}
+                />
               </Field>
             </div>
             <Field

@@ -6,6 +6,7 @@ import { PlusIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Field, Icon } from "@/components/shared";
@@ -15,8 +16,6 @@ import { useSectionIssues } from "@/components/console/agents/editor/editor-cont
 import type { EditorSectionProps } from "@/components/console/agents/editor/types";
 import { TELEPHONY_TOOLS, TELEPHONY_TOOLS_HINT } from "@/components/console/lib/constants";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
-
-import { NativeSelect } from "./native-select";
 
 /**
  * The agent editor's Tools section (V2-19, rulings R-V2-21 / R-V2-25): WP-5's
@@ -39,6 +38,61 @@ export function ToolsSection({ agent }: EditorSectionProps) {
     </div>
   );
 }
+
+interface SelectOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * The custom Select bound to a react-hook-form `Controller` field: the
+ * trigger takes the field's ref (so `setFocus` reaches it) and the
+ * `data-issue-path` the editor's issue list jumps to.
+ */
+function FormSelect({
+  id,
+  field,
+  options,
+  issuePath,
+  className,
+}: {
+  id: string;
+  field: { name: string; value: string; onChange: (value: string) => void; onBlur: () => void; ref: React.Ref<HTMLButtonElement> };
+  options: SelectOption[];
+  issuePath: string;
+  className?: string;
+}) {
+  return (
+    <Select name={field.name} value={field.value} onValueChange={field.onChange}>
+      <SelectTrigger
+        id={id}
+        ref={field.ref}
+        onBlur={field.onBlur}
+        data-issue-path={issuePath}
+        className={className ?? "w-full"}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+const TRANSFER_MODE_OPTIONS: SelectOption[] = [
+  { value: "cold", label: "Put through directly" },
+  { value: "warm", label: "Introduce the caller first (LiveKit Cloud)" },
+];
+
+const ON_MACHINE_OPTIONS: SelectOption[] = [
+  { value: "hangup", label: "Hang up" },
+  { value: "leave_message", label: "Leave a message" },
+];
 
 export function PhoneCallsCard() {
   const { control, register, watch, setValue, formState } = useFormContext<AgentEditorForm>();
@@ -135,14 +189,19 @@ export function PhoneCallsCard() {
                         />
                       </Field>
                       <Field label="How the call is handed over" htmlFor={modeId} className="min-w-56 flex-[2]">
-                        <NativeSelect
-                          id={modeId}
-                          data-issue-path={`telephony.transfer_targets[${index}].mode`}
-                          {...register(`config.telephony.transfer_targets.${index}.mode`)}
-                        >
-                          <option value="cold">Put through directly</option>
-                          <option value="warm">Introduce the caller first (LiveKit Cloud)</option>
-                        </NativeSelect>
+                        <Controller
+                          control={control}
+                          name={`config.telephony.transfer_targets.${index}.mode`}
+                          defaultValue="cold"
+                          render={({ field: mode }) => (
+                            <FormSelect
+                              id={modeId}
+                              field={{ ...mode, value: mode.value ?? "cold" }}
+                              options={TRANSFER_MODE_OPTIONS}
+                              issuePath={`telephony.transfer_targets[${index}].mode`}
+                            />
+                          )}
+                        />
                       </Field>
                       <Button
                         type="button"
@@ -245,10 +304,18 @@ export function VoicemailCard() {
         <>
           <SectionRow>
             <Field label="When a machine answers" htmlFor={onMachineId} className="max-w-xs">
-              <NativeSelect id={onMachineId} {...register("config.telephony.amd.on_machine")}>
-                <option value="hangup">Hang up</option>
-                <option value="leave_message">Leave a message</option>
-              </NativeSelect>
+              <Controller
+                control={control}
+                name="config.telephony.amd.on_machine"
+                render={({ field }) => (
+                  <FormSelect
+                    id={onMachineId}
+                    field={{ ...field, value: field.value ?? "hangup" }}
+                    options={ON_MACHINE_OPTIONS}
+                    issuePath="telephony.amd.on_machine"
+                  />
+                )}
+              />
             </Field>
           </SectionRow>
 

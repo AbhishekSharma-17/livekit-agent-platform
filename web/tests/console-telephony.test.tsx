@@ -56,8 +56,20 @@ class StubResizeObserver {
   unobserve() {}
   disconnect() {}
 }
-beforeEach(() => vi.stubGlobal("ResizeObserver", StubResizeObserver));
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", StubResizeObserver);
+  // The custom Select (Radix) in jsdom, as in tests/ui-select.test.tsx.
+  Element.prototype.scrollIntoView = vi.fn();
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.releasePointerCapture = vi.fn();
+});
 afterEach(() => vi.unstubAllGlobals());
+
+/** Open a custom Select from the keyboard and pick an option (its listbox is portaled to the body). */
+function choose(trigger: HTMLElement, option: string | RegExp) {
+  fireEvent.keyDown(trigger, { key: "ArrowDown" });
+  fireEvent.click(screen.getByRole("option", { name: option }));
+}
 
 const SIP_CONN: ConnectionOut = {
   id: "conn-1",
@@ -200,10 +212,10 @@ describe("TelephonyPage", () => {
     const requests = stubApi();
     renderWithClient(<TelephonyPage />);
     const table = within(await screen.findByRole("table", { name: "Phone numbers" }));
-    const picker = (await table.findByLabelText("Inbound agent for +15551230000")) as HTMLSelectElement;
+    const picker = (await table.findByRole("combobox", { name: "Inbound agent for +15551230000" })) as HTMLButtonElement;
     await waitFor(() => expect(picker.disabled).toBe(false));
 
-    fireEvent.change(picker, { target: { value: "agent-1" } });
+    choose(picker, "Support bot");
 
     await waitFor(() =>
       expect(requests).toContainEqual({
@@ -292,7 +304,7 @@ describe("TrunkDialog", () => {
     const onOpenChange = vi.fn();
     renderWithClient(<TrunkDialog open onOpenChange={onOpenChange} connections={[SIP_CONN]} />);
 
-    fireEvent.change(screen.getByLabelText(/Direction/), { target: { value: "outbound" } });
+    choose(screen.getByLabelText(/Direction/), "Outbound (place calls)");
     fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: "Twilio out" } });
     fireEvent.change(screen.getByLabelText(/^Numbers/), { target: { value: "+1 555 123 9999" } });
     fireEvent.change(screen.getByLabelText(/SIP address/), { target: { value: "example.pstn.twilio.com" } });
@@ -587,10 +599,10 @@ describe("PhoneCallsCard", () => {
     let latest: AgentEditorForm | undefined;
     render(<PhoneCardHarness targets={[{ label: "Sales", to: "+15550001111" }]} onValues={(v) => (latest = v)} />);
 
-    const select = screen.getByLabelText("How the call is handed over") as HTMLSelectElement;
-    expect(select.value).toBe("cold");
+    const select = screen.getByRole("combobox", { name: "How the call is handed over" });
+    expect(select.textContent).toBe("Put through directly");
 
-    fireEvent.change(select, { target: { value: "warm" } });
+    choose(select, "Introduce the caller first (LiveKit Cloud)");
 
     await waitFor(() =>
       expect(latest?.config.telephony.transfer_targets).toEqual([
@@ -655,7 +667,7 @@ describe("VoicemailCard", () => {
     expect(screen.getByLabelText("When a machine answers")).toBeTruthy();
     expect(screen.getByLabelText("Message")).toHaveProperty("disabled", true);
 
-    fireEvent.change(screen.getByLabelText("When a machine answers"), { target: { value: "leave_message" } });
+    choose(screen.getByLabelText("When a machine answers"), "Leave a message");
     await waitFor(() => expect(latest?.config.telephony.amd?.on_machine).toBe("leave_message"));
     expect(screen.getByLabelText("Message")).toHaveProperty("disabled", false);
 
@@ -670,7 +682,7 @@ describe("VoicemailCard", () => {
     let latest: AgentEditorForm | undefined;
     render(<VoicemailCardHarness onValues={(v) => (latest = v)} />);
     fireEvent.click(screen.getByRole("switch", { name: "Detect answering machines" }));
-    fireEvent.change(await screen.findByLabelText("When a machine answers"), { target: { value: "leave_message" } });
+    choose(await screen.findByLabelText("When a machine answers"), "Leave a message");
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Call back" } });
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "" } });
     await waitFor(() => expect(latest?.config.telephony.amd?.message).toBeNull());

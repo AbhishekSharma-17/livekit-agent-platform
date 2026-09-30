@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { SimpleSelect } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, Field, Icon, ResponsiveTable, Section, StatusChip } from "@/components/shared";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
@@ -24,7 +25,6 @@ import type { AgentOut, DispatchRuleOut } from "@/contracts/lkap-contracts";
 
 import { useCreateDispatchRule, useDeleteDispatchRule, useDispatchRules, useTrunks } from "./hooks";
 import { E164_PATTERN, splitNumbers } from "./model";
-import { NativeSelect } from "./native-select";
 /**
  * Dispatch rules (V2-17): LiveKit's inbound routing. Each call gets its own
  * room (`<prefix>_<caller>_<random>`) and the agent's worker is dispatched with
@@ -230,22 +230,20 @@ function RuleDialog({
           </DialogHeader>
           <DialogBody className="gap-4">
             <Field label="Inbound trunk" htmlFor="rule-trunk" required>
-              <NativeSelect id="rule-trunk" value={chosenTrunk} onChange={(e) => setTrunkId(e.target.value)}>
-                {trunks.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </NativeSelect>
+              <SimpleSelect
+                id="rule-trunk"
+                value={chosenTrunk}
+                onValueChange={setTrunkId}
+                options={trunks.map((t) => ({ value: t.id, label: t.name }))}
+              />
             </Field>
             <Field label="Agent" htmlFor="rule-agent" required>
-              <NativeSelect id="rule-agent" value={chosenAgent} onChange={(e) => setAgentId(e.target.value)}>
-                {agents.map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </option>
-                ))}
-              </NativeSelect>
+              <SimpleSelect
+                id="rule-agent"
+                value={chosenAgent}
+                onValueChange={setAgentId}
+                options={agents.map((agent) => ({ value: agent.id, label: agent.name }))}
+              />
             </Field>
             <Field label="Called numbers" htmlFor="rule-numbers" optional hint="Empty = every number on the trunk">
               <Input id="rule-numbers" value={numbers} onChange={(e) => setNumbers(e.target.value)} />

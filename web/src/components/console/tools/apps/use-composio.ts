@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import type { StatusTone } from "@/components/shared/status-chip";
 import { useAppsStatus, useTestCredential } from "@/components/console/lib/api-hooks";
@@ -65,12 +66,20 @@ export function composioStatusChip(status: AppsStatusOut | undefined): ComposioC
  */
 export function appsErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.code === "apps_not_enabled") {
-      return error.message || "Turn Apps on in Tools → Apps before doing that.";
-    }
+    // `apps_not_enabled` has plain copy in the friendly-error map; the api's
+    // own message for it is never shown verbatim.
     if (error.code === "tool_provider_unauthorized") {
       return "Composio rejected the stored key. Rotate it in Tools → Apps.";
     }
   }
   return errorMessage(error);
+}
+
+/**
+ * The error toast for a failed Apps action: a short title naming what
+ * failed ("Couldn't disconnect") with the plain-words reason and next step as
+ * its description, instead of one "title — reason" string.
+ */
+export function appsErrorToast(action: string, error: unknown, message: string = appsErrorMessage(error)) {
+  toast.error(`Couldn't ${action}`, { description: message });
 }

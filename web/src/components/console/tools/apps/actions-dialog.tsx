@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -17,11 +17,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/shared/empty-state";
+import { EmptyState, NoMatches } from "@/components/shared/empty-state";
+import { LoadingRegion } from "@/components/shared/loading-state";
+import { SearchField } from "@/components/shared/search-field";
+import { Tag } from "@/components/shared/tag";
 import { StatusPill, type StatusTone } from "@/components/shared/status-chip";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useAgents, useMaterialiseAppActions, useToolProviderActions } from "@/components/console/lib/api-hooks";
-import { appsErrorMessage } from "@/components/console/tools/apps/use-composio";
+import { appsErrorMessage, appsErrorToast } from "@/components/console/tools/apps/use-composio";
 import type { ActionRisk } from "@/components/console/tools/apps/types";
 import type { AppActionsPickOut } from "@/contracts/lkap-contracts";
 
@@ -159,7 +162,7 @@ export function ActionsDialog({
       onAdded?.(result);
       onOpenChange(false);
     } catch (error) {
-      toast.error(`Couldn't add actions — ${appsErrorMessage(error)}`);
+      appsErrorToast("add actions", error);
     }
   }
 
@@ -174,12 +177,12 @@ export function ActionsDialog({
 
           <DialogBody className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <Input
+              <SearchField
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search actions"
+                onValueChange={setSearch}
+                placeholder="Search actions…"
                 aria-label="Search actions"
-                className="w-full sm:w-56"
+                wrapperClassName="w-full sm:w-56 sm:max-w-56"
               />
               <div className="flex items-center gap-2">
                 <Checkbox id="actions-featured" checked={featuredOnly} onCheckedChange={(v) => setFeaturedOnly(v === true)} />
@@ -190,11 +193,26 @@ export function ActionsDialog({
             </div>
 
             {actionsQuery.isLoading ? (
-              <p className="text-label text-text-secondary">Loading actions…</p>
+              <LoadingRegion label="Loading actions" className="flex flex-col gap-1.5">
+                {[0, 1, 2].map((row) => (
+                  <Skeleton key={row} className="h-14 w-full" />
+                ))}
+              </LoadingRegion>
             ) : actionsQuery.isError ? (
-              <ErrorBanner message={`Couldn't load actions — ${appsErrorMessage(actionsQuery.error)}`} onRetry={() => actionsQuery.refetch()} />
+              <ErrorBanner title="Couldn't load actions" message={appsErrorMessage(actionsQuery.error)} onRetry={() => actionsQuery.refetch()} />
             ) : items.length === 0 ? (
-              <EmptyState title="No actions match" description="Try a different search." compact />
+              search.trim() || featuredOnly ? (
+                <NoMatches
+                  items="actions"
+                  query={search}
+                  onClear={() => {
+                    setSearch("");
+                    setFeaturedOnly(false);
+                  }}
+                />
+              ) : (
+                <EmptyState compact title="No actions yet" description={`${toolkitName} doesn't list any actions right now.`} />
+              )
             ) : (
               <ul className="flex max-h-80 flex-col gap-1.5 overflow-y-auto">
                 {items.map((action) => {
@@ -228,11 +246,7 @@ export function ActionsDialog({
                           <StatusPill tone={RISK_TONE[risk]} size="sm">
                             {RISK_LABEL[risk]}
                           </StatusPill>
-                          {action.important ? (
-                            <StatusPill tone="neutral" size="sm">
-                              Featured
-                            </StatusPill>
-                          ) : null}
+                          {action.important ? <Tag>Featured</Tag> : null}
                           {alreadyPicked ? (
                             <StatusPill tone="success" size="sm">
                               Added
@@ -253,16 +267,17 @@ export function ActionsDialog({
                   type="button"
                   variant="secondary"
                   size="sm"
-                  disabled={actionsQuery.isFetchingNextPage}
+                  busy={actionsQuery.isFetchingNextPage}
+                  busyLabel="Loading more…"
                   onClick={() => void actionsQuery.fetchNextPage()}
                 >
-                  {actionsQuery.isFetchingNextPage ? "Loading…" : "Load more"}
+                  Load more
                 </Button>
               </div>
             ) : null}
 
             {hasDestructive ? (
-              <div className="flex items-start gap-2 rounded bg-destructive-subtle p-2.5">
+              <div className="flex items-start gap-2 rounded border border-destructive-border bg-destructive-subtle p-2.5">
                 <Checkbox id="actions-destructive-confirm" checked={confirmDestructive} onCheckedChange={(v) => setConfirmDestructive(v === true)} className="mt-0.5" />
                 <Label htmlFor="actions-destructive-confirm" className="text-label font-normal text-destructive-text">
                   I understand — one or more picked actions delete, remove or move money.
@@ -294,7 +309,7 @@ export function ActionsDialog({
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!canSubmit || materialise.isPending}>
+            <Button type="submit" variant="primary" disabled={!canSubmit || materialise.isPending}>
               {materialise.isPending ? "Adding…" : attachAgentId ? "Add as tools and attach to agent" : "Add as tools"}
             </Button>
           </DialogFooter>

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,9 +22,11 @@ import {
 } from "@/components/ui/dialog";
 import { CopyButton } from "@/components/shared/copy-button";
 import { Field } from "@/components/shared/field";
-import { StatusPill } from "@/components/shared/status-chip";
+import { LoadingRow } from "@/components/shared/loading-state";
+import { LifecycleBadge } from "@/components/shared/status-chip";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useAgents, useConnectApp, useReconnectApp, useToolProviderConnection, useToolProviderToolkit } from "@/components/console/lib/api-hooks";
-import { appsErrorMessage } from "@/components/console/tools/apps/use-composio";
+import { appsErrorMessage, appsErrorToast } from "@/components/console/tools/apps/use-composio";
 import type { AuthOption, ConnectMethod, SubjectKind } from "@/components/console/tools/apps/types";
 import type { AppAuthField, ToolkitOut } from "@/contracts/lkap-contracts";
 
@@ -183,10 +186,10 @@ export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChang
         onConnected?.();
         setOpen(false);
       } else if (result.status === "failed" || result.status === "expired" || result.status === "inactive") {
-        toast.error(`Couldn't connect ${toolkit.name} — try again.`);
+        toast.error(`Couldn't connect ${toolkit.name}`, { description: "The sign-in didn't finish. Try again." });
       }
     } catch (error) {
-      toast.error(`Couldn't connect — ${appsErrorMessage(error)}`);
+      appsErrorToast("connect", error);
     }
   }
 
@@ -199,7 +202,7 @@ export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChang
         setRedirectUrl(result.redirect_url);
       }
     } catch (error) {
-      toast.error(`Couldn't reconnect — ${appsErrorMessage(error)}`);
+      appsErrorToast("reconnect", error);
     }
   }
 
@@ -223,43 +226,40 @@ export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChang
             <div className="flex flex-col gap-3">
               {failed ? (
                 <>
-                  <StatusPill tone="danger" size="sm">
-                    Failed
-                  </StatusPill>
+                  <LifecycleBadge state="failed" size="sm" />
                   <p className="text-label text-text-secondary">
                     The sign-in didn&apos;t finish. Try again.
                   </p>
                   <div>
-                    <Button type="button" variant="secondary" size="sm" onClick={() => void retry()}>
-                      Retry
+                    <Button type="button" variant="secondary" size="sm" busy={reconnectMutation.isPending} busyLabel="Retrying…" onClick={() => void retry()}>
+                      <RefreshCwIcon aria-hidden="true" /> Retry
                     </Button>
                   </div>
                 </>
               ) : (
                 <>
-                  <StatusPill tone="info" size="sm">
-                    Waiting for sign-in…
-                  </StatusPill>
+                  <LifecycleBadge state="connecting" label="Waiting for sign-in…" size="sm" />
                   <p className="text-label text-text-secondary">
                     Finish signing in in the tab that just opened, then come back here.
                   </p>
                   {redirectUrl ? (
-                    <a
-                      href={redirectUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="text-label font-medium text-foreground underline underline-offset-2"
-                    >
-                      Open sign-in page again
-                    </a>
+                    <Button asChild variant="link" className="w-fit">
+                      <a href={redirectUrl} target="_blank" rel="noreferrer noopener">
+                        Open sign-in page again
+                      </a>
+                    </Button>
                   ) : null}
                 </>
               )}
             </div>
           ) : detailQuery.isLoading ? (
-            <p className="text-label text-text-secondary">Loading…</p>
+            <LoadingRow label="Loading the ways to connect…" />
           ) : !detailQuery.data ? (
-            <p className="text-label text-destructive-text">Couldn&apos;t load this app&apos;s connect options.</p>
+            <ErrorBanner
+              title="Couldn't load this app's connect options"
+              message={detailQuery.error ? appsErrorMessage(detailQuery.error) : "Try again in a moment."}
+              onRetry={() => void detailQuery.refetch()}
+            />
           ) : (
             <>
               <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
@@ -270,7 +270,7 @@ export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChang
                       key={option}
                       htmlFor={`connect-method-${option}`}
                       className={`flex cursor-pointer items-center gap-2 rounded border p-2.5 text-body font-normal ${
-                        method === option ? "border-brand bg-muted/50" : "border-border"
+                        method === option ? "border-brand bg-brand-subtle" : "border-border"
                       }`}
                     >
                       <RadioGroupItem id={`connect-method-${option}`} value={option} />
@@ -296,14 +296,11 @@ export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChang
                     <CopyButton value={detailQuery.data.oauth_redirect_uri} label="Copy redirect URI" size="xs" />
                   </div>
                   {detailQuery.data.auth_guide_url ? (
-                    <a
-                      href={detailQuery.data.auth_guide_url}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="text-label font-medium text-foreground underline underline-offset-2"
-                    >
-                      Set up your OAuth app
-                    </a>
+                    <Button asChild variant="link" className="w-fit">
+                      <a href={detailQuery.data.auth_guide_url} target="_blank" rel="noreferrer noopener">
+                        Set up your OAuth app <ExternalLinkIcon aria-hidden="true" className="size-3.5" />
+                      </a>
+                    </Button>
                   ) : null}
                 </div>
               ) : null}
@@ -373,8 +370,8 @@ export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChang
               <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={!method || connectMutation.isPending}>
-                {connectMutation.isPending ? "Connecting…" : "Connect"}
+              <Button type="submit" variant="primary" disabled={!method} busy={connectMutation.isPending} busyLabel="Connecting…">
+                Connect
               </Button>
             </>
           )}

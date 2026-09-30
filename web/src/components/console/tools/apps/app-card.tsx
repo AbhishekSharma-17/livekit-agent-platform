@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { PlusIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,11 +13,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { StatusPill } from "@/components/shared/status-chip";
+import { Tag, TagList } from "@/components/shared/tag";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { ConnectAppDialog } from "@/components/console/tools/apps/connect-app-dialog";
 import { ConnectionRow } from "@/components/console/tools/apps/connection-row";
 import { useToolProviderConnections } from "@/components/console/lib/api-hooks";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { useWriteGate } from "@/components/console/tools/write-gate";
 import { pluralize } from "@/lib/format";
 import type { AppConnectionOut, ToolkitOut } from "@/contracts/lkap-contracts";
 
@@ -47,8 +49,7 @@ function AppLogo({ toolkit }: { toolkit: ToolkitOut }) {
  * another account" underneath.
  */
 export function AppCard({ toolkit }: { toolkit: ToolkitOut }) {
-  const { canWrite } = useWriteAccess();
-  const writeReason = writeAccessReason();
+  const gate = useWriteGate();
   const connectionsQuery = useToolProviderConnections();
   const accounts = React.useMemo(
     () => (connectionsQuery.data?.items ?? []).filter((connection) => connection.toolkit === toolkit.slug),
@@ -71,13 +72,13 @@ export function AppCard({ toolkit }: { toolkit: ToolkitOut }) {
             ) : null}
           </div>
           {toolkit.description ? <p className="line-clamp-2 text-caption text-pretty text-text-secondary">{toolkit.description}</p> : null}
-          <div className="flex flex-wrap gap-1">
-            {(toolkit.categories ?? []).slice(0, 3).map((category) => (
-              <StatusPill key={category} tone="neutral" size="sm">
-                {category}
-              </StatusPill>
-            ))}
-          </div>
+          {(toolkit.categories ?? []).length > 0 ? (
+            <TagList>
+              {(toolkit.categories ?? []).slice(0, 3).map((category) => (
+                <Tag key={category}>{category}</Tag>
+              ))}
+            </TagList>
+          ) : null}
         </div>
       </div>
 
@@ -90,27 +91,22 @@ export function AppCard({ toolkit }: { toolkit: ToolkitOut }) {
           ) : (
             <ConnectionRow connectionId={toolkit.connection_id} toolkit={toolkit} />
           )}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={!canWrite}
-            title={canWrite ? undefined : writeReason}
-            onClick={() => setAddAccountOpen(true)}
-          >
-            Add another account
-          </Button>
+          {gate.show ? (
+            <Button type="button" variant="ghost" size="sm" disabled={gate.pending} onClick={() => setAddAccountOpen(true)}>
+              <PlusIcon aria-hidden="true" /> Add another account
+            </Button>
+          ) : null}
         </div>
-      ) : (
+      ) : gate.show ? (
         <ConnectAppDialog
           toolkit={toolkit}
           trigger={
-            <Button type="button" variant="secondary" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason} className="self-start">
+            <Button type="button" variant="secondary" size="sm" disabled={gate.pending} className="self-start">
               Connect
             </Button>
           }
         />
-      )}
+      ) : null}
 
       {accounts.length > 1 ? <AppAccountsDialog open={accountsOpen} onOpenChange={setAccountsOpen} toolkit={toolkit} accounts={accounts} /> : null}
       <ConnectAppDialog toolkit={toolkit} open={addAccountOpen} onOpenChange={setAddAccountOpen} isAddingAccount />

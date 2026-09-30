@@ -13,20 +13,22 @@ import { RelativeTime } from "@/components/shared/relative-time";
 import { StatusPill } from "@/components/shared/status-chip";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
+import { readOnlyCopy } from "@/components/console/shared/permission";
 import { useDisableApps, useEnableApps, useToolProviderCategories, useToolProviderToolkits } from "@/components/console/lib/api-hooks";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
-import { AppGallery } from "@/components/console/tools/apps/app-gallery";
+import { AppCardSkeleton, AppGallery } from "@/components/console/tools/apps/app-gallery";
 import { EnableComposioDialog } from "@/components/console/tools/apps/enable-composio-dialog";
-import { appsErrorMessage, composioStatusChip, useComposioStatus } from "@/components/console/tools/apps/use-composio";
+import { appsErrorMessage, appsErrorToast, composioStatusChip, useComposioStatus } from "@/components/console/tools/apps/use-composio";
+import { useWriteGate } from "@/components/console/tools/write-gate";
 import type { AppsStatusOut } from "@/contracts/lkap-contracts";
 
 /**
  * Tools -> Apps (docs/v5/COMPOSIO.md §6, D-V5-C13). Four states from
- * `AppsStatusOut`: loading; no key yet (`credential_id === null`) shows the
- * **Enable Composio** empty state; a key that exists but is turned off shows
- * a plain "turn it back on" prompt (no key dialog — the key is already
- * there); enabled shows the header (chip, Validate, Rotate, Disable, "Also
- * in Keys") and the app gallery.
+ * `AppsStatusOut`: loading (a skeleton of the header card and the gallery);
+ * no key yet (`credential_id === null`) shows the **Enable Composio** empty
+ * state; a key that exists but is turned off shows a plain "turn it back on"
+ * prompt (no key dialog — the key is already there); enabled shows the header
+ * (chip, Validate, Rotate, Disable, "Also in Keys") and the app gallery.
+ * Viewers see the states without the controls (decision D12).
  */
 export function AppsTab() {
   const { status, isLoading, isError, error, refetch, validate, validating } = useComposioStatus();
@@ -56,27 +58,52 @@ export function AppsTab() {
   // swap would unmount it out from under the "Key saved… Done" view before
   // the builder ever saw it.
   const [enableOpen, setEnableOpen] = React.useState(false);
+  const gate = useWriteGate();
 
   let body: React.ReactNode;
   if (isLoading) {
     body = (
-      <LoadingRegion label="Loading Apps" className="flex flex-col gap-3">
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-32 w-full" />
+      <LoadingRegion label="Loading Apps" className="flex flex-col gap-5">
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-[22px] w-16 rounded-pill" />
+              <Skeleton className="h-3.5 w-40" />
+            </div>
+            <div className="flex gap-1.5">
+              <Skeleton className="h-7 w-20" />
+              <Skeleton className="h-7 w-16" />
+            </div>
+          </div>
+          <Skeleton className="h-3.5 w-24" />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <AppCardSkeleton key={i} />
+          ))}
+        </div>
       </LoadingRegion>
     );
   } else if (isError) {
-    body = <ErrorBanner message={`Couldn't load Apps — ${appsErrorMessage(error)}`} onRetry={() => void refetch()} />;
+    body = <ErrorBanner title="Couldn't load Apps" message={appsErrorMessage(error)} onRetry={() => void refetch()} />;
   } else if (!status || status.credential_id == null) {
     body = (
       <EmptyState
         icon={PlugIcon}
         title="Connect Composio to see your apps"
-        description="Add your Composio API key once to browse and connect apps for every agent in this workspace."
+        description={
+          gate.show
+            ? "Add your Composio API key once to browse and connect apps for every agent in this workspace."
+            : readOnlyCopy("builder", "connect Composio for this workspace")
+        }
         action={
-          <Button type="button" onClick={() => setEnableOpen(true)}>
-            Enable Composio
-          </Button>
+          // Not disabled while the role loads: it only opens the key dialog,
+          // and the api refuses a save the person isn't allowed to make.
+          gate.show ? (
+            <Button type="button" variant="primary" onClick={() => setEnableOpen(true)}>
+              Enable Composio
+            </Button>
+          ) : undefined
         }
       />
     );
@@ -101,8 +128,7 @@ export function AppsTab() {
 
 function AppsTurnedOff({ onEnabled }: { onEnabled: () => void }) {
   const enableApps = useEnableApps();
-  const { canWrite } = useWriteAccess();
-  const writeReason = writeAccessReason();
+  const gate = useWriteGate();
 
   async function turnOn() {
     try {
@@ -110,7 +136,7 @@ function AppsTurnedOff({ onEnabled }: { onEnabled: () => void }) {
       toast.success("Apps turned on");
       onEnabled();
     } catch (error) {
-      toast.error(`Couldn't turn Apps on — ${appsErrorMessage(error)}`);
+      appsErrorToast("turn Apps on", error);
     }
   }
 
@@ -118,11 +144,24 @@ function AppsTurnedOff({ onEnabled }: { onEnabled: () => void }) {
     <EmptyState
       icon={PlugIcon}
       title="Apps are turned off"
-      description="Your Composio key and every connection are kept — turn Apps back on to use them again."
+      description={
+        gate.show
+          ? "Your Composio key and every connection are kept — turn Apps back on to use them again."
+          : readOnlyCopy("builder", "turn Apps back on")
+      }
       action={
-        <Button type="button" disabled={!canWrite || enableApps.isPending} title={canWrite ? undefined : writeReason} onClick={() => void turnOn()}>
-          {enableApps.isPending ? "Turning on…" : "Turn on"}
-        </Button>
+        gate.show ? (
+          <Button
+            type="button"
+            variant="primary"
+            disabled={gate.pending}
+            busy={enableApps.isPending}
+            busyLabel="Turning on…"
+            onClick={() => void turnOn()}
+          >
+            Turn on
+          </Button>
+        ) : undefined
       }
     />
   );
@@ -141,8 +180,7 @@ function AppsHeader({
 }) {
   const chip = composioStatusChip(status);
   const disableApps = useDisableApps();
-  const { canWrite } = useWriteAccess();
-  const writeReason = writeAccessReason();
+  const gate = useWriteGate();
 
   async function confirmDisable() {
     try {
@@ -150,7 +188,7 @@ function AppsHeader({
       toast.success("Apps turned off");
       onChanged();
     } catch (error) {
-      toast.error(`Couldn't turn Apps off — ${appsErrorMessage(error)}`);
+      appsErrorToast("turn Apps off", error);
     }
   }
 
@@ -158,55 +196,56 @@ function AppsHeader({
     <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <StatusPill tone={chip.tone}>
-            {chip.label}
-          </StatusPill>
+          <StatusPill tone={chip.tone}>{chip.label}</StatusPill>
           {status.last_test_at ? (
             <span className="text-caption text-text-secondary">
               Last tested <RelativeTime iso={status.last_test_at} />
             </span>
           ) : null}
-          <span className="text-caption text-text-secondary">
+          <span className="text-caption text-text-secondary tabular-nums">
             {status.connections} connected · {status.paused_tools} paused
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={!canWrite || validating}
-            title={canWrite ? undefined : writeReason}
-            onClick={() => void onValidate()}
-          >
-            {validating ? "Validating…" : "Validate"}
-          </Button>
-          <EnableComposioDialog
-            mode="rotate"
-            credentialId={status.credential_id ?? undefined}
-            trigger={
-              <Button type="button" variant="secondary" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
-                Rotate
-              </Button>
-            }
-            onDone={onChanged}
-          />
-          <ConfirmDialog
-            trigger={
-              <Button type="button" variant="ghost" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
-                Disable
-              </Button>
-            }
-            title="Turn off Apps?"
-            description="The key and every connection are kept. Tools that use them switch off until you turn Apps back on."
-            confirmLabel="Turn off"
-            onConfirm={confirmDisable}
-          />
-        </div>
+        {gate.show ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={gate.pending}
+              busy={validating}
+              busyLabel="Validating…"
+              onClick={() => void onValidate()}
+            >
+              Validate
+            </Button>
+            <EnableComposioDialog
+              mode="rotate"
+              credentialId={status.credential_id ?? undefined}
+              trigger={
+                <Button type="button" variant="secondary" size="sm" disabled={gate.pending}>
+                  Rotate
+                </Button>
+              }
+              onDone={onChanged}
+            />
+            <ConfirmDialog
+              trigger={
+                <Button type="button" variant="ghost" size="sm" disabled={gate.pending}>
+                  Disable
+                </Button>
+              }
+              title="Turn off Apps?"
+              description="The key and every connection are kept. Tools that use them switch off until you turn Apps back on."
+              confirmLabel="Turn off"
+              onConfirm={confirmDisable}
+            />
+          </div>
+        ) : null}
       </div>
-      <Link href="/console/keys" className="w-fit text-label font-medium text-foreground underline underline-offset-2">
-        Also in Keys
-      </Link>
+      <Button asChild variant="link" className="w-fit">
+        <Link href="/console/keys">Also in Keys</Link>
+      </Button>
     </div>
   );
 }

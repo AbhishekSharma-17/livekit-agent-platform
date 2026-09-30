@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useController, useWatch } from "react-hook-form";
-import { ArrowUpRightIcon, ChevronRightIcon, CircleDashedIcon, SparklesIcon } from "lucide-react";
+import { ArrowUpRightIcon, ChevronRightIcon, CircleDashedIcon, ListChecksIcon } from "lucide-react";
 
 import { CopyButton } from "@/components/shared/copy-button";
 import { Icon } from "@/components/shared/icon";
@@ -202,7 +202,7 @@ export function NextStepsCard({ className }: { className?: string }) {
       className={cn("shrink-0 overflow-hidden rounded-lg border border-brand-line bg-brand-soft/30", className)}
     >
       <div className="flex items-start gap-2 px-4 pt-3 pb-2">
-        <Icon as={SparklesIcon} size="sm" className="mt-0.5 text-brand-text" />
+        <Icon as={ListChecksIcon} size="sm" className="mt-0.5 text-brand-text" />
         <div className="min-w-0 flex-1">
           <h2 id={headingId} className="text-sm font-semibold">
             Next steps

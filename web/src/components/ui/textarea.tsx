@@ -1,12 +1,17 @@
 import * as React from "react"
+
 import { cn } from "@/lib/utils"
 
+/**
+ * Textarea (docs/ui/DESIGN-SYSTEM.md section 6.2): the input's border, fill
+ * and focus treatment; resizes vertically only, line-height 1.55.
+ */
 function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
   return (
     <textarea
       data-slot="textarea"
       className={cn(
-        "flex field-sizing-content min-h-16 w-full rounded-sm border border-input bg-transparent px-2.5 py-2 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+        "flex field-sizing-content min-h-18 w-full resize-y rounded border border-input bg-card px-[11px] py-[7px] text-control leading-[1.55] text-foreground transition-[color,border-color,box-shadow] duration-(--duration-fast) outline-none placeholder:text-text-tertiary hover:border-border-strong focus-visible:border-brand focus-visible:shadow-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted disabled:text-text-secondary disabled:hover:border-input aria-invalid:border-destructive-solid",
         className
       )}
       {...props}

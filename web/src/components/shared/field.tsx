@@ -10,9 +10,12 @@ export interface FieldProps {
   hint?: React.ReactNode;
   /** Field-level error (§6): shown under the control; the control gets `aria-invalid`. */
   error?: React.ReactNode;
-  /** Marked with the word "Required" in the hint slot (no red asterisk). */
+  /**
+   * Sets `aria-required` and the word "Required" in the hint slot (no red
+   * asterisk). Prefer marking the optional fields instead (spec 7.4).
+   */
   required?: boolean;
-  /** Marked with the word "Optional" in the hint slot. */
+  /** Adds a 12 px tertiary "(optional)" after the label (spec 6.2). */
   optional?: boolean;
   children: React.ReactNode;
   /** Label + hint on the left, control on the right (switches, short selects). */
@@ -31,7 +34,9 @@ function mergeIds(...ids: Array<string | undefined>): string | undefined {
 }
 
 /**
- * Form field (docs/UI_UX_SPEC.md §2.7, §6). When `children` is a single
+ * Form field (docs/ui/DESIGN-SYSTEM.md section 6.2): a 6 px grid of a 13 px
+ * label, the control, a 12 px secondary hint and a 13 px destructive error.
+ * When `children` is a single
  * element, `aria-describedby` (hint + error) and `aria-invalid` are wired onto
  * it automatically; for composite controls, use `fieldIds(htmlFor)` yourself.
  */
@@ -47,7 +52,7 @@ export function Field({
   className,
 }: FieldProps) {
   const ids = fieldIds(htmlFor);
-  const marker = required ? "Required" : optional ? "Optional" : null;
+  const marker = required ? "Required" : null;
   const hasHint = Boolean(marker || hint);
   const hasError = error !== undefined && error !== null && error !== false && error !== "";
 
@@ -69,8 +74,26 @@ export function Field({
     });
   }
 
+  // "(optional)" sits beside the label, not inside it: visual only, so the
+  // accessible name stays the field name (a control without `required`
+  // already reads as optional to assistive tech).
+  const labelNode =
+    optional && !required ? (
+      <div className="flex flex-wrap items-baseline gap-x-1">
+        <Label htmlFor={htmlFor} className="leading-5">
+          {label}
+        </Label>
+        <span data-slot="field-optional" aria-hidden="true" className="text-caption text-text-tertiary">
+          (optional)
+        </span>
+      </div>
+    ) : (
+      <Label htmlFor={htmlFor} className="leading-5">
+        {label}
+      </Label>
+    );
   const hintNode = hasHint ? (
-    <p id={ids.hint} className="text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">
+    <p id={ids.hint} className="text-caption leading-[1.125rem] text-pretty text-text-secondary">
       {marker ? <span className="font-medium">{marker}</span> : null}
       {marker && hint ? <span aria-hidden="true"> · </span> : null}
       {hint}
@@ -78,7 +101,7 @@ export function Field({
   ) : null;
 
   const errorNode = hasError ? (
-    <p id={ids.error} className="text-[0.8125rem] leading-[1.125rem] text-danger-text">
+    <p id={ids.error} className="text-label leading-[1.125rem] text-destructive-text">
       {error}
     </p>
   ) : null;
@@ -92,9 +115,7 @@ export function Field({
         className={cn("grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-1.5", className)}
       >
         <div className="flex min-w-0 flex-col gap-1.5">
-          <Label htmlFor={htmlFor} className="leading-5">
-            {label}
-          </Label>
+          {labelNode}
           {hintNode}
         </div>
         <div className="flex items-center pt-0.5">{control}</div>
@@ -109,12 +130,53 @@ export function Field({
       data-invalid={hasError ? "" : undefined}
       className={cn("flex flex-col gap-1.5", className)}
     >
-      <Label htmlFor={htmlFor} className="leading-5">
-        {label}
-      </Label>
+      {labelNode}
       {control}
       {hintNode}
       {errorNode}
+    </div>
+  );
+}
+
+export interface FieldRowProps {
+  /** Columns above 640 px (one column on phones). Default 2. */
+  columns?: 2 | 3;
+  children: React.ReactNode;
+  className?: string;
+}
+
+/** Two or three fields side by side; collapses to one column on phones (spec 6.2). */
+export function FieldRow({ columns = 2, children, className }: FieldRowProps) {
+  return (
+    <div
+      data-slot="field-row"
+      className={cn(
+        "grid grid-cols-1 gap-4",
+        columns === 2 ? "sm:grid-cols-[repeat(2,minmax(0,1fr))]" : "sm:grid-cols-[repeat(3,minmax(0,1fr))]",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The form-level error block (spec 6.2 "Validation"): server errors after a
+ * submit, announced assertively. Renders nothing without a message.
+ */
+export function FormError({ children, className }: { children?: React.ReactNode; className?: string }) {
+  if (children === undefined || children === null || children === false || children === "") return null;
+  return (
+    <div
+      role="alert"
+      data-slot="form-error"
+      className={cn(
+        "rounded border border-destructive-border bg-destructive-subtle px-3 py-2.5 text-label text-destructive-text",
+        className,
+      )}
+    >
+      {children}
     </div>
   );
 }

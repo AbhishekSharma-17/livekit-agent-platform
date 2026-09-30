@@ -171,16 +171,19 @@ describe("Field", () => {
     expect(document.getElementById("agent-name-error")?.textContent).toBe("Name is required");
   });
 
-  it("marks optional fields in the hint slot and leaves valid controls alone", () => {
-    render(
+  it("marks optional fields with (optional) after the label and leaves valid controls alone", () => {
+    const { container } = render(
       <Field label="Description" htmlFor="desc" optional>
         <textarea id="desc" aria-describedby="external" />
       </Field>,
     );
+    // Spec 6.2: a 12 px tertiary "(optional)" beside the label; visual only, so
+    // the accessible name stays the field name.
     const textarea = screen.getByLabelText("Description");
+    expect(container.querySelector('[data-slot="field-optional"]')?.textContent).toBe("(optional)");
     expect(textarea.getAttribute("aria-invalid")).toBeNull();
-    expect(textarea.getAttribute("aria-describedby")).toBe("external desc-hint");
-    expect(document.getElementById("desc-hint")?.textContent).toBe("Optional");
+    expect(textarea.getAttribute("aria-describedby")).toBe("external");
+    expect(document.getElementById("desc-hint")).toBeNull();
     expect(document.getElementById("desc-error")).toBeNull();
   });
 

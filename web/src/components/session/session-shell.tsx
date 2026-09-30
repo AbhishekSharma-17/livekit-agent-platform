@@ -10,13 +10,20 @@
  * - `"wide"` (insurance notebook): a 340 px rail (stage over transcript) with
  *   the panel filling the main column.
  * - Below `lg` both collapse to one scrolling column with a `fixed`,
- *   safe-area-aware control bar and the transcript as a bottom sheet.
+ *   safe-area-aware control bar and the transcript as a bottom sheet (a
+ *   documented caller-facing exception to "dialogs only", decision D3: it
+ *   is the caller's own transcript, not console editing). Escape closes it;
+ *   the strip chip and the close button are 48 px touch targets.
+ * - The transcript body is a `role="log"` live region, and the connection
+ *   state is a word plus a tone ("Connecting…", "Reconnecting…").
  */
 import * as React from "react";
 import { ChevronDownIcon, MessageSquareTextIcon } from "lucide-react";
 
 import { Icon } from "@/components/shared/icon";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
+import { Badge } from "@/components/ui/badge";
+import { IconButton } from "@/components/ui/button";
 import {
   AGENT_STATE_LABEL,
   type AgentUiState,
@@ -104,15 +111,15 @@ export function SessionShell({
         className="flex h-10 shrink-0 items-center gap-2 px-3 lg:px-4"
       >
         {/* The page's h1 (axe `page-has-heading-one`): who the call is with. */}
-        <h1 className="text-foreground min-w-0 truncate text-sm font-medium">
+        <h1 className="text-foreground text-body min-w-0 truncate font-medium">
           {agentName}
         </h1>
-        {live && <StatusChip tone="live">Live</StatusChip>}
+        {live && <StatusPill tone="live">Live</StatusPill>}
         <span className="flex-1" />
         {elapsedMs !== undefined && live && (
           <span
             data-testid="top-strip-elapsed"
-            className="text-muted-foreground font-mono text-[0.8125rem] tabular-nums"
+            className="text-text-secondary text-label font-mono tabular-nums"
           >
             {formatElapsed(elapsedMs)}
           </span>
@@ -124,31 +131,30 @@ export function SessionShell({
             data-testid="transcript-chip"
             aria-expanded={transcriptOpen}
             onClick={() => onTranscriptOpenChange?.(!transcriptOpen)}
-            className="focus-visible:ring-ring rounded-xs focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none lg:hidden"
+            className="-my-1 inline-flex min-h-12 items-center rounded-sm lg:hidden"
           >
-            <StatusChip tone="neutral">
+            <Badge tone="neutral" className="tabular-nums">
               <Icon as={MessageSquareTextIcon} size="sm" />
               {transcriptCount} messages
-            </StatusChip>
+            </Badge>
           </button>
         )}
         {(agentState === "connecting" ||
           agentState === "reconnecting" ||
           agentState === "failed") && (
           <span data-testid="connection-chip">
-          <StatusChip
+          <StatusPill
             tone={
               agentState === "failed"
                 ? "danger"
                 : agentState === "reconnecting"
                   ? "warning"
-                  : "neutral"
+                  : "info"
             }
-            dot
           >
             {AGENT_STATE_LABEL[agentState]}
             {agentState === "failed" ? "" : "…"}
-          </StatusChip>
+          </StatusPill>
           </span>
         )}
       </header>
@@ -171,7 +177,7 @@ export function SessionShell({
           className={model.panel}
         >
           <header className="border-border flex shrink-0 items-center justify-between gap-2 border-b px-4 py-2.5">
-            <h2 className="truncate text-sm font-semibold">{panelTitle}</h2>
+            <h2 className="text-title truncate font-semibold">{panelTitle}</h2>
             {panelStatus}
           </header>
           <div className="min-h-0 flex-1 overflow-auto">{panel}</div>
@@ -182,26 +188,31 @@ export function SessionShell({
           aria-label="Transcript"
           data-open={transcriptOpen ? "true" : "false"}
           className={model.transcript}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && transcriptOpen) onTranscriptOpenChange?.(false);
+          }}
         >
           <header className="border-border flex shrink-0 items-center justify-between gap-2 border-b px-4 py-2.5">
-            <h2 className="text-sm font-semibold">
+            <h2 className="text-title font-semibold">
               Transcript
               {transcriptCount > 0 && (
-                <span className="text-muted-foreground ml-1.5 font-normal tabular-nums">
+                <span className="text-text-secondary ml-1.5 font-normal tabular-nums">
                   {transcriptCount}
                 </span>
               )}
             </h2>
-            <button
-              type="button"
-              aria-label="Hide transcript"
+            <IconButton
+              label="Hide transcript"
               onClick={() => onTranscriptOpenChange?.(false)}
-              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring -mr-1 inline-flex size-10 items-center justify-center rounded-sm focus-visible:ring-2 focus-visible:outline-none lg:hidden"
+              className="-my-2 -mr-2 size-12 lg:hidden"
             >
               <Icon as={ChevronDownIcon} size="lg" />
-            </button>
+            </IconButton>
           </header>
-          <div className="min-h-0 flex-1 overflow-hidden">{transcript}</div>
+          {/* The caller's transcript, announced as it grows. */}
+          <div role="log" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {transcript}
+          </div>
         </section>
 
         <div

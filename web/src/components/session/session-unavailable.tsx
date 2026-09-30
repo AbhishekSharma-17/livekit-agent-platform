@@ -3,17 +3,23 @@
 /**
  * The three "this link doesn't work" pages of docs/UI_UX_SPEC.md §5.7, keyed
  * by `classifyConnectError` (`lib/livekit.ts`). Same card shell as the
- * pre-call and end-of-call screens; the copy never blames the visitor and
- * only `not_published` offers the builder a way into the console.
+ * pre-call and end-of-call screens; the copy never blames the visitor, says
+ * what to do next, and only `not_published` offers the builder a way into the
+ * console. `unreachable` is the offline/unavailable state (docs/ui/
+ * DESIGN-SYSTEM.md section 8.8): the service is down, so the next step is a
+ * retry.
  */
 import * as React from "react";
+import { RefreshCwIcon } from "lucide-react";
 
+import { Icon } from "@/components/shared/icon";
 import { StateMeter } from "@/components/shared/state-meter";
 import { Button } from "@/components/ui/button";
 import {
   SessionCard,
   SessionCardScreen,
 } from "@/components/session/session-card";
+import { PHONE_TOUCH_TARGET } from "@/components/session/session-layout";
 
 export type SessionUnavailableKind =
   | "not_found"
@@ -67,16 +73,16 @@ export function SessionUnavailable({
         >
           <StateMeter state={kind === "unreachable" ? "failed" : "ended"} size="lg" bars={5} />
           <div>
-            <h1 className="text-[1.75rem] leading-[2.125rem] font-semibold tracking-[-0.02em] text-balance">
+            <h1 className="text-display font-semibold tracking-[-0.025em] text-balance">
               {copy.title}
             </h1>
-            <p className="text-muted-foreground mt-2 text-base text-pretty">
+            <p className="text-text-secondary mt-2 text-pretty">
               {copy.body}
             </p>
           </div>
 
           {kind === "not_published" && (
-            <Button variant="brand" size="lg" asChild>
+            <Button variant="primary" size="lg" className={PHONE_TOUCH_TARGET} asChild>
               <a href={`/console/agents?q=${encodeURIComponent(slug)}`}>
                 Open in console
               </a>
@@ -84,25 +90,27 @@ export function SessionUnavailable({
           )}
           {kind === "unreachable" && (
             <Button
-              variant="brand"
+              variant="primary"
               size="lg"
+              className={PHONE_TOUCH_TARGET}
               onClick={() => window.location.reload()}
             >
+              <Icon as={RefreshCwIcon} size="md" />
               Try again
             </Button>
           )}
 
           {testMode && detail && (
-            <p className="text-muted-foreground font-mono text-[0.8125rem]">
+            <p className="text-text-secondary text-caption font-mono break-words">
               {detail}
             </p>
           )}
         </div>
       </SessionCard>
-      <p className="text-muted-foreground text-sm">
+      <p className="text-body">
         <a
           href={testMode ? "/console/agents" : "/"}
-          className="underline underline-offset-4"
+          className="text-brand hover:text-brand-hover inline-flex min-h-12 items-center underline underline-offset-3 lg:min-h-0"
         >
           {testMode ? "Back to console" : "Home"}
         </a>

@@ -10,6 +10,12 @@
  *
  * The Start click is the browser's user gesture: the parent uses it to prime
  * audio playback (§5.2) before the room mounts.
+ *
+ * Built from the shared primitives (docs/ui/DESIGN-SYSTEM.md section 6):
+ * `Field` for the name (marked optional; it falls back to "Guest"), the
+ * `Select`, one primary button (Start call, last), and `Alert`s for the last
+ * attempt's error and for being offline (section 8.8). Caller actions reach
+ * 48 px on phones.
  */
 import * as React from "react";
 import {
@@ -17,16 +23,18 @@ import {
   MicIcon,
   MonitorUpIcon,
   PhoneIcon,
+  RefreshCwIcon,
   VideoIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import type { AgentPublicOut } from "@/contracts/lkap-contracts";
+import { Field } from "@/components/shared/field";
 import { Icon } from "@/components/shared/icon";
 import { StateMeter } from "@/components/shared/state-meter";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -39,6 +47,7 @@ import {
   SessionCardScreen,
 } from "@/components/session/session-card";
 import { TestModeBar } from "@/components/session/test-mode-bar";
+import { PHONE_TOUCH_TARGET } from "@/components/session/session-layout";
 import {
   expectations,
   micPermissionHint,
@@ -92,6 +101,8 @@ export interface PreCallCardProps {
   backHref?: string;
   /** `NEXT_PUBLIC_LKAP_PRIVACY_URL`, when the deployment sets one. */
   privacyUrl?: string;
+  /** The browser reports no network (`navigator.onLine`); says so above Start. */
+  offline?: boolean;
 }
 
 export function PreCallCard({
@@ -106,6 +117,7 @@ export function PreCallCard({
   testMode,
   backHref,
   privacyUrl,
+  offline = false,
 }: PreCallCardProps) {
   const items = expectations(agent.name, agent.capabilities);
   const requesting = devices.status === "requesting";
@@ -128,16 +140,16 @@ export function PreCallCard({
           <div className="bg-stage text-stage-foreground flex h-40 flex-col items-center justify-center gap-4 p-6 text-center md:h-auto md:items-start md:text-left">
             <StateMeter state="idle" size="lg" bars={5} />
             <div>
-              <h1 className="text-[1.75rem] leading-[2.125rem] font-semibold tracking-[-0.02em] text-balance">
+              <h1 className="text-display font-semibold tracking-[-0.025em] text-balance">
                 {agent.name}
               </h1>
               {agent.description && (
-                <p className="text-muted-foreground mt-2 text-base text-pretty">
+                <p className="text-text-secondary mt-2 text-pretty">
                   {agent.description}
                 </p>
               )}
             </div>
-            <ul className="text-muted-foreground hidden gap-2 text-sm md:grid">
+            <ul className="text-text-secondary text-body hidden gap-2 md:grid">
               {items.map((item) => (
                 <li key={item.text} className="flex items-start gap-2">
                   <Icon
@@ -153,7 +165,7 @@ export function PreCallCard({
 
           {/* Form */}
           <div className="flex flex-col gap-5 p-5 md:p-6">
-            <ul className="text-muted-foreground grid gap-2 text-sm md:hidden">
+            <ul className="text-text-secondary text-body grid gap-2 md:hidden">
               {items.map((item) => (
                 <li key={item.text} className="flex items-start gap-2">
                   <Icon
@@ -166,10 +178,7 @@ export function PreCallCard({
               ))}
             </ul>
 
-            <div className="grid gap-1.5">
-              <Label htmlFor="participant-name" className="text-sm">
-                Your name
-              </Label>
+            <Field label="Your name" htmlFor="participant-name" optional>
               <Input
                 id="participant-name"
                 name="participant-name"
@@ -180,10 +189,10 @@ export function PreCallCard({
                 onChange={(event) => onParticipantNameChange(event.target.value)}
                 placeholder="Guest"
               />
-            </div>
+            </Field>
 
             <div className="grid gap-2">
-              <span className="text-sm font-medium">Microphone</span>
+              <span className="text-label font-medium">Microphone</span>
 
               {devices.inputs.length > 1 && (
                 <Select
@@ -219,8 +228,8 @@ export function PreCallCard({
                   aria-live="polite"
                   className={
                     denied || devices.status === "unsupported"
-                      ? "text-danger-text text-sm"
-                      : "text-muted-foreground text-sm"
+                      ? "text-destructive-text text-body"
+                      : "text-text-secondary text-body"
                   }
                 >
                   {MIC_STATUS_MESSAGE[devices.status]}
@@ -228,7 +237,7 @@ export function PreCallCard({
               </div>
 
               {denied && (
-                <p className="text-muted-foreground text-sm">
+                <p className="text-text-secondary text-body">
                   {micPermissionHint(userAgent)}
                 </p>
               )}
@@ -239,12 +248,13 @@ export function PreCallCard({
                   type="button"
                   variant="secondary"
                   size="lg"
-                  className="w-fit"
-                  disabled={requesting}
+                  className={`w-fit ${PHONE_TOUCH_TARGET}`}
+                  busy={requesting}
+                  busyLabel="Waiting for permission…"
                   onClick={onCheckMicrophone}
                 >
                   <Icon as={MicIcon} size="md" />
-                  {requesting ? "Waiting for permission…" : "Check microphone"}
+                  Check microphone
                 </Button>
               )}
               {denied && (
@@ -252,36 +262,39 @@ export function PreCallCard({
                   type="button"
                   variant="secondary"
                   size="lg"
-                  className="w-fit"
+                  className={`w-fit ${PHONE_TOUCH_TARGET}`}
                   onClick={() => window.location.reload()}
                 >
+                  <Icon as={RefreshCwIcon} size="md" />
                   Reload
                 </Button>
               )}
             </div>
 
+            {offline && (
+              <Alert tone="warning" data-testid="pre-call-offline" className="text-body">
+                You&rsquo;re offline. You can start the call once you&rsquo;re back online.
+              </Alert>
+            )}
+
             {error && (
-              <p
-                role="alert"
-                data-testid="pre-call-error"
-                className="bg-danger-soft text-danger-text rounded-md px-3 py-2 text-sm"
-              >
+              <Alert tone="danger" data-testid="pre-call-error" className="text-body">
                 {error}
-              </p>
+              </Alert>
             )}
 
             <div>
               <Button
                 type="submit"
-                variant="brand"
+                variant="primary"
                 size="xl"
-                className="w-full"
+                className={`w-full ${PHONE_TOUCH_TARGET}`}
                 disabled={requesting}
               >
                 <Icon as={PhoneIcon} size="xl" />
                 {requesting ? "Waiting for permission…" : "Start call"}
               </Button>
-              <p className="text-muted-foreground mt-3 text-xs">
+              <p className="text-text-secondary text-caption mt-3">
                 Your microphone is on during the call. You can mute or hang up
                 any time.
                 {privacyUrl && (
@@ -289,7 +302,7 @@ export function PreCallCard({
                     {" "}
                     <a
                       href={privacyUrl}
-                      className="underline underline-offset-4"
+                      className="text-brand hover:text-brand-hover underline underline-offset-3"
                     >
                       Privacy
                     </a>

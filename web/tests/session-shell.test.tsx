@@ -52,9 +52,9 @@ describe("sessionLayoutModel", () => {
     );
   });
 
-  it("keeps the mobile stage a strip in wide and a 45vh stage in side", () => {
+  it("keeps the mobile stage a strip in wide and a 45dvh stage in side", () => {
     expect(sessionLayoutModel("wide").stage).toContain("min-h-[72px]");
-    expect(sessionLayoutModel("side").stage).toContain("h-[45vh]");
+    expect(sessionLayoutModel("side").stage).toContain("h-[45dvh]");
   });
 
   it("fixes the controls to the safe area below lg and unpins them at lg", () => {
@@ -67,7 +67,7 @@ describe("sessionLayoutModel", () => {
   it("makes the transcript a bottom sheet below lg and a column at lg", () => {
     const transcript = sessionLayoutModel("side").transcript;
     expect(transcript).toContain("fixed");
-    expect(transcript).toContain("h-[60vh]");
+    expect(transcript).toContain("h-[60dvh]");
     expect(transcript).toContain("data-[open=false]:pointer-events-none");
     expect(transcript).toContain("lg:static");
   });

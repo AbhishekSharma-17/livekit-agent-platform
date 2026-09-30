@@ -25,6 +25,7 @@ import {
   SessionUnavailable,
   type SessionUnavailableKind,
 } from "@/components/session/session-unavailable";
+import { useOnlineStatus } from "@/components/session/use-online-status";
 import { useMicCheck } from "@/hooks/use-mic-check";
 import type { ConnectErrorKind } from "@/lib/livekit";
 
@@ -86,6 +87,7 @@ export function SessionExperience({
   /** The reason the last attempt was abandoned, shown above Start (§5.1). */
   const [attemptError, setAttemptError] = useState<string | null>(null);
   const mic = useMicCheck();
+  const online = useOnlineStatus();
 
   /**
    * The primed context is owned *here*, not by `LiveSession`: an attempt's
@@ -232,6 +234,7 @@ export function SessionExperience({
       testMode={testMode}
       backHref={backHref}
       privacyUrl={privacyUrl}
+      offline={!online}
     />
   );
 }

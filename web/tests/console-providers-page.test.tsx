@@ -168,3 +168,61 @@ describe("ProvidersCatalog", () => {
     expect(screen.getByText("Vendor-disabled.")).toBeTruthy();
   });
 });
+
+describe("ProvidersCatalog search and permissions (docs/ui/DESIGN-SYSTEM.md sections 8, 9)", () => {
+  beforeEach(() => {
+    const data = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      get length() {
+        return data.size;
+      },
+      clear: () => data.clear(),
+      getItem: (key: string) => data.get(key) ?? null,
+      key: (index: number) => Array.from(data.keys())[index] ?? null,
+      removeItem: (key: string) => void data.delete(key),
+      setItem: (key: string, value: string) => void data.set(key, String(value)),
+    } satisfies Storage);
+  });
+
+  const SIX: ProviderOut[] = ["OpenAI Realtime", "Gemini Live", "Azure Realtime", "Ultravox", "Nova Sonic", "Phonic"].map(
+    (label, index) => ({ ...OPENAI, id: `rt-${index}`, label, vendor: label.split(" ")[0]! }),
+  );
+
+  it("offers search once a kind has 6 providers, with a distinct no-matches state", async () => {
+    stubProviders(SIX, [CONNECTION_A]);
+    renderWithClient(<ProvidersCatalog />);
+    const search = await screen.findByRole("searchbox", { name: "Search providers" });
+    fireEvent.change(search, { target: { value: "gemini" } });
+    expect(screen.getByText("1 of 6")).toBeTruthy();
+    expect(screen.queryByText("Ultravox")).toBeNull();
+    fireEvent.change(search, { target: { value: "zzz" } });
+    expect(await screen.findByText("No providers match “zzz”")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(await screen.findByText("Ultravox")).toBeTruthy();
+  });
+
+  it("shows a viewer whether a provider is enabled as a word, with no switch (D12)", async () => {
+    stubProviders([OPENAI], [CONNECTION_A]);
+    const base = globalThis.fetch as unknown as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).includes("/api/console/auth/me")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              user: { id: "u2", email: "viewer@example.test" },
+              workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: "viewer" }],
+            }),
+          } as Response;
+        }
+        return base(input, init);
+      }),
+    );
+    renderWithClient(<ProvidersCatalog />);
+    await screen.findByText("OpenAI Realtime");
+    await waitFor(() => expect(screen.queryByRole("switch")).toBeNull());
+    expect(screen.getByText("Enabled")).toBeTruthy();
+  });
+});

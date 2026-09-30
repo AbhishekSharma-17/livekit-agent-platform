@@ -2,20 +2,21 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronRightIcon } from "lucide-react";
+import { BlocksIcon, ChevronRightIcon } from "lucide-react";
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsCount, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/shared/empty-state";
-import { StatusChip } from "@/components/shared/status-chip";
+import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "@/components/shared/list-search";
+import { StatusPill } from "@/components/shared/status-chip";
 import { ProviderRow } from "@/components/console/providers/provider-row";
-import { errorMessage, ErrorBanner } from "@/components/console/shared/error-banner";
+import { RowsSkeleton } from "@/components/console/registry/rows-skeleton";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useConnections } from "@/hooks/useConnections";
 import { useProviderList } from "@/hooks/useProviders";
 import { KIND_LABEL, type ProviderKind } from "@/components/console/registry/provider-meta";
 import type { ProviderOut } from "@/contracts/lkap-contracts";
-import { LoadingRegion } from "@/components/shared/loading-state";
 
 /**
  * `/console/providers?kind=` (UI_UX_SPEC-V2-AMENDMENTS §2.2). Groups VAD,
@@ -56,105 +57,124 @@ const DEFAULT_TAB = TAB_GROUPS[0]!.id;
 //: an admin create a useless hand-made row.
 const MCP_OAUTH_PROVIDER_ID = "mcp-oauth";
 
+function isAvailable(provider: ProviderOut): boolean {
+  return (provider.availability ?? "available") === "available";
+}
+
+/**
+ * Loading state for the Providers page: the kind tab strip and provider
+ * rows with their vendor mark, so the data replaces it without a jump. Also
+ * the page's `Suspense` fallback.
+ */
+export function ProvidersCatalogSkeleton() {
+  return (
+    <div className="flex flex-col gap-4">
+      <div aria-hidden="true" className="flex h-10 items-center gap-5 overflow-hidden border-b border-border">
+        {[64, 88, 72, 96, 60, 80].map((width, index) => (
+          <Skeleton key={index} className="h-3.5 shrink-0" style={{ width }} />
+        ))}
+      </div>
+      <RowsSkeleton label="Loading providers" mark />
+    </div>
+  );
+}
+
+/**
+ * The provider registry by kind (docs/ui/DESIGN-SYSTEM.md section 7.4,
+ * "List"): tabs per kind with counts, search once a kind has 6 or more
+ * providers (accent-insensitive, highlighted, remembered), distinct "nothing
+ * of this kind" and "no matches" states, and the unavailable entries folded
+ * away with their reason.
+ */
 export function ProvidersCatalog() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedKind = searchParams?.get("kind");
   const activeTab = requestedKind && TAB_IDS.has(requestedKind) ? requestedKind : DEFAULT_TAB;
-  const [search, setSearch] = React.useState("");
 
   const { data, isLoading, isError, error, refetch } = useProviderList();
   const connectionsQuery = useConnections();
   const connections = connectionsQuery.data?.items ?? [];
 
+  const providers = React.useMemo(() => (data?.providers ?? []).filter((p) => p.id !== MCP_OAUTH_PROVIDER_ID), [data]);
+  const group = TAB_GROUPS.find((t) => t.id === activeTab) ?? TAB_GROUPS[0]!;
+  const inKind = React.useMemo(() => providers.filter((p) => group.kinds.includes(p.kind)), [providers, group]);
+  const search = useListSearch("providers", inKind, (provider) => [provider.label, provider.vendor, provider.notes]);
+
   function selectTab(next: string) {
     router.replace(`/console/providers?kind=${next}`, { scroll: false });
   }
 
-  if (isLoading) {
-    return (
-      <LoadingRegion label="Loading providers" className="flex flex-col gap-2">
-        {[0, 1, 2].map((i) => (
-          <Skeleton key={i} className="h-20 w-full" />
-        ))}
-      </LoadingRegion>
-    );
-  }
+  if (isLoading) return <ProvidersCatalogSkeleton />;
   if (isError) {
-    return <ErrorBanner message={`Couldn't load the provider registry — ${errorMessage(error)}`} onRetry={() => refetch()} />;
+    return <ErrorBanner error={error} context={{ action: "load the providers" }} onRetry={() => void refetch()} />;
   }
 
-  const providers = data?.providers ?? [];
-  const group = TAB_GROUPS.find((t) => t.id === activeTab) ?? TAB_GROUPS[0]!;
-  const needle = search.trim().toLowerCase();
-
-  const inKind = providers.filter((p) => group.kinds.includes(p.kind) && p.id !== MCP_OAUTH_PROVIDER_ID);
-  const matching = needle === "" ? inKind : inKind.filter((p) => p.label.toLowerCase().includes(needle) || p.vendor.toLowerCase().includes(needle));
-
-  const available = matching.filter((p) => (p.availability ?? "available") === "available");
-  const notAvailable = matching.filter((p) => (p.availability ?? "available") !== "available");
+  const available = search.filtered.filter(isAvailable);
+  const notAvailable = search.filtered.filter((p) => !isAvailable(p));
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search providers"
-          className="w-full sm:w-64"
-          aria-label="Search providers"
-        />
-      </div>
-
-      <div role="tablist" aria-label="Provider kind" className="flex flex-wrap gap-1 border-b border-border pb-2">
-        {TAB_GROUPS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.id}
-            onClick={() => selectTab(tab.id)}
-            className={`rounded-sm px-3 py-1.5 text-sm font-medium outline-none transition-colors duration-(--dur-2) focus-visible:ring-2 focus-visible:ring-ring ${
-              activeTab === tab.id ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {available.length === 0 && notAvailable.length === 0 ? (
-        <EmptyState title="No providers match" description="Try a different search term or kind." compact />
-      ) : (
-        <div className="flex flex-col gap-2">
-          {available.map((provider) => (
-            <ProviderRow key={provider.id} provider={provider} connections={connections} />
-          ))}
-        </div>
-      )}
-
-      {notAvailable.length > 0 ? <NotAvailableSection providers={notAvailable} /> : null}
-    </div>
+    <Tabs value={activeTab} onValueChange={selectTab}>
+      <TabsList aria-label="Provider kind">
+        {TAB_GROUPS.map((tab) => {
+          const count = providers.filter((p) => tab.kinds.includes(p.kind) && isAvailable(p)).length;
+          return (
+            <TabsTrigger key={tab.id} value={tab.id}>
+              {tab.label}
+              {count > 0 ? <TabsCount>{count}</TabsCount> : null}
+            </TabsTrigger>
+          );
+        })}
+      </TabsList>
+      <TabsContent value={activeTab} className="flex flex-col gap-4">
+        <ListSearchField search={search} label="Search providers" total={inKind.length} className="mb-0" />
+        {inKind.length === 0 ? (
+          <EmptyState
+            icon={BlocksIcon}
+            title={`No ${group.label.toLowerCase()} providers yet`}
+            description="This kind has no providers in the registry on this server."
+          />
+        ) : search.noMatches ? (
+          <ListNoMatches search={search} items="providers" />
+        ) : (
+          <>
+            {available.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                {available.map((provider) => (
+                  <ProviderRow key={provider.id} provider={provider} connections={connections} query={search.query} />
+                ))}
+              </div>
+            ) : null}
+            {notAvailable.length > 0 ? <NotAvailableSection providers={notAvailable} query={search.query} /> : null}
+          </>
+        )}
+      </TabsContent>
+    </Tabs>
   );
 }
 
-function NotAvailableSection({ providers }: { providers: ProviderOut[] }) {
+function NotAvailableSection({ providers, query }: { providers: ProviderOut[]; query: string }) {
   return (
     <Collapsible>
-      <CollapsibleTrigger className="group/more inline-flex items-center gap-1 rounded-xs text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-        <ChevronRightIcon className="size-4 transition-transform duration-(--dur-2) group-data-[state=open]/more:rotate-90" aria-hidden="true" />
+      <CollapsibleTrigger className="group/more inline-flex items-center gap-1 rounded-sm text-control font-medium text-text-secondary hover:text-foreground">
+        <ChevronRightIcon
+          className="size-4 transition-transform duration-(--duration-base) group-data-[state=open]/more:rotate-90"
+          aria-hidden="true"
+        />
         Not available ({providers.length})
       </CollapsibleTrigger>
-      <CollapsibleContent className="mt-2 flex flex-col gap-2">
+      <CollapsibleContent className="mt-2 flex flex-col divide-y divide-border rounded-lg border border-border bg-card">
         {providers.map((provider) => (
-          <div key={provider.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2">
-            <div>
-              <p className="text-sm text-foreground">{provider.label}</p>
-              <p className="text-xs text-pretty text-muted-foreground">{provider.notes || reasonFor(provider)}</p>
+          <div key={provider.id} className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-3">
+            <div className="min-w-0">
+              <p className="text-body text-foreground">
+                <Highlight text={provider.label} query={query} />
+              </p>
+              <p className="text-caption text-pretty text-text-secondary">{provider.notes || reasonFor(provider)}</p>
             </div>
-            <StatusChip tone="neutral" size="sm">
+            <StatusPill tone="neutral" size="sm">
               {provider.availability === "removed" ? "Removed" : provider.availability === "incompatible" ? "Not available" : "Coming soon"}
-            </StatusChip>
+            </StatusPill>
           </div>
         ))}
       </CollapsibleContent>

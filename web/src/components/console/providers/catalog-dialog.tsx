@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronLeftIcon, ChevronRightIcon, FlaskConicalIcon, SearchIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, FlaskConicalIcon, LibraryIcon, RefreshCwIcon, SearchXIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,14 +14,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { StatusChip } from "@/components/shared/status-chip";
+import { Alert } from "@/components/ui/alert";
+import { EmptyState } from "@/components/shared/empty-state";
 import { SkeletonRows } from "@/components/shared/loading-state";
+import { SearchField } from "@/components/shared/search-field";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useCredentials, useProviderModels, useTestModel } from "@/components/console/lib/api-hooks";
 import { useWriteAccess } from "@/components/console/lib/roles";
 import { TestedChip, testedStateFor, testErrorMessage } from "@/components/console/registry/model-test-panel";
 import { CATALOG_PAGE_SIZE, useCatalog, useRefreshCatalog, type CatalogKind, type CatalogParams } from "@/hooks/useCatalog";
 import { isSendableModelId } from "@/lib/model-ids";
+import { cn } from "@/lib/utils";
 import type { CatalogItem, ModelTestResult, ProviderModelOut, ProviderOut } from "@/contracts/lkap-contracts";
 
 /**
@@ -69,7 +72,7 @@ export function CatalogDialog({ provider }: { provider: ProviderOut }) {
   const [offset, setOffset] = React.useState(0);
   const q = useDebounced(search.trim());
   const params: CatalogParams = { q: q || undefined, offset, limit: CATALOG_PAGE_SIZE };
-  const { data, isLoading, isError, isFetching } = useCatalog(provider.id, kind ?? "models", provider.default_credential_id, {
+  const { data, isLoading, isError, isFetching, refetch } = useCatalog(provider.id, kind ?? "models", provider.default_credential_id, {
     enabled: open && Boolean(kind),
     params,
   });
@@ -116,7 +119,8 @@ export function CatalogDialog({ provider }: { provider: ProviderOut }) {
       }}
     >
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm">
+        <Button type="button" size="sm">
+          <LibraryIcon aria-hidden="true" />
           Catalog
         </Button>
       </DialogTrigger>
@@ -130,27 +134,44 @@ export function CatalogDialog({ provider }: { provider: ProviderOut }) {
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="gap-3">
-          <div className="relative">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input
-              id={searchId}
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={`Search ${kind} by name or id`}
-              aria-label={`Search the ${kind}`}
-              className="pl-8"
-            />
-          </div>
-          <p className="text-xs text-muted-foreground tabular-nums" aria-live="polite" data-testid="catalog-range">
+          <SearchField
+            id={searchId}
+            value={search}
+            onValueChange={setSearch}
+            placeholder={`Search ${kind} by name or id`}
+            aria-label={`Search the ${kind}`}
+          />
+          <p className="text-caption text-text-secondary tabular-nums" aria-live="polite" data-testid="catalog-range">
             {busy ? "Loading…" : total === 0 ? (q ? "Nothing matches." : "") : `Showing ${from}–${to} of ${total}`}
           </p>
           {busy ? (
             <SkeletonRows label="Loading the catalog" rows={4} rowClassName="h-12" />
           ) : isError ? (
-            <p className="text-sm text-danger-text">Couldn&apos;t load the catalog.</p>
+            <ErrorBanner
+              message="Couldn't load the catalog. Check the provider's key, then try again."
+              onRetry={() => void refetch()}
+            />
           ) : items.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{q ? "No items match this search." : "No items yet."}</p>
+            q ? (
+              <EmptyState
+                variant="plain"
+                icon={SearchXIcon}
+                title={`Nothing matches “${q}”`}
+                description="Try a different name or id."
+                action={
+                  <Button type="button" size="sm" onClick={() => setSearch("")}>
+                    Clear search
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                variant="plain"
+                icon={LibraryIcon}
+                title="Nothing listed yet"
+                description="Refresh to ask the vendor for its latest list."
+              />
+            )
           ) : (
             <ul className="flex flex-col gap-1.5" aria-busy={isFetching}>
               {items.map((item) => (
@@ -167,19 +188,16 @@ export function CatalogDialog({ provider }: { provider: ProviderOut }) {
             </ul>
           )}
           {page?.error ? (
-            <p className="text-xs text-muted-foreground">
-              <StatusChip tone="neutral" size="sm">
-                Fallback
-              </StatusChip>{" "}
-              {page.error}
-            </p>
+            // The vendor's own error text stays out of the UI (spec section 1); say what is shown instead.
+            <Alert tone="info" title="Showing the saved list">
+              The vendor&apos;s live list couldn&apos;t be read, so this is the saved or built-in one. Refresh to try again.
+            </Alert>
           ) : null}
         </DialogBody>
         <DialogFooter className="flex-row flex-wrap items-center gap-2 sm:justify-between">
           <div className="flex items-center gap-1.5">
             <Button
               type="button"
-              variant="outline"
               size="sm"
               onClick={() => setOffset((o) => Math.max(0, o - CATALOG_PAGE_SIZE))}
               disabled={offset === 0 || busy}
@@ -189,7 +207,6 @@ export function CatalogDialog({ provider }: { provider: ProviderOut }) {
             </Button>
             <Button
               type="button"
-              variant="outline"
               size="sm"
               onClick={() => setOffset((o) => o + CATALOG_PAGE_SIZE)}
               disabled={offset + CATALOG_PAGE_SIZE >= total || busy}
@@ -199,10 +216,11 @@ export function CatalogDialog({ provider }: { provider: ProviderOut }) {
             </Button>
           </div>
           <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
+            <Button type="button" size="sm" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
+              <RefreshCwIcon aria-hidden="true" className={cn(refresh.isPending && "animate-spin")} />
               {refresh.isPending ? "Refreshing…" : "Refresh"}
             </Button>
-            <Button type="button" size="sm" onClick={() => setOpen(false)}>
+            <Button type="button" variant="primary" size="sm" onClick={() => setOpen(false)}>
               Close
             </Button>
           </div>
@@ -248,24 +266,23 @@ function CatalogRow({
   const showChip = testable && (state.kind === "ok" || state.kind === "failed");
 
   return (
-    <li className="flex flex-col gap-1.5 rounded-md border border-border px-3 py-2" data-catalog-id={item.id}>
+    <li className="flex flex-col gap-1.5 rounded border border-border px-3 py-2" data-catalog-id={item.id}>
       <div className="flex min-w-0 items-center gap-2.5">
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="" className="size-8 shrink-0 rounded-full border border-border object-cover" />
+          <img src={preview} alt="" className="size-8 shrink-0 rounded-pill border border-border object-cover" />
         ) : null}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm text-foreground" title={item.label}>
+          <p className="truncate text-body text-foreground" title={item.label}>
             {item.label}
           </p>
-          <p className="truncate font-mono text-xs text-muted-foreground" title={item.id}>
+          <p className="truncate font-mono text-caption text-text-tertiary" title={item.id}>
             {item.id}
           </p>
         </div>
         {testable && canTest && sendable ? (
           <Button
             type="button"
-            variant="outline"
             size="sm"
             className="shrink-0"
             disabled={test.isPending}
@@ -283,10 +300,10 @@ function CatalogRow({
         ) : null}
       </div>
       {showChip || test.isError || (result && typeof result.latency_ms === "number") ? (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+        <div className="flex flex-wrap items-center gap-2 text-caption text-text-secondary" aria-live="polite">
           {showChip ? <TestedChip state={state} className="max-w-full" /> : null}
           {result && typeof result.latency_ms === "number" ? <span className="tabular-nums">{result.latency_ms} ms</span> : null}
-          {test.isError ? <span className="text-danger-text">{testErrorMessage(test.error)}</span> : null}
+          {test.isError ? <span className="text-destructive-text">{testErrorMessage(test.error)}</span> : null}
         </div>
       ) : null}
     </li>

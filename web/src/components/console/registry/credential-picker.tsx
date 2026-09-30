@@ -66,10 +66,10 @@ export function CredentialPicker({
   if (isError) {
     hint = (
       <>
-        Couldn&apos;t load keys — {errorMessage(loadError)}.{" "}
+        Couldn&apos;t load keys. {errorMessage(loadError)}{" "}
         <button
           type="button"
-          className="rounded-xs font-medium text-foreground underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded-sm font-medium text-foreground underline underline-offset-3"
           onClick={() => refetch()}
         >
           Try again
@@ -106,7 +106,7 @@ export function CredentialPicker({
               ))}
             </SelectContent>
           </Select>
-          <Button type="button" variant="outline" onClick={() => setDialogOpen(true)} className="shrink-0">
+          <Button type="button" onClick={() => setDialogOpen(true)} className="shrink-0">
             <PlusIcon aria-hidden="true" />
             Add key
           </Button>
@@ -215,7 +215,7 @@ export function MultiHomeCredentialPicker({
         Couldn&apos;t load keys.{" "}
         <button
           type="button"
-          className="rounded-xs font-medium text-foreground underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded-sm font-medium text-foreground underline underline-offset-3"
           onClick={() => queries.forEach((query) => void query.refetch())}
         >
           Try again
@@ -254,7 +254,7 @@ export function MultiHomeCredentialPicker({
             </SelectContent>
           </Select>
           {addKeySpec ? (
-            <Button type="button" variant="outline" onClick={() => setDialogOpen(true)} className="shrink-0">
+            <Button type="button" onClick={() => setDialogOpen(true)} className="shrink-0">
               <PlusIcon aria-hidden="true" />
               Add key
             </Button>

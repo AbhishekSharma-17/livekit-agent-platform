@@ -21,16 +21,7 @@ allow colour-literal   1  src/components/shared/vendor-mark.tsx   # keep: per-ve
 
 # S1 agents (0: was 45 in 23 files; cleared by the S1 screen package)
 
-# S2 connect (17 in 9 files)
-allow opacity-colour   2  src/components/console/connections/connections-table.tsx
-allow opacity-colour   1  src/components/console/connections/deploy-panel.tsx
-allow opacity-colour   1  src/components/console/connections/worker-status-notice.tsx
-allow opacity-colour   4  src/components/console/registry/credential-list.tsx
-allow opacity-colour   1  src/components/console/registry/model-capabilities.tsx
-allow opacity-colour   2  src/components/console/registry/model-combobox.tsx
-allow opacity-colour   4  src/components/console/registry/model-test-panel.tsx
-allow opacity-colour   1  src/components/console/registry/provider-slot-card.tsx
-allow opacity-colour   1  src/components/console/registry/registry-form.tsx
+# S2 connect (0 in 0 files)
 
 # S3 telephony (0: cleared)
 

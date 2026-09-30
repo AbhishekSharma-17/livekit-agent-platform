@@ -119,21 +119,21 @@ export function ProviderSlotCard({
         data-state={expanded ? "open" : "closed"}
         className={cn(
           "rounded-lg border bg-card",
-          error && errorTone === "error" ? "border-danger/60" : "border-border",
+          error && errorTone === "error" ? "border-destructive-border" : "border-border",
         )}
       >
         <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start">
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             <div className="flex flex-col gap-0.5">
-              <h3 id={titleId} className="text-sm font-semibold text-foreground">
+              <h3 id={titleId} className="text-body font-semibold text-foreground">
                 {job ?? title}
               </h3>
               {job ? (
-                <p id={nameId} data-slot="slot-technical-name" className="text-[0.6875rem] leading-4 tracking-[0.02em] text-muted-foreground">
+                <p id={nameId} data-slot="slot-technical-name" className="text-caption leading-4 tracking-[0.02em] text-text-secondary">
                   {title}
                 </p>
               ) : null}
-              {description ? <p className="text-xs text-pretty text-muted-foreground">{description}</p> : null}
+              {description ? <p className="text-caption text-pretty text-text-secondary">{description}</p> : null}
             </div>
             <ProviderSlotSummary value={value} providers={providers} kind={kind} />
             {costEstimate ? <SlotCostChip estimate={costEstimate} /> : null}
@@ -147,7 +147,7 @@ export function ProviderSlotCard({
             ) : null}
             <Button
               type="button"
-              variant={expanded ? "secondary" : "outline"}
+              variant={expanded ? "ghost" : "secondary"}
               size="sm"
               aria-expanded={expanded}
               aria-controls={bodyId}
@@ -162,8 +162,8 @@ export function ProviderSlotCard({
         {error ? (
           <p
             className={cn(
-              "mx-4 mb-3 -mt-1 text-[0.8125rem] leading-[1.125rem]",
-              errorTone === "error" ? "text-danger-text" : "text-warning-text",
+              "mx-4 mb-3 -mt-1 text-label leading-[1.125rem]",
+              errorTone === "error" ? "text-destructive-text" : "text-warning-text",
             )}
           >
             {error}
@@ -187,16 +187,16 @@ export function ProviderSlotCard({
 function SlotCostChip({ estimate }: { estimate: SlotCostEstimate }) {
   const usd = formatUsdPerMin(estimate.usdPerMin);
   if (usd) {
-    return <p className="text-[0.8125rem] text-muted-foreground">{usd} · estimate</p>;
+    return <p className="text-label text-text-secondary">{usd} · estimate</p>;
   }
   return (
-    <p className="flex items-center gap-1.5 text-[0.8125rem] text-muted-foreground">
+    <p className="flex items-center gap-1.5 text-label text-text-secondary">
       no price
       {estimate.onSetPrice ? (
         <button
           type="button"
           onClick={estimate.onSetPrice}
-          className="rounded-xs font-medium text-brand-text underline underline-offset-2 outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded-sm font-medium text-brand underline underline-offset-3 hover:no-underline"
         >
           Set a price
         </button>
@@ -220,11 +220,11 @@ export function ProviderSlotSummary({
 }) {
   const spec = value ? providers.find((p) => p.id === value.provider_id) : undefined;
   if (!value) {
-    return <p className="text-[0.8125rem] text-muted-foreground">Not set</p>;
+    return <p className="text-label text-text-secondary">Not set</p>;
   }
   if (!spec) {
     return (
-      <p className="text-[0.8125rem] text-muted-foreground">
+      <p className="text-label text-text-secondary">
         <span className="font-mono">{value.provider_id}</span>
         {providers.length > 0 ? " · not in the registry" : null}
       </p>
@@ -277,7 +277,7 @@ function SlotSummaryBody({ spec, value, kind }: { spec: ProviderSpec; value: Pro
       <div className="flex items-start gap-2.5">
         <VendorMark vendor={spec.vendor} size="md" className="mt-0.5" />
         <div className="flex min-w-0 flex-col">
-          <span className="text-sm font-medium text-foreground">{spec.label}</span>
+          <span className="text-body font-medium text-foreground">{spec.label}</span>
           {modelId ? <ModelSummary model={summaryModel} modelId={modelId} isDefault={isDefault} /> : null}
           {custom || showChip ? (
             <span className="mt-1 flex flex-wrap items-center gap-1">

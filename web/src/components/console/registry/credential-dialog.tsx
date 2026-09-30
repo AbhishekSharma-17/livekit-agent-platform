@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PlusIcon, TrashIcon } from "lucide-react";
+import { PlusIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { CopyButton } from "@/components/shared/copy-button";
 import { DescriptionList } from "@/components/shared/description-list";
-import { Field } from "@/components/shared/field";
+import { Field, FormError } from "@/components/shared/field";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { useCreateCredential, useProviders, useUpdateCredential } from "@/components/console/lib/api-hooks";
 import { errorMessage } from "@/components/console/shared/error-banner";
@@ -119,6 +119,7 @@ export function CredentialDialog({
   const [pairs, setPairs] = React.useState<KeyValuePair[]>(EMPTY_PAIRS);
   const [errors, setErrors] = React.useState<Record<string, string | undefined>>({});
   const [saved, setSaved] = React.useState<CredentialOut | null>(null);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
 
   const createMutation = useCreateCredential();
   const updateMutation = useUpdateCredential();
@@ -133,6 +134,7 @@ export function CredentialDialog({
     setPairs(EMPTY_PAIRS);
     setErrors({});
     setSaved(null);
+    setSaveError(null);
   }, [credential, mode, specProp]);
 
   // Fresh state every time the dialog opens.
@@ -213,6 +215,7 @@ export function CredentialDialog({
       return;
     }
 
+    setSaveError(null);
     try {
       let result: CredentialOut;
       if (mode === "create") {
@@ -236,7 +239,8 @@ export function CredentialDialog({
       toast.success(mode === "create" ? "Credential added" : "Key rotated");
       setSaved(result);
     } catch (error) {
-      toast.error(`Couldn't save — ${errorMessage(error)}`);
+      // Stays open with everything typed kept (spec section 9); says why in plain words.
+      setSaveError(`Couldn't save the key. ${errorMessage(error)}`);
     }
   }
 
@@ -305,14 +309,14 @@ export function CredentialDialog({
                 <div className="flex items-center gap-2.5">
                   <VendorMark vendor={spec.vendor} size="md" />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">{display!.title}</p>
-                    <p className="text-xs text-muted-foreground">{KIND_LABEL[spec.kind]}</p>
+                    <p className="text-body font-medium text-foreground">{display!.title}</p>
+                    <p className="text-caption text-text-secondary">{KIND_LABEL[spec.kind]}</p>
                   </div>
                 </div>
               ) : null}
 
               {display && display.usedBy.length > 1 ? (
-                <p className="text-[0.8125rem] text-pretty text-muted-foreground">
+                <p className="text-label text-pretty text-text-secondary">
                   One key for all {display.title} services: {display.usedBy.join(", ")}.
                 </p>
               ) : null}
@@ -347,13 +351,13 @@ export function CredentialDialog({
               ) : null}
 
               {spec?.get_key_url && mode === "create" ? (
-                <p className="text-[0.8125rem] text-muted-foreground">
+                <p className="text-label text-text-secondary">
                   Need a key?{" "}
                   <a
                     href={spec.get_key_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="font-medium text-foreground underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="font-medium text-foreground underline underline-offset-3"
                   >
                     Get one from {spec.vendor}
                   </a>
@@ -361,20 +365,23 @@ export function CredentialDialog({
               ) : null}
 
               {mode !== "create" && credential ? <CurrentKey credential={credential} /> : null}
+              <FormError>{saveError}</FormError>
             </>
           )}
         </DialogBody>
 
         <DialogFooter>
           {saved ? (
-            <Button type="submit">Done</Button>
+            <Button type="submit" variant="primary">
+              Done
+            </Button>
           ) : (
             <>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              <Button type="button" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={pending}>
-                {pending ? "Saving…" : mode === "rename" ? "Save name" : "Save key"}
+              <Button type="submit" variant="primary" busy={pending} busyLabel="Saving…">
+                {mode === "rename" ? "Save name" : "Save key"}
               </Button>
             </>
           )}
@@ -404,7 +411,7 @@ function SavedView({ credential, title }: { credential: CredentialOut; title: st
             term: "Fingerprint",
             detail: (
               <span className="inline-flex items-center gap-1">
-                <span className="font-mono text-[0.8125rem] tabular-nums">{credential.fingerprint}</span>
+                <span className="font-mono text-label tabular-nums">{credential.fingerprint}</span>
                 <CopyButton value={credential.fingerprint} label="Copy fingerprint" size="xs" />
               </span>
             ),
@@ -422,8 +429,8 @@ function CurrentKey({ credential }: { credential: CredentialOut }) {
     <div className="flex flex-col gap-3 border-t border-border pt-5">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">Current key</p>
-          <p className="font-mono text-[0.8125rem] text-muted-foreground tabular-nums">{credential.fingerprint}</p>
+          <p className="text-body font-medium text-foreground">Current key</p>
+          <p className="font-mono text-label text-text-secondary tabular-nums">{credential.fingerprint}</p>
         </div>
       </div>
       <TestKeyBlock credentialId={credential.id} />
@@ -436,7 +443,7 @@ function TestKeyBlock({ credentialId }: { credentialId: string }) {
   return (
     <div className="flex flex-col gap-2">
       <div>
-        <Button type="button" variant="outline" size="sm" onClick={() => void run()} disabled={pending}>
+        <Button type="button" size="sm" onClick={() => void run()} disabled={pending}>
           {pending ? "Testing…" : last ? "Test again" : "Test key"}
         </Button>
       </div>
@@ -459,8 +466,8 @@ function SecretPairs({
 }) {
   return (
     <fieldset className="m-0 flex flex-col gap-2 border-0 p-0" aria-describedby="credential-dialog-pairs-hint">
-      <legend className="mb-1.5 text-sm font-medium text-foreground">Secrets</legend>
-      <p id="credential-dialog-pairs-hint" className="-mt-1 text-[0.8125rem] text-muted-foreground">
+      <legend className="mb-1.5 text-label font-medium text-foreground">Secrets</legend>
+      <p id="credential-dialog-pairs-hint" className="-mt-1 text-label text-text-secondary">
         {masked
           ? "Pairs you add replace the stored ones. Leave empty to keep them."
           : "Reference them in tool headers, URLs and bodies as {{ secret.NAME }}."}
@@ -475,7 +482,7 @@ function SecretPairs({
             onChange={(event) =>
               setPairs((prev) => prev.map((p, i) => (i === index ? { ...p, name: event.target.value.toUpperCase() } : p)))
             }
-            className="font-mono text-xs"
+            className="font-mono text-caption"
           />
           <Input
             type="password"
@@ -494,13 +501,13 @@ function SecretPairs({
             aria-label={`Remove secret ${index + 1}`}
             onClick={() => setPairs((prev) => (prev.length === 1 ? EMPTY_PAIRS : prev.filter((_, i) => i !== index)))}
           >
-            <TrashIcon aria-hidden="true" />
+            <Trash2Icon aria-hidden="true" />
           </Button>
         </div>
       ))}
-      {error ? <p className="text-[0.8125rem] text-danger-text">{error}</p> : null}
+      {error ? <p className="text-label text-destructive-text">{error}</p> : null}
       <div>
-        <Button type="button" variant="outline" size="sm" onClick={() => setPairs((prev) => [...prev, { name: "", value: "" }])}>
+        <Button type="button" size="sm" onClick={() => setPairs((prev) => [...prev, { name: "", value: "" }])}>
           <PlusIcon aria-hidden="true" /> Add pair
         </Button>
       </div>

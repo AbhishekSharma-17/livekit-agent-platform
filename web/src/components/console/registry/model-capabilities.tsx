@@ -141,13 +141,13 @@ export function ModelCapabilitiesBlock({ spec, modelId, record, catalogItem, det
     <section
       aria-labelledby={headingId}
       data-slot="model-capabilities"
-      className={cn("flex flex-col gap-2.5 rounded-md border border-border bg-muted/30 px-3 py-3", className)}
+      className={cn("flex flex-col gap-2.5 rounded border border-border bg-muted px-3 py-3", className)}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-        <h4 id={headingId} className="text-[0.8125rem] font-semibold text-foreground">
+        <h4 id={headingId} className="text-label font-semibold text-foreground">
           This model can…
         </h4>
-        <span className="text-xs text-muted-foreground" role="status" aria-live="polite">
+        <span className="text-caption text-text-secondary" role="status" aria-live="polite">
           {declare.isPending ? "Saving…" : declare.isError ? "" : declare.isSuccess ? "Saved" : ""}
         </span>
       </div>
@@ -159,8 +159,8 @@ export function ModelCapabilitiesBlock({ spec, modelId, record, catalogItem, det
           return (
             <li key={row.key} className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
               <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-[0.8125rem] font-medium text-foreground">{row.label}</span>
-                <span className="text-xs text-pretty text-muted-foreground" data-testid={`capability-${row.key}-source`}>
+                <span className="text-label font-medium text-foreground">{row.label}</span>
+                <span className="text-caption text-pretty text-text-secondary" data-testid={`capability-${row.key}-source`}>
                   {answer} · {sourceLabel(resolved.source, spec.vendor)}
                 </span>
               </div>
@@ -178,10 +178,10 @@ export function ModelCapabilitiesBlock({ spec, modelId, record, catalogItem, det
         })}
       </ul>
       {declare.isError ? (
-        <p className="text-xs text-danger-text">Couldn&apos;t save: {errorMessage(declare.error)}</p>
+        <p role="alert" className="text-caption text-destructive-text">Couldn&apos;t save your answer. {errorMessage(declare.error)}</p>
       ) : null}
       {isAdmin ? (
-        <p className="text-xs text-muted-foreground">Your answer overrides the test and the vendor&apos;s list. &ldquo;Auto&rdquo; goes back to them.</p>
+        <p className="text-caption text-text-secondary">Your answer overrides the test and the vendor&apos;s list. &ldquo;Auto&rdquo; goes back to them.</p>
       ) : null}
     </section>
   );
@@ -209,14 +209,14 @@ function DeclareChoice({
     <div
       role="radiogroup"
       aria-label={label}
-      className="inline-flex shrink-0 self-start rounded-md border border-border bg-background p-0.5"
+      className="inline-flex shrink-0 self-start rounded border border-border bg-background p-0.5"
     >
       {options.map((option) => (
         <label
           key={option.value}
           className={cn(
-            "relative cursor-pointer rounded-sm px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors duration-(--dur-2)",
-            "hover:text-foreground has-[:checked]:bg-brand-soft has-[:checked]:text-brand-text",
+            "relative cursor-pointer rounded-sm px-2.5 py-1 text-caption font-medium text-text-secondary transition-colors duration-(--duration-base)",
+            "hover:text-foreground has-[:checked]:bg-brand-subtle has-[:checked]:text-brand",
             "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
             disabled && "pointer-events-none opacity-60",
           )}

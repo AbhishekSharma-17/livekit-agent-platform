@@ -1,13 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { CircleAlertIcon, CircleCheckIcon, CircleHelpIcon, FlaskConicalIcon, RotateCwIcon, XIcon } from "lucide-react";
+import { CircleAlertIcon, CircleCheckIcon, CircleHelpIcon, FlaskConicalIcon, RefreshCwIcon, XIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { GatedButton } from "@/components/shared/gated-button";
 import { Icon } from "@/components/shared/icon";
 import { RelativeTime } from "@/components/shared/relative-time";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { useCredentials, useProviderModel, useTestModel } from "@/components/console/lib/api-hooks";
 import { useWriteAccess } from "@/components/console/lib/roles";
 import { isInferenceProvider } from "@/components/console/registry/provider-meta";
@@ -23,7 +23,7 @@ import type { ModelCapabilities, ModelTestResult, ProviderModelOut, ProviderSpec
  *
  * The chip lives here rather than in `CapabilityBadge` — it needs a danger
  * tone and a relative time, which the badge's three-tone metadata does not
- * carry — so it is a `StatusChip` (V4-09's choice).
+ * carry — so it is a `StatusPill` (V4-09's choice).
  *
  * Everything a vendor sends back (`message`, `sample`, probe messages) is
  * untrusted data: plain text in a mono box, never markdown or HTML.
@@ -94,31 +94,31 @@ export function TestedChip({ state, className }: { state: TestedState; className
   switch (state.kind) {
     case "ok":
       return (
-        <StatusChip tone="success" size="sm" className={className}>
+        <StatusPill tone="success" size="sm" className={className}>
           <span data-testid="tested-chip">
             Tested ✓ <RelativeTime iso={state.at} />
           </span>
-        </StatusChip>
+        </StatusPill>
       );
     case "failed":
       return (
-        <StatusChip tone="danger" size="sm" className={cn("max-w-full min-w-0", className)}>
+        <StatusPill tone="danger" size="sm" className={cn("max-w-full min-w-0", className)}>
           <span data-testid="tested-chip" className="truncate" title={`Test failed · ${state.reason}`}>
             Test failed · {state.reason}
           </span>
-        </StatusChip>
+        </StatusPill>
       );
     case "no-probe":
       return (
-        <StatusChip tone="neutral" size="sm" className={className}>
+        <StatusPill tone="neutral" size="sm" className={className}>
           <span data-testid="tested-chip">No test for this provider</span>
-        </StatusChip>
+        </StatusPill>
       );
     default:
       return (
-        <StatusChip tone="neutral" size="sm" className={className}>
+        <StatusPill tone="neutral" size="sm" className={className}>
           <span data-testid="tested-chip">Untested</span>
-        </StatusChip>
+        </StatusPill>
       );
   }
 }
@@ -161,7 +161,7 @@ export function testErrorMessage(error: unknown): string {
     if (error.status === 403) return "Testing a model needs the builder role or higher.";
     if (error.status === 422) return `Couldn't run the test: ${error.message}`;
   }
-  return `Couldn't run the test: ${errorMessage(error)}`;
+  return `Couldn't run the test. ${errorMessage(error)}`;
 }
 
 export interface ModelTestControlsProps {
@@ -246,7 +246,7 @@ export function ModelTestControls({
         {spec.probe ? (
           <GatedButton
             type="button"
-            variant="outline"
+           
             size="sm"
             allowed={canWrite}
             reason="Testing a model needs the builder role or higher."
@@ -260,18 +260,18 @@ export function ModelTestControls({
           </GatedButton>
         ) : null}
         {spec.probe && missingKey ? (
-          <span className="text-xs text-muted-foreground">Choose a key to test this model.</span>
+          <span className="text-caption text-text-secondary">Choose a key to test this model.</span>
         ) : null}
       </div>
       {panelOpen ? (
         <div id={panelId} role="region" aria-label="Test result" aria-live="polite" aria-busy={test.isPending}>
           {test.isPending ? (
-            <p className="rounded-md border border-border bg-muted/40 px-3 py-2.5 text-[0.8125rem] text-muted-foreground">
+            <p className="rounded border border-border bg-muted px-3 py-2.5 text-label text-text-secondary">
               Calling the vendor once with this model…
             </p>
           ) : test.isError ? (
             <PanelFrame tone="danger" onClose={() => setPanelOpen(false)}>
-              <p className="text-[0.8125rem] text-danger-text">{testErrorMessage(test.error)}</p>
+              <p className="text-label text-destructive-text">{testErrorMessage(test.error)}</p>
             </PanelFrame>
           ) : result ? (
             <ModelTestPanel result={result} onRunAgain={() => run(true)} onClose={() => setPanelOpen(false)} />
@@ -296,8 +296,8 @@ function PanelFrame({
       data-slot="model-test-panel"
       data-tone={tone}
       className={cn(
-        "relative flex min-w-0 flex-col gap-3 rounded-md border px-3 py-3 pr-10 sm:px-4",
-        tone === "success" ? "border-success/40" : tone === "danger" ? "border-danger/40" : "border-border",
+        "relative flex min-w-0 flex-col gap-3 rounded border px-3 py-3 pr-10 sm:px-4",
+        tone === "success" ? "border-success-border" : tone === "danger" ? "border-destructive-border" : "border-border",
         "bg-card",
       )}
     >
@@ -368,12 +368,12 @@ export function ModelTestPanel({
           size="sm"
           className={cn(
             "mt-0.5 shrink-0",
-            result.ok === true ? "text-success-text" : result.ok === false ? "text-danger-text" : "text-muted-foreground",
+            result.ok === true ? "text-success-text" : result.ok === false ? "text-destructive-text" : "text-text-secondary",
           )}
         />
         <div className="flex min-w-0 flex-col gap-0.5">
-          <p className="text-sm font-medium text-foreground">{title}</p>
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+          <p className="text-body font-medium text-foreground">{title}</p>
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-caption text-text-secondary">
             {typeof result.latency_ms === "number" ? (
               <span className="tabular-nums" data-testid="test-latency">
                 {result.latency_ms} ms
@@ -391,16 +391,16 @@ export function ModelTestPanel({
       {result.message ? <UntrustedBox label="What the vendor said">{result.message}</UntrustedBox> : null}
 
       {probes.length > 0 ? (
-        <ul className="flex flex-col divide-y divide-border rounded-md border border-border" aria-label="Checks">
+        <ul className="flex flex-col divide-y divide-border rounded border border-border" aria-label="Checks">
           {probes.map((probe) => (
             <li key={probe.name} className="flex min-w-0 flex-col gap-1 px-3 py-2 sm:flex-row sm:items-start sm:gap-3">
               <span className="flex shrink-0 items-center gap-2 sm:w-40">
-                <StatusChip tone={probe.ok === true ? "success" : probe.ok === false ? "danger" : "neutral"} size="sm">
+                <StatusPill tone={probe.ok === true ? "success" : probe.ok === false ? "danger" : "neutral"} size="sm">
                   {probe.ok === true ? "Passed" : probe.ok === false ? "Failed" : "Inconclusive"}
-                </StatusChip>
-                <span className="text-[0.8125rem] text-foreground">{PROBE_LABEL[probe.name] ?? probe.name}</span>
+                </StatusPill>
+                <span className="text-label text-foreground">{PROBE_LABEL[probe.name] ?? probe.name}</span>
               </span>
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-xs text-muted-foreground">
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-caption text-text-secondary">
                 {typeof probe.latency_ms === "number" ? <span className="tabular-nums">{probe.latency_ms} ms</span> : null}
                 {probe.message ? <span className="font-mono break-words whitespace-pre-wrap">{probe.message}</span> : null}
               </span>
@@ -411,13 +411,13 @@ export function ModelTestPanel({
 
       {known.length > 0 ? (
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs font-medium text-muted-foreground">What the test found</p>
+          <p className="text-caption font-medium text-text-secondary">What the test found</p>
           <ul className="flex flex-wrap gap-1.5">
             {known.map(({ key, label }) => (
               <li key={key}>
-                <StatusChip tone={detected[key] ? "success" : "neutral"} size="sm">
+                <StatusPill tone={detected[key] ? "success" : "neutral"} size="sm">
                   {detected[key] ? label : `${label}: no`}
-                </StatusChip>
+                </StatusPill>
               </li>
             ))}
           </ul>
@@ -426,15 +426,15 @@ export function ModelTestPanel({
 
       {result.sample ? <UntrustedBox label="What the model said">{result.sample}</UntrustedBox> : null}
 
-      <p className="text-xs text-muted-foreground" data-testid="test-cost">
+      <p className="text-caption text-text-secondary" data-testid="test-cost">
         {costLine}
       </p>
-      <p className="text-xs text-pretty text-muted-foreground" data-testid="test-caveat">
+      <p className="text-caption text-pretty text-text-secondary" data-testid="test-caveat">
         A pass proves the vendor accepts this model with this key, not that the agent can load it; the first call checks that.
       </p>
       {result.cached && onRunAgain ? (
-        <Button type="button" variant="outline" size="sm" className="self-start" onClick={onRunAgain}>
-          <RotateCwIcon aria-hidden="true" />
+        <Button type="button" size="sm" className="self-start" onClick={onRunAgain}>
+          <RefreshCwIcon aria-hidden="true" />
           Run it again now
         </Button>
       ) : null}
@@ -446,12 +446,12 @@ export function ModelTestPanel({
 function UntrustedBox({ label, children }: { label: string; children: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="text-caption font-medium text-text-secondary">{label}</p>
       <pre
         data-slot="untrusted-text"
         tabIndex={0}
         aria-label={label}
-        className="max-h-32 overflow-auto rounded-sm border border-border bg-muted/50 px-2.5 py-2 font-mono text-xs break-words whitespace-pre-wrap text-foreground"
+        className="max-h-32 overflow-auto rounded-sm border border-border bg-muted px-2.5 py-2 font-mono text-caption break-words whitespace-pre-wrap text-foreground"
       >
         {children}
       </pre>

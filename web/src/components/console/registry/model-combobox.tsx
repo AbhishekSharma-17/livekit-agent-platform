@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronsUpDownIcon, CircleSlashIcon, PencilLineIcon, SearchIcon } from "lucide-react";
+import { ChevronsUpDownIcon, CircleSlashIcon, PencilIcon, SearchIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -342,7 +342,7 @@ function ModelComboboxView({
         <Button
           id={id}
           type="button"
-          variant="outline"
+         
           role="combobox"
           aria-expanded={open}
           aria-controls={open ? listId : undefined}
@@ -357,28 +357,28 @@ function ModelComboboxView({
               modelId={effective}
               isDefault={value.trim() === "" && Boolean(defaultModel)}
               // The dark outline trigger lightens on hover/open; the muted id would drop below 4.5:1 there.
-              idClassName="dark:text-foreground/80"
+              idClassName="dark:text-text-secondary"
             />
             {custom ? <CapabilityBadge kind="custom" /> : null}
           </span>
-          <ChevronsUpDownIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <ChevronsUpDownIcon className="size-4 shrink-0 text-text-secondary" aria-hidden="true" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-(--radix-popover-trigger-width) min-w-72 p-0" aria-label="Choose a model">
         <Command shouldFilter={false} label="Models">
           <CommandInput value={query} onValueChange={setQuery} placeholder="Search models or type an id" />
           {provider && isOpenRouterSpeech(provider.id) ? (
-            <p className="px-3 pt-2 text-xs text-warning-text">Not for live calls — OpenRouter answers one whole request per utterance.</p>
+            <p className="px-3 pt-2 text-caption text-warning-text">Not for live calls — OpenRouter answers one whole request per utterance.</p>
           ) : null}
           {hasVision ? (
-            <div className="flex items-center gap-2 px-3 pt-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 px-3 pt-2 text-caption text-text-secondary">
               <button
                 type="button"
                 aria-pressed={visionOnly}
                 onClick={() => setVisionOnly((v) => !v)}
                 className={cn(
-                  "rounded-xs px-1.5 py-0.5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  visionOnly ? "bg-brand-soft text-brand-text" : "bg-muted text-muted-foreground hover:text-foreground",
+                  "rounded-sm px-1.5 py-0.5 font-medium",
+                  visionOnly ? "bg-brand-subtle text-brand" : "bg-muted text-text-secondary hover:text-foreground",
                 )}
               >
                 Vision only
@@ -401,14 +401,14 @@ function ModelComboboxView({
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="flex flex-wrap items-center justify-between gap-1.5">
                         <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-                          <span className="text-sm text-foreground">{model.label}</span>
+                          <span className="text-body text-foreground">{model.label}</span>
                           {model.id === defaultModel ? (
-                            <span className="rounded-xs bg-muted px-1 text-[0.6875rem] leading-4 font-medium text-muted-foreground">
+                            <span className="rounded-sm bg-muted px-1 text-caption leading-4 font-medium text-text-secondary">
                               Default
                             </span>
                           ) : null}
                           {model.deprecated ? (
-                            <span className="rounded-xs bg-warning-soft px-1 text-[0.6875rem] leading-4 font-medium text-warning-text">
+                            <span className="rounded-sm bg-warning-subtle px-1 text-caption leading-4 font-medium text-warning-text">
                               Deprecated
                             </span>
                           ) : null}
@@ -417,9 +417,9 @@ function ModelComboboxView({
                         </span>
                         <ModelPriceHint priceQuotes={live.priceQuotes} modelId={model.id} />
                       </span>
-                      <span className="truncate font-mono text-xs text-muted-foreground">{model.id}</span>
+                      <span className="truncate font-mono text-caption text-text-secondary">{model.id}</span>
                       <ModelBlurb text={blurbFor(model.id, catalogById.get(model.id))} />
-                      {model.note ? <span className="text-xs text-muted-foreground">{model.note}</span> : null}
+                      {model.note ? <span className="text-caption text-text-secondary">{model.note}</span> : null}
                     </div>
                   </CommandItem>
                 ))}
@@ -449,7 +449,7 @@ function ModelComboboxView({
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="flex flex-wrap items-center justify-between gap-1.5">
                         <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-                          <span className="min-w-0 truncate text-sm text-foreground" title={item.label}>
+                          <span className="min-w-0 truncate text-body text-foreground" title={item.label}>
                             {item.label}
                           </span>
                           {catalogSaysVision(item.meta) === true ? <CapabilityBadge kind="vision" /> : null}
@@ -457,7 +457,7 @@ function ModelComboboxView({
                         </span>
                         <ModelPriceHint priceQuotes={live.priceQuotes} modelId={item.id} />
                       </span>
-                      <span className="truncate font-mono text-xs text-muted-foreground" title={item.id}>
+                      <span className="truncate font-mono text-caption text-text-secondary" title={item.id}>
                         {item.id}
                       </span>
                       <ModelBlurb text={blurbFor(item.id, item)} />
@@ -465,7 +465,7 @@ function ModelComboboxView({
                   </CommandItem>
                 ))}
                 {live.vendorSearching ? (
-                  <p className="px-2 py-1.5 text-xs text-muted-foreground">Searching {searchVendor}…</p>
+                  <p className="px-2 py-1.5 text-caption text-text-secondary">Searching {searchVendor}…</p>
                 ) : null}
               </CommandGroup>
             ) : null}
@@ -480,7 +480,7 @@ function ModelComboboxView({
                     className="items-start"
                   >
                     <div className="flex min-w-0 flex-1 flex-col gap-1">
-                      <span className="truncate font-mono text-xs text-foreground" title={record.model_id}>
+                      <span className="truncate font-mono text-caption text-foreground" title={record.model_id}>
                         {record.model_id}
                       </span>
                       {provider ? (
@@ -495,7 +495,7 @@ function ModelComboboxView({
               <CommandGroup heading="Custom">
                 {offerVendorSearch ? (
                   <CommandItem value={`__search__:${typed}`} onSelect={() => setVendorQuery(typed)}>
-                    <SearchIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+                    <SearchIcon className="size-4 text-text-secondary" aria-hidden="true" />
                     <span className="min-w-0 truncate">
                       Search {searchVendor} for <span className="font-mono">&ldquo;{typed}&rdquo;</span>
                     </span>
@@ -504,12 +504,12 @@ function ModelComboboxView({
                 {offerCustom ? (
                   typedIssue?.severity === "error" ? (
                     <CommandItem value="__custom__:invalid" disabled data-invalid="" className="items-start">
-                      <CircleSlashIcon className="mt-0.5 size-4 text-danger-text" aria-hidden="true" />
-                      <span className="min-w-0 text-pretty text-danger-text">{idIssueSentence(typedIssue, "this as a model id")}</span>
+                      <CircleSlashIcon className="mt-0.5 size-4 text-destructive-text" aria-hidden="true" />
+                      <span className="min-w-0 text-pretty text-destructive-text">{idIssueSentence(typedIssue, "this as a model id")}</span>
                     </CommandItem>
                   ) : (
                     <CommandItem value={`__custom__:${typed}`} onSelect={() => choose(typed)}>
-                      <PencilLineIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+                      <PencilIcon className="size-4 text-text-secondary" aria-hidden="true" />
                       <span className="min-w-0 truncate">
                         Use custom model: <span className="font-mono">{typed}</span>
                       </span>
@@ -529,7 +529,7 @@ function ModelComboboxView({
 export function ModelBlurb({ text, className }: { text: string | null | undefined; className?: string }) {
   if (!text) return null;
   return (
-    <span data-slot="model-blurb" className={cn("text-xs text-pretty text-foreground/80", className)}>
+    <span data-slot="model-blurb" className={cn("text-caption text-pretty text-text-secondary", className)}>
       {text}
     </span>
   );
@@ -555,7 +555,7 @@ function dedupe(items: CatalogItem[]): CatalogItem[] {
 function ModelPriceHint({ priceQuotes, modelId }: { priceQuotes: Map<string, string>; modelId: string }) {
   const usd = priceQuotes.get(modelId);
   if (!usd) return null;
-  return <span className="shrink-0 font-mono text-xs text-muted-foreground">{usd}</span>;
+  return <span className="shrink-0 font-mono text-caption text-text-secondary">{usd}</span>;
 }
 
 /** Label first, id second (mono); custom ids show "Custom model". */
@@ -571,16 +571,16 @@ export function ModelSummary({
   idClassName?: string;
 }) {
   if (!modelId) {
-    return <span className="text-sm text-muted-foreground">Choose a model</span>;
+    return <span className="text-body text-text-secondary">Choose a model</span>;
   }
   return (
     <span className="flex min-w-0 flex-col">
-      <span className="flex items-center gap-1.5 truncate text-sm text-foreground">
+      <span className="flex items-center gap-1.5 truncate text-body text-foreground">
         {model ? model.label : "Custom model"}
-        {isDefault ? <span className="text-xs text-muted-foreground">· Default</span> : null}
-        {model?.deprecated ? <span className="text-xs text-warning-text">· Deprecated</span> : null}
+        {isDefault ? <span className="text-caption text-text-secondary">· Default</span> : null}
+        {model?.deprecated ? <span className="text-caption text-warning-text">· Deprecated</span> : null}
       </span>
-      <span className={cn("truncate font-mono text-xs text-muted-foreground", idClassName)}>{modelId}</span>
+      <span className={cn("truncate font-mono text-caption text-text-secondary", idClassName)}>{modelId}</span>
     </span>
   );
 }

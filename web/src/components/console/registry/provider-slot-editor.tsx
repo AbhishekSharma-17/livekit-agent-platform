@@ -6,7 +6,7 @@ import { ChevronRightIcon, ExternalLinkIcon } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { CapabilityBadge } from "@/components/shared/capability-badge";
 import { Field } from "@/components/shared/field";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { useProviderModel, useProviders } from "@/components/console/lib/api-hooks";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
@@ -316,7 +316,7 @@ export function ProviderSlotEditor({
       {current && value ? (
         <>
           {current.notes ? (
-            <p data-slot="provider-notes" className="text-[0.8125rem] text-pretty break-words text-muted-foreground">
+            <p data-slot="provider-notes" className="text-label text-pretty break-words text-text-secondary">
               {current.notes}
             </p>
           ) : null}
@@ -342,7 +342,7 @@ export function ProviderSlotEditor({
 
           {optionFields.length > 0 || showEffort ? (
             <div className="flex flex-col gap-3">
-              <h4 className="text-sm font-semibold text-foreground">Options</h4>
+              <h4 className="text-body font-semibold text-foreground">Options</h4>
               {showEffort ? (
                 <ReasoningEffortField
                   id={`${prefix}-field-${REASONING_EFFORT_FIELD}`}
@@ -359,7 +359,7 @@ export function ProviderSlotEditor({
                 />
               ) : null}
               {hiddenByModel.size > 0 ? (
-                <p data-slot="hidden-by-model" className="text-xs text-pretty text-muted-foreground">
+                <p data-slot="hidden-by-model" className="text-caption text-pretty text-text-secondary">
                   {hiddenFieldsNote(current, hiddenByModel)}
                 </p>
               ) : null}
@@ -384,7 +384,7 @@ export function ProviderSlotEditor({
           ) : null}
         </>
       ) : value && !current ? (
-        <p className="text-[0.8125rem] text-warning-text">
+        <p className="text-label text-warning-text">
           This slot uses <span className="font-mono">{value.provider_id}</span>, which isn&apos;t in the provider registry any
           more. Pick another provider.
         </p>
@@ -547,15 +547,15 @@ function RunChoiceControl({
   ];
   return (
     <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-      <legend className="mb-2 text-sm font-medium text-foreground">Run it with</legend>
+      <legend className="mb-2 text-label font-medium text-foreground">Run it with</legend>
       <div className="grid gap-2 sm:grid-cols-2">
         {options.map((option) => (
           <label
             key={option.value}
             className={cn(
-              "relative flex cursor-pointer flex-col gap-0.5 rounded-md border border-border bg-background px-3 py-2.5",
-              "transition-colors duration-(--dur-2) hover:bg-accent",
-              "has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft",
+              "relative flex cursor-pointer flex-col gap-0.5 rounded border border-border bg-background px-3 py-2.5",
+              "transition-colors duration-(--duration-base) hover:bg-muted",
+              "has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle",
               "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background",
             )}
           >
@@ -568,16 +568,16 @@ function RunChoiceControl({
               className="sr-only"
               aria-describedby={`${name}-${option.value}-hint`}
             />
-            <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
+            <span className="flex flex-wrap items-center gap-2 text-body font-medium text-foreground">
               {option.title}
               {option.value === "inference" ? <CapabilityBadge kind="no-key" /> : null}
               {option.value === "inference" && recommended ? (
-                <StatusChip tone="info" size="sm">
+                <StatusPill tone="info" size="sm">
                   Recommended
-                </StatusChip>
+                </StatusPill>
               ) : null}
             </span>
-            <span id={`${name}-${option.value}-hint`} className="text-xs text-muted-foreground">
+            <span id={`${name}-${option.value}-hint`} className="text-caption text-text-secondary">
               {option.hint}
             </span>
           </label>
@@ -612,14 +612,14 @@ function VendorList({
   return (
     <div className="flex flex-col gap-2">
       <div role="radiogroup" aria-labelledby={legendId} className="flex flex-col gap-2">
-        <span id={legendId} className="text-sm font-medium text-foreground">
+        <span id={legendId} className="text-label font-medium text-foreground">
           Vendor
         </span>
         {deploymentType === "self_hosted" && kind === "tts" ? (
-          <p className="text-xs text-muted-foreground">{RECOMMENDED_STACK.selfHostedAlternatives}</p>
+          <p className="text-caption text-text-secondary">{RECOMMENDED_STACK.selfHostedAlternatives}</p>
         ) : null}
         {selectable.length === 0 ? (
-          <p className="text-[0.8125rem] text-muted-foreground">No {kind === "llm" ? "language model" : "provider"} is available for this slot yet.</p>
+          <p className="text-label text-text-secondary">No {kind === "llm" ? "language model" : "provider"} is available for this slot yet.</p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">
             {selectable.map((spec) => (
@@ -640,12 +640,12 @@ function VendorList({
         <Collapsible>
           <CollapsibleTrigger
             className={cn(
-              "group/more inline-flex items-center gap-1 rounded-xs text-[0.8125rem] font-medium text-muted-foreground outline-none",
-              "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+              "group/more inline-flex items-center gap-1 rounded-sm text-label font-medium text-text-secondary outline-none",
+              "hover:text-foreground",
             )}
           >
             <ChevronRightIcon
-              className="size-3.5 transition-transform duration-(--dur-2) group-data-[state=open]/more:rotate-90"
+              className="size-3.5 transition-transform duration-(--duration-base) group-data-[state=open]/more:rotate-90"
               aria-hidden="true"
             />
             More providers ({unavailable.length})
@@ -653,10 +653,10 @@ function VendorList({
           <CollapsibleContent className="mt-3 flex flex-col gap-4">
             {groupUnavailable(unavailable).map((group) => (
               <div key={group.chip} className="flex flex-col gap-2">
-                <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  <StatusChip tone="neutral" size="sm">
+                <p className="flex flex-wrap items-center gap-1.5 text-caption text-text-secondary">
+                  <StatusPill tone="neutral" size="sm">
                     {group.chip}
-                  </StatusChip>
+                  </StatusPill>
                   {group.sharedReason ? <span className="text-pretty">{group.sharedReason}</span> : null}
                 </p>
                 <ul className="grid gap-x-3 gap-y-1.5 sm:grid-cols-2" aria-label={`${group.chip}: providers you can't pick yet`}>
@@ -664,8 +664,8 @@ function VendorList({
                     <li key={spec.id} data-provider-id={spec.id} data-unavailable="" className="flex min-w-0 items-start gap-2 py-0.5">
                       <VendorMark vendor={spec.vendor} size="sm" className="opacity-60" />
                       <span className="flex min-w-0 flex-col">
-                        <span className="truncate text-[0.8125rem] leading-5 text-muted-foreground">{spec.label}</span>
-                        {group.sharedReason ? null : <span className="text-xs text-muted-foreground">{reason.reason}</span>}
+                        <span className="truncate text-label leading-5 text-text-secondary">{spec.label}</span>
+                        {group.sharedReason ? null : <span className="text-caption text-text-secondary">{reason.reason}</span>}
                       </span>
                     </li>
                   ))}
@@ -720,9 +720,9 @@ function VendorCard({
   return (
     <div
       className={cn(
-        "relative flex flex-col gap-1.5 rounded-md border border-border bg-background px-3 py-2.5",
-        "transition-colors duration-(--dur-2) hover:bg-accent",
-        "has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft",
+        "relative flex flex-col gap-1.5 rounded border border-border bg-background px-3 py-2.5",
+        "transition-colors duration-(--duration-base) hover:bg-muted",
+        "has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle",
         "has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring has-[input:focus-visible]:ring-offset-2 has-[input:focus-visible]:ring-offset-background",
       )}
       data-provider-id={spec.id}
@@ -732,16 +732,16 @@ function VendorCard({
         <VendorMark vendor={spec.vendor} size="sm" className="mt-0.5" />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="flex flex-wrap items-center gap-1.5">
-            <span className="text-sm font-medium text-foreground">{spec.label}</span>
+            <span className="text-body font-medium text-foreground">{spec.label}</span>
             {isVerified(spec) ? (
-              <StatusChip tone="success" size="sm">
+              <StatusPill tone="success" size="sm">
                 Verified
-              </StatusChip>
+              </StatusPill>
             ) : null}
             {recommended ? (
-              <StatusChip tone="info" size="sm">
+              <StatusPill tone="info" size="sm">
                 Recommended
-              </StatusChip>
+              </StatusPill>
             ) : null}
           </span>
           <span className="flex flex-wrap items-center gap-1">
@@ -752,15 +752,15 @@ function VendorCard({
             {spec.requires_credential === false ? <CapabilityBadge kind="no-key" /> : null}
             {streamChip ? <StreamingChip copy={streamChip} /> : null}
             {liveCallsNote ? (
-              <StatusChip tone="warning" size="sm">
+              <StatusPill tone="warning" size="sm">
                 {liveCallsNote}
-              </StatusChip>
+              </StatusPill>
             ) : null}
           </span>
         </span>
       </label>
       {spec.docs_url || spec.get_key_url ? (
-        <span className="flex gap-3 pl-[1.875rem] text-xs">
+        <span className="flex gap-3 pl-[1.875rem] text-caption">
           {spec.docs_url ? <VendorLink href={spec.docs_url}>Docs</VendorLink> : null}
           {spec.get_key_url ? <VendorLink href={spec.get_key_url}>Get a key</VendorLink> : null}
         </span>
@@ -777,9 +777,9 @@ function VendorCard({
  */
 export function StreamingChip({ copy }: { copy: StreamingChipCopy }) {
   const chip = (
-    <StatusChip tone={copy.tone} size="sm">
+    <StatusPill tone={copy.tone} size="sm">
       {copy.label}
-    </StatusChip>
+    </StatusPill>
   );
   if (!copy.tip) return chip;
   return (
@@ -795,7 +795,7 @@ function VendorLink({ href, children }: { href: string; children: React.ReactNod
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="relative inline-flex items-center gap-0.5 rounded-xs font-medium text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+      className="relative inline-flex items-center gap-0.5 rounded-sm font-medium text-text-secondary underline-offset-3 hover:text-foreground hover:underline"
     >
       {children}
       <ExternalLinkIcon className="size-3" aria-hidden="true" />

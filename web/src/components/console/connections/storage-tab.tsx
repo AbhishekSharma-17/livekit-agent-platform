@@ -1,4 +1,6 @@
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert } from "@/components/ui/alert";
+import { MetaList } from "@/components/shared/data-display";
+import { Section, SectionRow } from "@/components/shared/section";
 import type { ConnectionOut } from "@/contracts/lkap-contracts";
 
 /**
@@ -16,25 +18,27 @@ import type { ConnectionOut } from "@/contracts/lkap-contracts";
  * only show the connection's current `storage_config_id` (already visible
  * via `PUT /v1/connections/{id}`) and point at where a config will be
  * created, rather than a picker over a real list or a "Test" action against
- * one — there is nothing to pick from or test yet.
+ * one — there is nothing to pick from or test yet. The "unavailable" state
+ * (docs/ui/DESIGN-SYSTEM.md section 8.8) says so and what happens meanwhile.
  */
 export function StorageTab({ connection }: { connection: ConnectionOut }) {
   return (
-    <div className="flex flex-col gap-4">
-      <Alert>
-        <AlertDescription>
-          Custom storage for recordings can&apos;t be set up from the console yet. Until it can, this connection uses
-          the platform&apos;s default storage.
-        </AlertDescription>
-      </Alert>
-      <p className="text-sm text-muted-foreground">
-        Storage for this connection:{" "}
-        {connection.storage_config_id ? (
-          <span className="font-mono text-foreground">{connection.storage_config_id}</span>
-        ) : (
-          <span className="font-medium text-foreground">Platform default</span>
-        )}
-      </p>
-    </div>
+    <Section id="connection-storage" title="Recording storage" description="Where this connection's recordings are kept.">
+      <SectionRow className="flex flex-col gap-4">
+        <Alert tone="info" title="Custom storage isn't available yet">
+          Custom storage for recordings can&apos;t be set up from the console yet. Until it can, this connection uses the
+          platform&apos;s default storage.
+        </Alert>
+        <MetaList
+          items={[
+            {
+              term: "Storage for this connection",
+              // Never an internal id (spec section 3): there is no storage-config name to show yet.
+              value: connection.storage_config_id ? "Custom storage" : "Platform default",
+            },
+          ]}
+        />
+      </SectionRow>
+    </Section>
   );
 }

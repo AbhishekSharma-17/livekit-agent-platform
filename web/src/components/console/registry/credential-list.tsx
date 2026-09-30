@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { FlaskConicalIcon, KeyRoundIcon, MoreHorizontalIcon, PencilIcon, PlugIcon, RefreshCwIcon, TrashIcon } from "lucide-react";
+import { FlaskConicalIcon, KeyRoundIcon, PencilIcon, PlugIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,34 +14,31 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/skeleton";
 import { CopyButton } from "@/components/shared/copy-button";
 import { EmptyState } from "@/components/shared/empty-state";
+import { FormError } from "@/components/shared/field";
+import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "@/components/shared/list-search";
+import { NewResourceButton } from "@/components/shared/new-resource-button";
 import { PageHeader } from "@/components/shared/page-header";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
-import { StatusChip } from "@/components/shared/status-chip";
+import { RowMenu, type RowMenuAction } from "@/components/shared/row-menu";
+import { StatusPill } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { useSetBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
 import { useAgents, useCredentials, useDeleteCredential, useDisableApps, useEnableApps, useProviders, useTools } from "@/components/console/lib/api-hooks";
 import { CredentialDialog, type CredentialDialogMode } from "@/components/console/registry/credential-dialog";
 import { OUTCOME_LABEL, OUTCOME_TONE, useCredentialTest } from "@/components/console/registry/credential-test";
 import { KIND_LABEL, credentialDisplay, kindRank } from "@/components/console/registry/provider-meta";
+import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { useCan } from "@/components/console/shared/permission";
+import { RowsSkeleton } from "@/components/console/registry/rows-skeleton";
 import { EnableComposioDialog } from "@/components/console/tools/apps/enable-composio-dialog";
 import { appsErrorMessage, composioStatusChip, useComposioStatus } from "@/components/console/tools/apps/use-composio";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { pluralize } from "@/lib/format";
 import { ApiError } from "@/lib/api";
 import type { AgentOut, CredentialOut, ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
-import { LoadingRegion } from "@/components/shared/loading-state";
 
 /**
  * `lkap_contracts.tool_providers` module-level constants (not pydantic
@@ -132,9 +129,6 @@ export function CredentialList() {
   const toolsQuery = useTools();
   const [dialog, setDialog] = React.useState<DialogState | null>(null);
   const [deleting, setDeleting] = React.useState<CredentialOut | null>(null);
-  // Credentials need `admin` server-side (`auth/roles.py::ROUTE_POLICY`).
-  const { canWrite } = useWriteAccess("admin");
-  const writeReason = writeAccessReason("admin");
 
   const registry = React.useMemo(() => providersQuery.data?.providers ?? [], [providersQuery.data]);
 
@@ -172,33 +166,36 @@ export function CredentialList() {
     });
   }, [credentialsQuery.data, specs, registry]);
 
+  const titleOf = (row: CredentialOut) => {
+    const spec = specs.get(row.provider_id);
+    return spec ? credentialDisplay(spec, registry).title : row.provider_id;
+  };
+  const kindsOf = (row: CredentialOut) => {
+    const spec = specs.get(row.provider_id);
+    return spec ? [KIND_LABEL[spec.kind], ...credentialDisplay(spec, registry).usedBy].join(" ") : "";
+  };
+  const search = useListSearch("provider-keys", rows, (row) => [row.label, titleOf(row), kindsOf(row), row.fingerprint]);
+  const query = search.query;
+
+  // Credentials are admin writes server-side (`auth/roles.py::ROUTE_POLICY`):
+  // below admin the page-level action is a note that names the next step (D12).
   const addButton = (
-    <Button
-      type="button"
-      disabled={!canWrite}
-      title={canWrite ? undefined : writeReason}
-      onClick={() => setDialog({ mode: "create" })}
-    >
+    <NewResourceButton min="admin" readOnlyNote="Ask an admin to add credentials." onClick={() => setDialog({ mode: "create" })}>
       Add credential
-    </Button>
+    </NewResourceButton>
   );
 
   const openDialog = (mode: CredentialDialogMode, credential: CredentialOut) => setDialog({ mode, credential });
 
   let body: React.ReactNode;
   if (credentialsQuery.isLoading) {
-    body = (
-      <LoadingRegion label="Loading credentials" className="flex flex-col gap-2">
-        {[0, 1, 2].map((i) => (
-          <Skeleton key={i} className="h-14 w-full" />
-        ))}
-      </LoadingRegion>
-    );
+    body = <RowsSkeleton label="Loading credentials" mark />;
   } else if (credentialsQuery.isError) {
     body = (
       <ErrorBanner
-        message={`Couldn't load credentials — ${errorMessage(credentialsQuery.error)}`}
-        onRetry={() => credentialsQuery.refetch()}
+        error={credentialsQuery.error}
+        context={{ action: "load credentials" }}
+        onRetry={() => void credentialsQuery.refetch()}
       />
     );
   } else if (rows.length === 0) {
@@ -206,7 +203,7 @@ export function CredentialList() {
       <EmptyState
         icon={KeyRoundIcon}
         title="No credentials yet"
-        description="Add a vendor key to run speech, language, voice or avatar providers on your own account. LiveKit Inference needs no key."
+        description="Add a vendor key to run speech, language, voice or avatar providers on your own account."
         action={addButton}
       />
     );
@@ -215,7 +212,7 @@ export function CredentialList() {
       {
         id: "credential",
         header: "Credential",
-        cell: (row) => <CredentialIdentity credential={row} spec={specs.get(row.provider_id)} registry={registry} />,
+        cell: (row) => <CredentialIdentity credential={row} spec={specs.get(row.provider_id)} registry={registry} query={query} />,
       },
       {
         id: "kind",
@@ -237,7 +234,7 @@ export function CredentialList() {
       {
         id: "added",
         header: "Added",
-        cell: (row) => <RelativeTime iso={row.created_at} className="text-[0.8125rem] text-muted-foreground" />,
+        cell: (row) => <RelativeTime iso={row.created_at} className="text-label text-text-secondary" />,
       },
       {
         id: "used",
@@ -258,24 +255,26 @@ export function CredentialList() {
       },
     ];
 
-    body = (
+    body = search.noMatches ? (
+      <ListNoMatches search={search} items="credentials" />
+    ) : (
       <ResponsiveTable
         label="Credentials"
         columns={columns}
-        rows={rows}
+        rows={search.filtered}
         getRowKey={(row) => row.id}
         renderCard={(row) => (
-          <div className="flex flex-col gap-2 p-4">
+          <div className="flex flex-col gap-2">
             <div className="flex items-start justify-between gap-2">
-              <CredentialIdentity credential={row} spec={specs.get(row.provider_id)} registry={registry} />
+              <CredentialIdentity credential={row} spec={specs.get(row.provider_id)} registry={registry} query={query} />
               <CredentialRowActions credential={row} onOpenDialog={openDialog} onDelete={setDeleting} />
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-[2.125rem] text-[0.8125rem] text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-[2.125rem] text-label text-text-secondary">
               <CredentialKind spec={specs.get(row.provider_id)} registry={registry} />
               <Fingerprint value={row.fingerprint} />
               <UsageCell usage={usage.get(row.id) ?? NO_USAGE} />
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-[2.125rem] text-[0.8125rem] text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-[2.125rem] text-label text-text-secondary">
               <span>
                 Added <RelativeTime iso={row.created_at} />
               </span>
@@ -293,10 +292,14 @@ export function CredentialList() {
   return (
     <div>
       <PageHeader
+        back={{ href: "/console/providers", label: "Back to providers" }}
         title="Credentials"
-        description="Vendor keys your agents and tools use. Secrets are encrypted at rest; only a fingerprint is ever shown."
+        description="Vendor keys your agents and tools use: encrypted at rest, and only a fingerprint is ever shown."
         actions={rows.length > 0 ? addButton : undefined}
       />
+      {rows.length > 0 && !credentialsQuery.isLoading && !credentialsQuery.isError ? (
+        <ListSearchField search={search} label="Search credentials" total={rows.length} />
+      ) : null}
       {body}
       <CredentialDialog
         open={dialog !== null}
@@ -327,18 +330,24 @@ function CredentialIdentity({
   credential,
   spec,
   registry,
+  query = "",
 }: {
   credential: CredentialOut;
   spec: ProviderSpec | undefined;
   registry: ProviderSpec[];
+  query?: string;
 }) {
   const title = spec ? credentialDisplay(spec, registry).title : credential.provider_id;
   return (
     <div className="flex min-w-0 items-start gap-2.5">
       <VendorMark vendor={spec?.vendor ?? credential.provider_id} size="md" className="mt-0.5" />
       <div className="flex min-w-0 flex-col">
-        <span className="truncate font-medium text-foreground">{credential.label}</span>
-        <span className="truncate text-xs text-muted-foreground">{title}</span>
+        <span className="truncate font-medium text-foreground">
+          <Highlight text={credential.label} query={query} />
+        </span>
+        <span className="truncate text-caption text-text-secondary">
+          <Highlight text={title} query={query} />
+        </span>
       </div>
     </div>
   );
@@ -351,17 +360,17 @@ function CredentialIdentity({
  * exactly what made the key look LLM-only.
  */
 function CredentialKind({ spec, registry }: { spec: ProviderSpec | undefined; registry: ProviderSpec[] }) {
-  if (!spec) return <span className="text-[0.8125rem] text-muted-foreground">—</span>;
+  if (!spec) return <span className="text-label text-text-secondary">—</span>;
   const { usedBy } = credentialDisplay(spec, registry);
   if (usedBy.length <= 1) {
-    return <span className="text-[0.8125rem] text-muted-foreground">{KIND_LABEL[spec.kind]}</span>;
+    return <span className="text-label text-text-secondary">{KIND_LABEL[spec.kind]}</span>;
   }
   return (
     <div className="flex flex-wrap items-center gap-1" aria-label={`Used by ${usedBy.join(", ")}`}>
       {usedBy.map((kind) => (
-        <StatusChip key={kind} tone="neutral" size="sm">
+        <StatusPill key={kind} tone="neutral" size="sm">
           {kind}
-        </StatusChip>
+        </StatusPill>
       ))}
     </div>
   );
@@ -371,7 +380,7 @@ function CredentialKind({ spec, registry }: { spec: ProviderSpec | undefined; re
 function Fingerprint({ value }: { value: string }) {
   return (
     <span className="inline-flex items-center gap-0.5">
-      <span className="font-mono text-[0.8125rem] text-muted-foreground tabular-nums">{value}</span>
+      <span className="font-mono text-label text-text-secondary tabular-nums">{value}</span>
       <CopyButton value={value} label="Copy fingerprint" size="xs" />
     </span>
   );
@@ -380,14 +389,14 @@ function Fingerprint({ value }: { value: string }) {
 function UsageCell({ usage }: { usage: CredentialUsage }) {
   const text = usageText(usage);
   if (usage.agents.length === 0 && usage.tools.length === 0) {
-    return <span className="text-[0.8125rem] text-muted-foreground">{text}</span>;
+    return <span className="text-label text-text-secondary">{text}</span>;
   }
   const names = [...usage.agents.map((a) => a.name), ...usage.tools.map((t) => t.name)].join(", ");
   return (
     <Link
       href="/console/agents"
       title={names}
-      className="rounded-xs text-[0.8125rem] text-foreground underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+      className="rounded-sm text-label text-foreground underline-offset-3 hover:underline"
     >
       {text}
     </Link>
@@ -400,10 +409,10 @@ function UsageCell({ usage }: { usage: CredentialUsage }) {
  */
 function LastUsed({ credential, withLabel = false }: { credential: CredentialOut; withLabel?: boolean }) {
   if (!credential.last_used_at) {
-    return <span className="text-[0.8125rem] text-muted-foreground">Not used yet</span>;
+    return <span className="text-label text-text-secondary">Not used yet</span>;
   }
   return (
-    <span className="text-[0.8125rem] text-muted-foreground">
+    <span className="text-label text-text-secondary">
       {withLabel ? "Last used " : null}
       <RelativeTime iso={credential.last_used_at} />
     </span>
@@ -424,25 +433,25 @@ export function shortTestMessage(message: string | null | undefined, max = 60): 
  */
 export function RecordedTest({ credential }: { credential: Pick<CredentialOut, "last_test_at" | "last_test_ok" | "last_test_message"> }) {
   const testedAt = credential.last_test_at;
-  if (!testedAt) return <span className="text-[0.8125rem] text-muted-foreground">Not tested yet</span>;
+  if (!testedAt) return <span className="text-label text-text-secondary">Not tested yet</span>;
   if (credential.last_test_ok === true) {
     return (
-      <span className="text-[0.8125rem] text-muted-foreground" title={credential.last_test_message ?? undefined}>
-        <span className="text-success-text">Works</span> · tested <RelativeTime iso={testedAt} />
+      <span className="text-label text-text-secondary" title={credential.last_test_message ?? undefined}>
+        <span className="font-medium text-success-text">Works</span> · tested <RelativeTime iso={testedAt} />
       </span>
     );
   }
   if (credential.last_test_ok === false) {
     const reason = shortTestMessage(credential.last_test_message);
     return (
-      <span className="text-[0.8125rem] text-muted-foreground" title={credential.last_test_message ?? undefined}>
-        <span className="text-danger-text">Failed</span> · <RelativeTime iso={testedAt} />
+      <span className="text-label text-text-secondary" title={credential.last_test_message ?? undefined}>
+        <span className="font-medium text-destructive-text">Failed</span> · <RelativeTime iso={testedAt} />
         {reason ? ` · ${reason}` : null}
       </span>
     );
   }
   return (
-    <span className="text-[0.8125rem] text-muted-foreground" title={credential.last_test_message ?? undefined}>
+    <span className="text-label text-text-secondary" title={credential.last_test_message ?? undefined}>
       {OUTCOME_LABEL["not-implemented"]}
     </span>
   );
@@ -468,16 +477,16 @@ function TestStatus({ credential }: { credential: CredentialOut }) {
   return (
     <span role="status" aria-live="polite" className="inline-flex min-h-5 items-center">
       {pending ? (
-        <span className="text-[0.8125rem] text-muted-foreground">Testing…</span>
+        <span className="text-label text-text-secondary">Testing…</span>
       ) : last && fresh ? (
-        <StatusChip tone={OUTCOME_TONE[last.outcome]} dot size="sm" className="max-w-64">
+        <StatusPill tone={OUTCOME_TONE[last.outcome]} size="sm" className="max-w-64">
           <span className="truncate" title={last.message}>
             {last.outcome === "passed" || last.outcome === "timed-out" ? OUTCOME_LABEL[last.outcome] : last.message || OUTCOME_LABEL[last.outcome]}
           </span>
-        </StatusChip>
+        </StatusPill>
       ) : last && !credential.last_test_at ? (
         // The api has not answered with the recorded result yet (or the test timed out here).
-        <span className="text-[0.8125rem] text-muted-foreground" title={last.message}>
+        <span className="text-label text-text-secondary" title={last.message}>
           {OUTCOME_LABEL[last.outcome]} · <RelativeTime iso={last.testedAt} />
         </span>
       ) : (
@@ -497,10 +506,10 @@ function ComposioTestStatus() {
   const chip = composioStatusChip(status);
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
-      <StatusChip tone={chip.tone} dot size="sm">
+      <StatusPill tone={chip.tone} size="sm">
         {chip.label}
-      </StatusChip>
-      {status?.last_test_at ? <RelativeTime iso={status.last_test_at} className="text-[0.8125rem] text-muted-foreground" /> : null}
+      </StatusPill>
+      {status?.last_test_at ? <RelativeTime iso={status.last_test_at} className="text-label text-text-secondary" /> : null}
     </span>
   );
 }
@@ -530,83 +539,64 @@ function ComposioRowActions({ credential, onDelete }: { credential: CredentialOu
   const { status, validate, validating } = useComposioStatus();
   const enableApps = useEnableApps();
   const disableApps = useDisableApps();
-  const { canWrite } = useWriteAccess("admin");
+  const { can, isLoading } = useCan("admin");
   const [rotateOpen, setRotateOpen] = React.useState(false);
   const [disableConfirmOpen, setDisableConfirmOpen] = React.useState(false);
 
-  async function handleToggle() {
+  async function turnOn() {
     try {
-      if (status?.enabled) {
-        await disableApps.mutateAsync();
-        toast.success("Apps turned off");
-      } else {
-        await enableApps.mutateAsync();
-        toast.success("Apps turned on");
-      }
+      await enableApps.mutateAsync();
+      toast.success("Apps turned on");
     } catch (error) {
-      toast.error(`Couldn't update — ${appsErrorMessage(error)}`);
+      toast.error(appsErrorMessage(error));
     }
+  }
+
+  // Admin actions show disabled while the role loads, then only for admins (D12).
+  const admin = can || isLoading;
+  const actions: RowMenuAction[] = [
+    { label: "Validate", icon: FlaskConicalIcon, disabled: validating, onSelect: () => void validate() },
+  ];
+  if (admin) {
+    actions.push({ label: "Rotate", icon: RefreshCwIcon, disabled: isLoading, onSelect: () => setRotateOpen(true) });
+    actions.push({
+      label: status?.enabled ? "Disable" : "Enable",
+      icon: PlugIcon,
+      disabled: isLoading,
+      onSelect: () => (status?.enabled ? setDisableConfirmOpen(true) : void turnOn()),
+    });
   }
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${credential.label}`}>
-            <MoreHorizontalIcon aria-hidden="true" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem disabled={validating} onSelect={() => void validate()}>
-            <FlaskConicalIcon aria-hidden="true" />
-            Validate
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={!canWrite} onSelect={() => setRotateOpen(true)}>
-            <RefreshCwIcon aria-hidden="true" />
-            Rotate
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={!canWrite}
-            onSelect={() => (status?.enabled ? setDisableConfirmOpen(true) : void handleToggle())}
-          >
-            <PlugIcon aria-hidden="true" />
-            {status?.enabled ? "Disable" : "Enable"}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" disabled={!canWrite} onSelect={() => onDelete(credential)}>
-            <TrashIcon aria-hidden="true" />
-            Remove key
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <EnableComposioDialog mode="rotate" credentialId={credential.id} open={rotateOpen} onOpenChange={setRotateOpen} />
-      <Dialog open={disableConfirmOpen} onOpenChange={setDisableConfirmOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Turn off Apps?</DialogTitle>
-            <DialogDescription>
-              The key and every connection are kept. Tools that use them switch off until you turn Apps back on.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDisableConfirmOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90"
-              disabled={disableApps.isPending}
-              onClick={async () => {
-                await handleToggle();
-                setDisableConfirmOpen(false);
-              }}
-            >
-              {disableApps.isPending ? "Working…" : "Turn off"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RowMenu
+        label={`Actions for ${credential.label}`}
+        size="sm"
+        actions={actions}
+        destructive={admin ? { label: "Remove key", icon: Trash2Icon, disabled: isLoading, onSelect: () => onDelete(credential) } : undefined}
+      />
+      {can ? (
+        <>
+          <EnableComposioDialog mode="rotate" credentialId={credential.id} open={rotateOpen} onOpenChange={setRotateOpen} />
+          <ConfirmDialog
+            open={disableConfirmOpen}
+            onOpenChange={setDisableConfirmOpen}
+            title="Turn off Apps?"
+            description="The key and every connection are kept. Tools that use them switch off until you turn Apps back on."
+            confirmLabel="Turn off"
+            busyLabel="Turning off…"
+            onConfirm={async () => {
+              try {
+                await disableApps.mutateAsync();
+              } catch (error) {
+                // The dialog stays open and says why, in the Apps screen's own words.
+                throw new Error(appsErrorMessage(error));
+              }
+              toast.success("Apps turned off");
+            }}
+          />
+        </>
+      ) : null}
     </>
   );
 }
@@ -621,34 +611,23 @@ function RowActions({
   onDelete: (credential: CredentialOut) => void;
 }) {
   const { run, pending } = useCredentialTest(credential.id);
-  const { canWrite } = useWriteAccess("admin");
+  // Testing, rotating, renaming and deleting a key are all admin writes
+  // server-side. They show disabled while the role loads, then only for admins
+  // (D12); with nothing left to offer, the menu hides itself.
+  const { can, isLoading } = useCan("admin");
+  if (!can && !isLoading) return null;
+  const actions: RowMenuAction[] = [
+    { label: "Test", icon: FlaskConicalIcon, disabled: isLoading || pending, onSelect: () => void run() },
+    { label: "Rotate", icon: RefreshCwIcon, disabled: isLoading, onSelect: () => onOpenDialog("rotate", credential) },
+    { label: "Rename", icon: PencilIcon, disabled: isLoading, onSelect: () => onOpenDialog("rename", credential) },
+  ];
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${credential.label}`}>
-          <MoreHorizontalIcon aria-hidden="true" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem disabled={pending} onSelect={() => void run()}>
-          <FlaskConicalIcon aria-hidden="true" />
-          Test
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={!canWrite} onSelect={() => onOpenDialog("rotate", credential)}>
-          <RefreshCwIcon aria-hidden="true" />
-          Rotate
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={!canWrite} onSelect={() => onOpenDialog("rename", credential)}>
-          <PencilIcon aria-hidden="true" />
-          Rename
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" disabled={!canWrite} onSelect={() => onDelete(credential)}>
-          <TrashIcon aria-hidden="true" />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <RowMenu
+      label={`Actions for ${credential.label}`}
+      size="sm"
+      actions={actions}
+      destructive={{ label: "Delete", icon: Trash2Icon, disabled: isLoading, onSelect: () => onDelete(credential) }}
+    />
   );
 }
 
@@ -663,13 +642,16 @@ function DeleteCredentialDialog({
 }) {
   const deleteMutation = useDeleteCredential();
   const [conflict, setConflict] = React.useState<string | null>(null);
+  const [failure, setFailure] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setConflict(null);
+    setFailure(null);
   }, [credential]);
 
   async function confirm() {
     if (!credential) return;
+    setFailure(null);
     try {
       await deleteMutation.mutateAsync(credential.id);
       toast.success("Credential deleted");
@@ -679,15 +661,16 @@ function DeleteCredentialDialog({
         setConflict(error.message);
         return;
       }
-      toast.error(`Couldn't delete — ${errorMessage(error)}`);
+      // Stays open and says why (spec section 9); nothing was deleted.
+      setFailure(errorMessage(error));
     }
   }
 
   const inUse = usage.agents.length > 0 || usage.tools.length > 0;
 
   return (
-    <Dialog open={credential !== null} onOpenChange={(open) => (open ? undefined : onClose())}>
-      <DialogContent>
+    <Dialog open={credential !== null} onOpenChange={(open) => (open || deleteMutation.isPending ? undefined : onClose())}>
+      <DialogContent role="alertdialog" className="sm:w-[min(calc(100vw-32px),440px)]" onInteractOutside={(event) => event.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Delete {credential?.label}</DialogTitle>
           <DialogDescription>
@@ -695,7 +678,10 @@ function DeleteCredentialDialog({
           </DialogDescription>
         </DialogHeader>
         {conflict ? (
-          <div role="alert" className="flex flex-col gap-1.5 rounded-md bg-danger-soft px-3 py-2 text-[0.8125rem] text-danger-text">
+          <div
+            role="alert"
+            className="flex flex-col gap-1.5 rounded border border-destructive-border bg-destructive-subtle px-3 py-2.5 text-label text-destructive-text"
+          >
             {usage.agents.length > 0 ? (
               <p>
                 Used by{" "}
@@ -704,7 +690,7 @@ function DeleteCredentialDialog({
                     {index > 0 ? ", " : null}
                     <Link
                       href={`/console/agents/${agent.id}?section=providers`}
-                      className="font-medium underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="font-medium underline underline-offset-3"
                     >
                       {agent.name}
                     </Link>
@@ -717,20 +703,21 @@ function DeleteCredentialDialog({
             )}
           </div>
         ) : inUse ? (
-          <p className="text-[0.8125rem] text-warning-text">{usageText(usage)}.</p>
+          <p className="text-label text-warning-text">{usageText(usage)}.</p>
         ) : null}
+        <FormError>{failure}</FormError>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" onClick={onClose} disabled={deleteMutation.isPending}>
             Cancel
           </Button>
           <Button
             type="button"
-            variant="destructive"
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90"
-            disabled={deleteMutation.isPending}
+            variant="danger"
+            busy={deleteMutation.isPending}
+            busyLabel="Deleting…"
             onClick={() => void confirm()}
           >
-            {deleteMutation.isPending ? "Deleting…" : "Delete credential"}
+            Delete credential
           </Button>
         </DialogFooter>
       </DialogContent>

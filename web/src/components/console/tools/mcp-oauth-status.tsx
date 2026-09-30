@@ -236,6 +236,10 @@ export function McpOauthStatusPanel({
           <span className="text-caption text-text-secondary">Waiting for you to finish signing in…</span>
         ) : null}
       </div>
+      {/* The reason sign-in is unavailable is on screen, not only in a tooltip. "Save your
+          changes first." already shows under Test connection in the editor, so only the
+          client-id reason is repeated here. */}
+      {disabledReason && !dirty ? <p className="text-caption text-text-secondary">{disabledReason}</p> : null}
     </div>
   );
 }

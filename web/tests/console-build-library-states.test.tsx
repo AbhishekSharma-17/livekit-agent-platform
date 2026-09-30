@@ -69,7 +69,7 @@ const SIX = [
   dataset({ id: "d3", name: "Branch phones", key_columns: [{ name: "branch", type: "string" }] }),
   dataset({ id: "d4", name: "Agents on call", key_columns: [{ name: "agent", type: "string" }] }),
   dataset({ id: "d5", name: "Claim codes", key_columns: [{ name: "code", type: "string" }] }),
-  dataset({ id: "d6", name: "Holiday hours", key_columns: [{ name: "date", type: "date" }] }),
+  dataset({ id: "d6", name: "Holiday hours", key_columns: [{ name: "date", type: "string" }] }),
 ];
 
 describe("list search (datasets)", () => {

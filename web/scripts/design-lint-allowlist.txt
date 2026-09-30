@@ -63,20 +63,7 @@ allow native-select    1  src/components/console/telephony/native-select.tsx   #
 allow opacity-colour   2  src/components/console/telephony/native-select.tsx
 allow opacity-colour   2  src/components/console/telephony/numbers-section.tsx
 
-# S4 build library (21 in 13 files)
-allow opacity-colour   1  src/components/console/datasets/upload-dataset-dialog.tsx
-allow opacity-colour   1  src/components/console/knowledge/create-kb-dialog.tsx
-allow opacity-colour   4  src/components/console/knowledge/kb-documents.tsx
-allow opacity-colour   2  src/components/console/knowledge/kb-list.tsx
-allow opacity-colour   4  src/components/console/knowledge/kb-search-panel.tsx
-allow opacity-colour   1  src/components/console/tools/apps/connect-app-dialog.tsx
-allow opacity-colour   1  src/components/console/tools/dry-run-dialog.tsx
-allow opacity-colour   1  src/components/console/tools/kits/add-kit-dialog.tsx
-allow opacity-colour   1  src/components/console/tools/mcp-oauth-status.tsx
-allow opacity-colour   2  src/components/console/tools/mcp-tool-editor-dialog.tsx
-allow opacity-colour   1  src/components/console/tools/provider-tool-editor-dialog.tsx
-allow opacity-colour   1  src/components/console/tools/readback-field.tsx
-allow opacity-colour   1  src/components/console/tools/requires-vars-field.tsx
+# S4 build library (cleared: 21 in 13 files taken to zero)
 
 # S5 observe (3 in 3 files)
 allow opacity-colour   1  src/components/console/sessions-v2/cost-tab.tsx

@@ -1,13 +1,14 @@
 /**
  * The preview route's own chrome (docs/UI_UX_SPEC.md §7.11 item 1: "no
- * sidebar (a minimal top bar with a state selector)"). Server-renderable —
- * every control is a plain link that rewrites the query string, so switching
- * scenes needs no client JS and the route stays crawlable by nothing (see
- * `robots` on the layout).
+ * sidebar (a minimal top bar with a state selector)"). Server-renderable:
+ * scene links rewrite the query string, and the parameter pickers are small
+ * client islands (`PreviewSelect`, the custom Select) inside a GET form. The
+ * route stays crawlable by nothing (see `robots` on the layout).
  */
 import type { ReactNode } from "react";
 import Link from "next/link";
 
+import { PreviewSelect } from "./preview-select";
 import { SCENES, type Surface } from "./scenes";
 
 export interface PreviewShellProps {
@@ -68,32 +69,15 @@ export function PreviewShell({ sceneId, params, surface, children }: PreviewShel
             <form action="/console/preview/panels" className="flex flex-wrap items-center gap-2">
               <input type="hidden" name="scene" value={sceneId} />
               {Object.keys(scene.params).map((key) => (
-                <label key={key} className="text-muted-foreground flex items-center gap-1">
+                <span key={key} className="text-muted-foreground flex items-center gap-1">
                   {key}
-                  <select
-                    name={key}
-                    defaultValue={params[key]}
-                    className="border-input bg-background rounded-sm border px-1 py-0.5 text-xs"
-                  >
-                    {scene.params[key].map((value) => (
-                      <option key={value} value={value}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  <PreviewSelect name={key} label={key} defaultValue={params[key]} values={scene.params[key]} />
+                </span>
               ))}
-              <label className="text-muted-foreground flex items-center gap-1">
+              <span className="text-muted-foreground flex items-center gap-1">
                 surface
-                <select
-                  name="surface"
-                  defaultValue={surface}
-                  className="border-input bg-background rounded-sm border px-1 py-0.5 text-xs"
-                >
-                  <option value="dark">dark</option>
-                  <option value="light">light</option>
-                </select>
-              </label>
+                <PreviewSelect name="surface" label="surface" defaultValue={surface} values={["dark", "light"]} />
+              </span>
               <button
                 type="submit"
                 className="border-border hover:bg-muted rounded-sm border px-2 py-0.5 text-xs"

@@ -10,7 +10,7 @@ import { Field } from "@/components/shared/field";
 import { Input } from "@/components/ui/input";
 import { CopyButton } from "@/components/shared/copy-button";
 import { RelativeTime } from "@/components/shared/relative-time";
-import { StatusChip, type StatusTone } from "@/components/shared/status-chip";
+import { StatusPill, type StatusTone } from "@/components/shared/status-chip";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { useMcpOauthStatus, useRevokeMcpOauth, useStartMcpOauth } from "@/components/console/lib/api-hooks";
@@ -40,13 +40,13 @@ export interface McpAuthLike {
 export function McpOauthStatusChip({ status }: { status: McpOauthStatusOut["status"] | undefined }) {
   switch (status) {
     case "connected":
-      return <StatusChip tone="success">Connected</StatusChip>;
+      return <StatusPill tone="success">Connected</StatusPill>;
     case "needs_reauth":
-      return <StatusChip tone="warning">Needs sign-in again</StatusChip>;
+      return <StatusPill tone="warning">Needs sign-in again</StatusPill>;
     case "not_connected":
     case "revoked":
     case undefined:
-      return <StatusChip tone="neutral">Not connected</StatusChip>;
+      return <StatusPill tone="neutral">Not connected</StatusPill>;
   }
 }
 
@@ -97,7 +97,7 @@ export function McpOauthStatusPanel({
 
   if (toolId === null) {
     return (
-      <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+      <p className="rounded-lg border border-dashed border-border px-3 py-2 text-caption text-text-secondary">
         Save the server first, then sign in.
       </p>
     );
@@ -156,11 +156,11 @@ export function McpOauthStatusPanel({
       <div className="flex flex-wrap items-center gap-2">
         <McpOauthStatusChip status={status} />
         {statusQuery.data?.expires_at && status === "connected" ? (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-caption text-text-secondary">
             expires <RelativeTime iso={statusQuery.data.expires_at} />
           </span>
         ) : null}
-        {statusQuery.data?.issuer ? <span className="text-xs text-muted-foreground">{statusQuery.data.issuer}</span> : null}
+        {statusQuery.data?.issuer ? <span className="text-caption text-text-secondary">{statusQuery.data.issuer}</span> : null}
       </div>
 
       {registration === "own_oauth" ? (
@@ -181,13 +181,13 @@ export function McpOauthStatusPanel({
       ) : null}
 
       {registerAt ? (
-        <div className="flex flex-col gap-1.5 rounded-md bg-warning-soft px-3 py-2 text-xs text-warning-text">
+        <div className="flex flex-col gap-1.5 rounded bg-warning-subtle px-3 py-2 text-caption text-warning-text">
           <p>
             {registerAt.issuer ?? "This server"} needs an OAuth app registered first. Give it this return address,
             then paste the client ID above and try again.
           </p>
           <div className="flex items-center gap-1.5">
-            <code className="min-w-0 flex-1 truncate rounded-xs bg-background/60 px-1.5 py-0.5 font-mono">
+            <code className="min-w-0 flex-1 truncate rounded-sm bg-card px-1.5 py-0.5 font-mono">
               {registerAt.redirectUri}
             </code>
             <CopyButton value={registerAt.redirectUri} label="Copy the return address" size="xs" />
@@ -200,7 +200,7 @@ export function McpOauthStatusPanel({
           <>
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
               onClick={() => void handleSignIn()}
               disabled={start.isPending || Boolean(disabledReason)}
@@ -223,7 +223,7 @@ export function McpOauthStatusPanel({
         ) : (
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={() => void handleSignIn()}
             disabled={start.isPending || Boolean(disabledReason)}
@@ -233,9 +233,13 @@ export function McpOauthStatusPanel({
           </Button>
         )}
         {waiting ? (
-          <span className="text-xs text-muted-foreground">Waiting for you to finish signing in…</span>
+          <span className="text-caption text-text-secondary">Waiting for you to finish signing in…</span>
         ) : null}
       </div>
+      {/* The reason sign-in is unavailable is on screen, not only in a tooltip. "Save your
+          changes first." already shows under Test connection in the editor, so only the
+          client-id reason is repeated here. */}
+      {disabledReason && !dirty ? <p className="text-caption text-text-secondary">{disabledReason}</p> : null}
     </div>
   );
 }

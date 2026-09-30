@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Field } from "@/components/shared/field";
 import { useUpdateConnection } from "@/components/console/lib/api-hooks";
-import { appsErrorMessage } from "@/components/console/tools/apps/use-composio";
+import { appsErrorMessage, appsErrorToast } from "@/components/console/tools/apps/use-composio";
 import { ApiError } from "@/lib/api";
 
 /** `ConnectionRenameIn.label` (R-V5-13): "≤ 40" in docs/v5/_asks.md #85. */
@@ -77,7 +77,7 @@ export function RenameAccountDialog({
       toast.success(`Renamed to ${trimmed}`);
       setOpen(false);
     } catch (error) {
-      toast.error(`Couldn't rename — ${renameErrorMessage(error)}`);
+      appsErrorToast("rename", error, renameErrorMessage(error));
     }
   }
 
@@ -102,11 +102,11 @@ export function RenameAccountDialog({
             </Field>
           </DialogBody>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!label.trim() || rename.isPending}>
-              {rename.isPending ? "Renaming…" : "Rename"}
+            <Button type="submit" variant="primary" disabled={!label.trim()} busy={rename.isPending} busyLabel="Renaming…">
+              Rename
             </Button>
           </DialogFooter>
         </form>

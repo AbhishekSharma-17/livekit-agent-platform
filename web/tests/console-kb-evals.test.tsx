@@ -77,11 +77,25 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+/**
+ * `GET /auth/me` for a builder: Edit questions and Run are write controls,
+ * not rendered for a viewer (decision D12), so the runner tests sign in as
+ * someone who may use them.
+ */
+function asBuilder(url: string): Response | undefined {
+  if (url.includes("/auth/me")) {
+    return jsonResponse({ user: { id: "u1", email: "b@example.test" }, workspaces: [{ id: "ws1", name: "W", slug: "w", role: "builder" }] });
+  }
+  return undefined;
+}
+
 describe("KbEvalsCard — eval runner (docs/v5/PLAN-V5.md V5-10)", () => {
   it("shows 'No golden questions yet' and disables Run when the set is empty", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => {
+        const me = asBuilder(url);
+        if (me) return me;
         if (url.includes("/evaluate/latest")) {
           return jsonResponse({ error: { code: "not_found", message: "none" } }, 404);
         }
@@ -94,12 +108,35 @@ describe("KbEvalsCard — eval runner (docs/v5/PLAN-V5.md V5-10)", () => {
     renderWithClient(<KbEvalsCard kbId="kb-1" />);
 
     expect(await screen.findByText("No golden questions yet")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /run/i })).toHaveProperty("disabled", true);
+    const run = await screen.findByRole("button", { name: /run/i });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Edit questions" })).toHaveProperty("disabled", false));
+    expect(run).toHaveProperty("disabled", true);
+  });
+
+  it("doesn't offer Edit questions or Run to a viewer", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("/auth/me")) {
+          return jsonResponse({ user: { id: "u1", email: "v@example.test" }, workspaces: [{ id: "ws1", name: "W", slug: "w", role: "viewer" }] });
+        }
+        if (url.includes("/evaluate/latest")) return jsonResponse({ error: { code: "not_found", message: "none" } }, 404);
+        if (url.includes("/evals")) return jsonResponse({ items: [evalRow()], total: 1 } satisfies KbEvalSetOut);
+        return jsonResponse({});
+      }),
+    );
+
+    renderWithClient(<KbEvalsCard kbId="kb-1" />);
+    await screen.findByText("1 golden question");
+    await waitFor(() => expect(screen.queryByRole("button", { name: /run/i })).toBeNull());
+    expect(screen.queryByRole("button", { name: "Edit questions" })).toBeNull();
   });
 
   it("edits the question set through the dialog and saves it with PUT .../evals", async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
+      const me = asBuilder(url);
+      if (me) return me;
       if (url.includes("/evaluate/latest")) return jsonResponse({ error: { code: "not_found", message: "none" } }, 404);
       if (method === "GET" && url.includes("/evals")) return jsonResponse({ items: [], total: 0 } satisfies KbEvalSetOut);
       if (method === "PUT" && url.includes("/evals")) {
@@ -114,7 +151,9 @@ describe("KbEvalsCard — eval runner (docs/v5/PLAN-V5.md V5-10)", () => {
     renderWithClient(<KbEvalsCard kbId="kb-1" />);
     await screen.findByText("No golden questions yet");
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit questions" }));
+    const edit = await screen.findByRole("button", { name: "Edit questions" });
+    await waitFor(() => expect(edit).toHaveProperty("disabled", false));
+    fireEvent.click(edit);
     fireEvent.change(await screen.findByLabelText("Question 1"), {
       target: { value: "Is water damage from a burst pipe covered?" },
     });
@@ -148,6 +187,8 @@ describe("KbEvalsCard — eval runner (docs/v5/PLAN-V5.md V5-10)", () => {
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         const method = init?.method ?? "GET";
+        const me = asBuilder(url);
+        if (me) return me;
         if (url.includes("/evaluate/latest")) return jsonResponse({ error: { code: "not_found", message: "none" } }, 404);
         if (method === "POST" && url.includes("/evaluate")) {
           return jsonResponse(runResult({ status: "pending", result: null }), 202);
@@ -164,7 +205,9 @@ describe("KbEvalsCard — eval runner (docs/v5/PLAN-V5.md V5-10)", () => {
     renderWithClient(<KbEvalsCard kbId="kb-1" />);
     await screen.findByText("1 golden question");
 
-    fireEvent.click(screen.getByRole("button", { name: /run/i }));
+    const run = await screen.findByRole("button", { name: /run/i });
+    await waitFor(() => expect(run).toHaveProperty("disabled", false));
+    fireEvent.click(run);
 
     expect(await screen.findByText("Recall@1")).toBeTruthy();
     expect(screen.getAllByText("100%")).toHaveLength(2); // recall@1 and recall@k

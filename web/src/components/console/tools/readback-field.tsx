@@ -65,22 +65,22 @@ export function ReadbackField({
   return (
     <div data-slot="field" className="flex flex-col gap-1.5">
       <Label htmlFor={htmlFor}>Read back before calling</Label>
-      <p id={ids.hint} className="text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">
+      <p id={ids.hint} className="text-label leading-[1.125rem] text-pretty text-text-secondary">
         The model says these values back to the caller and gets confirmation before the tool runs.
       </p>
       {pickable.length > 0 ? (
         <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
           <legend className="sr-only">Arguments to read back</legend>
           {pickable.map((name) => (
-            <label key={name} className="flex items-center gap-2 text-sm">
+            <label key={name} className="flex items-center gap-2 text-body">
               <input
                 type="checkbox"
-                className="size-3.5 rounded-xs border-input"
+                className="size-4"
                 checked={values.includes(name)}
                 disabled={!values.includes(name) && atCap}
                 onChange={(e) => toggle(name, e.target.checked)}
               />
-              <span className="font-mono text-xs">{name}</span>
+              <span className="font-mono text-caption">{name}</span>
             </label>
           ))}
         </fieldset>
@@ -89,13 +89,13 @@ export function ReadbackField({
           {values.length > 0 ? (
             <ul className="flex flex-wrap gap-1.5">
               {values.map((name) => (
-                <li key={name} className="flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2.5 py-0.5 font-mono text-xs">
+                <li key={name} className="flex items-center gap-1 rounded-pill border border-border bg-muted px-2.5 py-0.5 font-mono text-caption">
                   {name}
                   <button
                     type="button"
                     onClick={() => onChange(values.filter((v) => v !== name))}
                     aria-label={`Remove ${name}`}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-text-secondary hover:text-foreground"
                   >
                     ×
                   </button>
@@ -110,7 +110,7 @@ export function ReadbackField({
               onChange={(e) => setDraftName(e.target.value)}
               placeholder="email"
               aria-describedby={ids.hint}
-              className="font-mono text-sm"
+              className="font-mono text-body"
               disabled={atCap}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -121,7 +121,7 @@ export function ReadbackField({
             />
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               onClick={() => add(draftName)}
               disabled={atCap || draftName.trim() === ""}
               aria-label="Add an argument to read back"
@@ -131,11 +131,11 @@ export function ReadbackField({
           </div>
         </div>
       )}
-      {atCap ? <p className="text-[0.8125rem] text-warning-text">At most {MAX_CONFIRM_READBACK} arguments to read back.</p> : null}
+      {atCap ? <p className="text-label text-warning-text">At most {MAX_CONFIRM_READBACK} arguments to read back.</p> : null}
       {issues.length > 0 ? (
         <ul id={ids.error} className="flex flex-col gap-0.5">
           {issues.map((issue) => (
-            <li key={issue} className="text-[0.8125rem] text-danger-text">
+            <li key={issue} className="text-label text-destructive-text">
               {issue}
             </li>
           ))}

@@ -8,7 +8,7 @@ import { Field } from "@/components/shared/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -537,7 +537,7 @@ export function McpToolEditorDialog({
                 />
               </Field>
             ) : null}
-            {preset?.notes ? <p className="text-[0.8125rem] text-pretty text-muted-foreground">{preset.notes}</p> : null}
+            {preset?.notes ? <p className="text-label text-pretty text-text-secondary">{preset.notes}</p> : null}
 
             <Field label="Name" htmlFor={`${uid}-name`} required error={errors.name}>
               <Input id={`${uid}-name`} value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
@@ -545,7 +545,7 @@ export function McpToolEditorDialog({
             <Field label="URL" htmlFor={`${uid}-url`} required error={errors.url}>
               <Input
                 id={`${uid}-url`}
-                className="font-mono text-sm"
+                className="font-mono text-body"
                 value={draft.url}
                 onChange={(e) => setDraft((d) => ({ ...d, url: e.target.value }))}
                 placeholder="https://mcp.example.com/stream"
@@ -553,7 +553,7 @@ export function McpToolEditorDialog({
             </Field>
 
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-              <legend className="mb-1 text-sm font-medium text-foreground">Authentication</legend>
+              <legend className="mb-1 text-body font-medium text-foreground">Authentication</legend>
               <RadioGroup
                 value={draft.authKind}
                 onValueChange={(value) => setDraft((d) => ({ ...d, authKind: value as AuthKind }))}
@@ -562,8 +562,8 @@ export function McpToolEditorDialog({
                   <Label
                     key={kind}
                     htmlFor={`${uid}-auth-${kind}`}
-                    className={`flex cursor-pointer items-center gap-2 rounded-md border p-2.5 text-sm font-normal ${
-                      draft.authKind === kind ? "border-primary bg-muted/50" : "border-border"
+                    className={`flex cursor-pointer items-center gap-2 rounded border p-2.5 text-body font-normal ${
+                      draft.authKind === kind ? "border-brand bg-muted" : "border-border"
                     }`}
                   >
                     <RadioGroupItem id={`${uid}-auth-${kind}`} value={kind} />
@@ -571,7 +571,7 @@ export function McpToolEditorDialog({
                   </Label>
                 ))}
               </RadioGroup>
-              {preset?.scopes_hint ? <p className="text-xs text-muted-foreground">{preset.scopes_hint}</p> : null}
+              {preset?.scopes_hint ? <p className="text-caption text-text-secondary">{preset.scopes_hint}</p> : null}
             </fieldset>
 
             {draft.authKind === "header" ? (
@@ -584,7 +584,7 @@ export function McpToolEditorDialog({
                 >
                   <Textarea
                     id={`${uid}-headers`}
-                    className="min-h-20 font-mono text-xs"
+                    className="min-h-20 font-mono text-caption"
                     value={draft.headersJson}
                     onChange={(e) => setDraft((d) => ({ ...d, headersJson: e.target.value }))}
                   />
@@ -603,7 +603,7 @@ export function McpToolEditorDialog({
               <>
                 {draft.authKind === "own_oauth" ? (
                   <>
-                    <p className="rounded-md bg-muted/50 px-3 py-2 text-[0.8125rem] text-muted-foreground">
+                    <p className="rounded bg-muted px-3 py-2 text-label text-text-secondary">
                       Register an app with the vendor first — its return address is the api&apos;s own address
                       (not this console&apos;s) with <code className="font-mono">/v1/oauth/mcp/callback</code>{" "}
                       appended. Once you have a client id, save this server, then use Sign in below.
@@ -637,17 +637,17 @@ export function McpToolEditorDialog({
                 </Field>
                 {agentId !== null ? (
                   <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-                    <legend className="mb-1 text-sm font-medium text-foreground">Sign in as</legend>
+                    <legend className="mb-1 text-body font-medium text-foreground">Sign in as</legend>
                     <RadioGroup
                       value={draft.oauthSubject}
                       onValueChange={(value) => setDraft((d) => ({ ...d, oauthSubject: value as Draft["oauthSubject"] }))}
                       className="flex flex-col gap-2"
                     >
-                      <Label htmlFor={`${uid}-subject-workspace`} className="flex cursor-pointer items-center gap-2 text-sm font-normal">
+                      <Label htmlFor={`${uid}-subject-workspace`} className="flex cursor-pointer items-center gap-2 text-body font-normal">
                         <RadioGroupItem id={`${uid}-subject-workspace`} value="workspace" />
                         This workspace
                       </Label>
-                      <Label htmlFor={`${uid}-subject-agent`} className="flex cursor-pointer items-center gap-2 text-sm font-normal">
+                      <Label htmlFor={`${uid}-subject-agent`} className="flex cursor-pointer items-center gap-2 text-body font-normal">
                         <RadioGroupItem id={`${uid}-subject-agent`} value="agent" />
                         This agent
                       </Label>
@@ -678,33 +678,33 @@ export function McpToolEditorDialog({
 
             <div className="flex flex-col gap-2 border-t border-border pt-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Test connection</h3>
-                <Button type="button" variant="outline" size="sm" onClick={() => void handleTest()} disabled={Boolean(testDisabledReason) || testMcp.isPending} title={testDisabledReason}>
+                <h3 className="text-body font-semibold text-foreground">Test connection</h3>
+                <Button type="button" variant="secondary" size="sm" onClick={() => void handleTest()} disabled={Boolean(testDisabledReason) || testMcp.isPending} title={testDisabledReason}>
                   {testMcp.isPending ? "Testing…" : "Test connection"}
                 </Button>
               </div>
-              {testDisabledReason ? <p className="text-[0.8125rem] text-muted-foreground">{testDisabledReason}</p> : null}
+              {testDisabledReason ? <p className="text-label text-text-secondary">{testDisabledReason}</p> : null}
               {testResult ? (
-                <div className="flex items-center gap-2 text-[0.8125rem]">
-                  <StatusChip tone={testResult.ok ? "success" : "danger"} size="sm">
+                <div className="flex items-center gap-2 text-label">
+                  <StatusPill tone={testResult.ok ? "success" : "danger"} size="sm">
                     {testResult.ok ? "OK" : "Failed"}
-                  </StatusChip>
-                  <span className="text-muted-foreground">
+                  </StatusPill>
+                  <span className="text-text-secondary">
                     {testResult.ok ? `${testResult.tool_count} tools · ${testResult.duration_ms}ms` : (testResult.error ?? "Couldn't connect.")}
                   </span>
                 </div>
               ) : null}
               {discovered.length > 0 ? (
                 <div className="flex flex-col gap-1.5">
-                  <p className="text-[0.8125rem] text-muted-foreground">Uncheck a tool to keep it out of &quot;Allowed tools&quot;.</p>
+                  <p className="text-label text-text-secondary">Uncheck a tool to keep it out of &quot;Allowed tools&quot;.</p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                     {discovered.map((name) => {
                       const checked = allowedToolNames.length === 0 ? true : allowedToolNames.includes(name);
                       return (
-                        <label key={name} className="flex items-center gap-1.5 text-xs">
+                        <label key={name} className="flex items-center gap-1.5 text-caption">
                           <input
                             type="checkbox"
-                            className="size-3.5 rounded-xs border-input"
+                            className="size-4"
                             checked={checked}
                             onChange={(e) => toggleDiscoveredTool(name, e.target.checked)}
                           />
@@ -718,8 +718,8 @@ export function McpToolEditorDialog({
             </div>
 
             <div className="flex flex-col gap-2 border-t border-border pt-4">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">How each tool runs</h3>
-              <p className="text-[0.8125rem] text-muted-foreground">
+              <h3 className="text-body font-semibold text-foreground">How each tool runs</h3>
+              <p className="text-label text-text-secondary">
                 Left at &quot;Blocking&quot; until edited — an MCP tool never runs in the background unless it opts in here.
               </p>
               {optionRows.length > 0 ? (
@@ -740,7 +740,7 @@ export function McpToolEditorDialog({
                       const rowId = `${uid}-mcp-option-${name}`;
                       return (
                         <TableRow key={name}>
-                          <TableCell className="font-mono text-xs">{name}</TableCell>
+                          <TableCell className="font-mono text-caption">{name}</TableCell>
                           <TableCell>
                             <Select value={option.mode} onValueChange={(v) => patchOption(name, { mode: v as McpOptionDraft["mode"] })}>
                               <SelectTrigger id={`${rowId}-mode`} className="w-36" aria-label={`${name} — runs`}>
@@ -760,7 +760,7 @@ export function McpToolEditorDialog({
                               onCheckedChange={(v) => patchOption(name, { report_progress: v })}
                             />
                             {option.mode !== "blocking" && !option.report_progress ? (
-                              <p className="mt-1 max-w-40 text-[0.6875rem] leading-tight text-warning-text">
+                              <p className="mt-1 max-w-40 text-caption leading-tight text-warning-text">
                                 No progress messages — the agent won&apos;t announce this tool.
                               </p>
                             ) : null}
@@ -816,7 +816,7 @@ export function McpToolEditorDialog({
                   </TableBody>
                 </Table>
               ) : (
-                <p className="text-[0.8125rem] text-muted-foreground">
+                <p className="text-label text-text-secondary">
                   No tool names yet — add one below, or list them in &quot;Allowed tools&quot; above.
                 </p>
               )}
@@ -827,7 +827,7 @@ export function McpToolEditorDialog({
                     onChange={(e) => setFreeTextRow(e.target.value)}
                     placeholder="tool_name"
                     aria-label="Tool name"
-                    className="font-mono text-sm"
+                    className="font-mono text-body"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
@@ -835,7 +835,7 @@ export function McpToolEditorDialog({
                       }
                     }}
                   />
-                  <Button type="button" variant="outline" onClick={addFreeTextRow} disabled={freeTextRow.trim() === ""}>
+                  <Button type="button" variant="secondary" onClick={addFreeTextRow} disabled={freeTextRow.trim() === ""}>
                     Add
                   </Button>
                 </div>
@@ -844,14 +844,14 @@ export function McpToolEditorDialog({
 
             {optionRows.length > 0 ? (
               <div className="flex flex-col gap-2 border-t border-border pt-4">
-                <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Tool context</h3>
-                <p className="text-[0.8125rem] text-muted-foreground">
+                <h3 className="text-body font-semibold text-foreground">Tool context</h3>
+                <p className="text-label text-text-secondary">
                   Per tool: session values it can use, what it needs first, what it reads back, where a result goes,
                   and any fixed values.
                 </p>
-                {errors.toolContext ? <p className="text-[0.8125rem] text-danger-text">{errors.toolContext}</p> : null}
+                {errors.toolContext ? <p className="text-label text-destructive-text">{errors.toolContext}</p> : null}
                 {!agentId ? (
-                  <p className="text-[0.8125rem] text-muted-foreground">
+                  <p className="text-label text-text-secondary">
                     Attach this server to an agent to pick from its panel blocks and flow variables.
                   </p>
                 ) : null}
@@ -867,15 +867,15 @@ export function McpToolEditorDialog({
                         onOpenChange={(next) => setOpenContextRow(next ? name : null)}
                       >
                         <CollapsibleTrigger asChild>
-                          <Button type="button" variant="outline" size="sm" className="w-fit justify-start gap-1.5 text-xs">
+                          <Button type="button" variant="secondary" size="sm" className="w-fit justify-start gap-1.5 text-caption">
                             <ChevronRightIcon
-                              className={`size-3.5 shrink-0 transition-transform ${openContextRow === name ? "rotate-90" : ""}`}
+                              className={`size-3.5 shrink-0 transition-transform duration-(--duration-fast) ${openContextRow === name ? "rotate-90" : ""}`}
                               aria-hidden="true"
                             />
                             {`Tool context — ${name}`}
                           </Button>
                         </CollapsibleTrigger>
-                        <CollapsibleContent className="flex flex-col gap-5 rounded-md border border-border p-3 pt-4">
+                        <CollapsibleContent className="flex flex-col gap-5 rounded border border-border p-3 pt-4">
                           <RequiresVarsField
                             uid={`${uid}-${name}`}
                             values={spec.requires_vars ?? []}
@@ -909,7 +909,7 @@ export function McpToolEditorDialog({
               </div>
             ) : null}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Timeout" htmlFor={`${uid}-timeout`} hint="Seconds.">
                 <Input
                   id={`${uid}-timeout`}
@@ -939,10 +939,10 @@ export function McpToolEditorDialog({
           </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" variant="primary" disabled={pending}>
               {pending ? "Saving…" : "Save server"}
             </Button>
           </DialogFooter>

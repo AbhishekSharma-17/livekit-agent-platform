@@ -6,7 +6,8 @@ import { PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
+import { Tag } from "@/components/shared/tag";
 import { useDeleteTool } from "@/components/console/lib/api-hooks";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { DatasetToolEditorDialog } from "@/components/console/tools/dataset-tool-editor-dialog";
@@ -15,17 +16,17 @@ import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-edito
 import { mcpAuthChip } from "@/components/console/tools/mcp-oauth-status";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
 import { ProviderToolEditorDialog } from "@/components/console/tools/provider-tool-editor-dialog";
+import { useWriteGate } from "@/components/console/tools/write-gate";
 import { errorMessage } from "@/components/console/shared/error-banner";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import type { McpHeaderAuth, McpNoAuth, McpOAuthAuth, ProviderSpec, ProviderToolDefinition, ToolOut } from "@/contracts/lkap-contracts";
 
 /** "No auth" / "Header" / "Sign in" chip (V5-21 acceptance: "Tool rows show the auth mode chip"). */
 function McpAuthTag({ auth }: { auth: McpNoAuth | McpHeaderAuth | McpOAuthAuth | undefined }) {
   const { label, tone } = mcpAuthChip(auth ?? {});
   return (
-    <StatusChip tone={tone} size="sm">
+    <StatusPill tone={tone} size="sm">
       {label}
-    </StatusChip>
+    </StatusPill>
   );
 }
 
@@ -60,6 +61,12 @@ export function requestSummary(tool: ToolOut): string {
   }
 }
 
+/**
+ * One tool inside an agent's Tools section: name, state, auth mode, the
+ * "Use in this agent" switch and the row actions. Edit and Delete are not
+ * rendered for viewers (decision D12); while the role loads they render
+ * disabled so nothing appears and then disappears.
+ */
 export function ToolRow({
   tool,
   agentId,
@@ -78,22 +85,27 @@ export function ToolRow({
   secretBagSpec: ProviderSpec | undefined;
 }) {
   const deleteTool = useDeleteTool();
-  const { canWrite } = useWriteAccess();
-  const writeReason = writeAccessReason();
+  const gate = useWriteGate();
+
+  const editTrigger = (
+    <Button type="button" variant="ghost" size="icon-sm" aria-label="Edit" disabled={gate.pending}>
+      <PencilIcon aria-hidden="true" />
+    </Button>
+  );
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+    <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate font-mono text-sm">{tool.name}</span>
-          {!tool.enabled ? <StatusChip tone="neutral">disabled</StatusChip> : null}
-          {tool.agent_id === null ? <StatusChip tone="info">shared</StatusChip> : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="min-w-0 truncate font-mono text-body">{tool.name}</span>
+          {!tool.enabled ? <StatusPill tone="neutral">Disabled</StatusPill> : null}
+          {tool.agent_id === null ? <Tag>Shared</Tag> : null}
           {tool.definition.kind === "mcp" ? <McpAuthTag auth={tool.definition.auth} /> : null}
         </div>
-        <p className="truncate text-xs text-muted-foreground">{requestSummary(tool)}</p>
+        <p className="truncate text-caption text-text-secondary">{requestSummary(tool)}</p>
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <label className="mr-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <label className="mr-2 flex items-center gap-1.5 text-caption text-text-secondary">
           Use in this agent
           <Switch checked={attached} onCheckedChange={onToggleAttach} />
         </label>
@@ -102,111 +114,47 @@ export function ToolRow({
             toolId={tool.id}
             trigger={
               <Button type="button" variant="ghost" size="icon-sm" aria-label="Dry run">
-                <PlayIcon className="size-3.5" />
+                <PlayIcon aria-hidden="true" />
               </Button>
             }
           />
         ) : null}
-        {tool.definition.kind === "http" ? (
-          <HttpToolEditorDialog
-            agentId={agentId}
-            tool={tool}
-            secretBagSpec={secretBagSpec}
-            onSaved={onSaved}
-            trigger={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Edit"
-                disabled={!canWrite}
-                title={canWrite ? undefined : writeReason}
-              >
-                <PencilIcon className="size-3.5" />
-              </Button>
-            }
-          />
+        {!gate.show ? null : tool.definition.kind === "http" ? (
+          <HttpToolEditorDialog agentId={agentId} tool={tool} secretBagSpec={secretBagSpec} onSaved={onSaved} trigger={editTrigger} />
         ) : tool.kind === "provider" ? (
           // R-V5-8, V5-50: a `ProviderToolDefinition` gets its own dialog, never the MCP one.
           <ProviderToolEditorDialog
             tool={tool as ToolOut & { definition: ProviderToolDefinition }}
             onSaved={onSaved}
-            trigger={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Edit"
-                disabled={!canWrite}
-                title={canWrite ? undefined : writeReason}
-              >
-                <PencilIcon className="size-3.5" />
-              </Button>
-            }
+            trigger={editTrigger}
           />
         ) : tool.kind === "dataset" ? (
           // V6-19: a lookup-table tool (`DatasetToolDefinition`, D-V6-27) — its own editor, never the MCP one.
-          <DatasetToolEditorDialog
-            agentId={agentId}
-            tool={tool}
-            onSaved={onSaved}
-            trigger={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Edit"
-                disabled={!canWrite}
-                title={canWrite ? undefined : writeReason}
-              >
-                <PencilIcon className="size-3.5" />
-              </Button>
-            }
-          />
+          <DatasetToolEditorDialog agentId={agentId} tool={tool} onSaved={onSaved} trigger={editTrigger} />
         ) : (
-          <McpToolEditorDialog
-            agentId={agentId}
-            tool={tool}
-            secretBagSpec={secretBagSpec}
-            onSaved={onSaved}
+          <McpToolEditorDialog agentId={agentId} tool={tool} secretBagSpec={secretBagSpec} onSaved={onSaved} trigger={editTrigger} />
+        )}
+        {gate.show ? (
+          <ConfirmDialog
             trigger={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Edit"
-                disabled={!canWrite}
-                title={canWrite ? undefined : writeReason}
-              >
-                <PencilIcon className="size-3.5" />
+              <Button type="button" variant="ghost" size="icon-sm" aria-label="Delete" disabled={gate.pending}>
+                <Trash2Icon aria-hidden="true" />
               </Button>
             }
+            title={`Delete “${tool.name}”?`}
+            description="This removes the tool everywhere it's attached."
+            confirmLabel="Delete tool"
+            onConfirm={async () => {
+              try {
+                await deleteTool.mutateAsync(tool.id);
+                toast.success(`${tool.name} deleted.`);
+                onDeleted();
+              } catch (error) {
+                toast.error(errorMessage(error));
+              }
+            }}
           />
-        )}
-        <ConfirmDialog
-          trigger={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Delete"
-              disabled={!canWrite}
-              title={canWrite ? undefined : writeReason}
-            >
-              <Trash2Icon className="size-3.5" />
-            </Button>
-          }
-          title={`Delete "${tool.name}"?`}
-          onConfirm={async () => {
-            try {
-              await deleteTool.mutateAsync(tool.id);
-              toast.success(`${tool.name} deleted.`);
-              onDeleted();
-            } catch (error) {
-              toast.error(errorMessage(error));
-            }
-          }}
-        />
+        ) : null}
       </div>
     </div>
   );

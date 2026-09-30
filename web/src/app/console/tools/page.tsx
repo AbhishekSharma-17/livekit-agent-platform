@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 
-import { ToolsPageTabs } from "@/components/console/tools/apps/tools-page-tabs";
+import { ToolsPageSkeleton, ToolsPageTabs } from "@/components/console/tools/apps/tools-page-tabs";
 import { McpOauthReturnToast } from "@/components/console/tools/mcp-oauth-status";
 
 export const metadata: Metadata = { title: "Tools" };
@@ -18,11 +18,12 @@ export const metadata: Metadata = { title: "Tools" };
  * invalidation, mirroring `ToolsPageTabs`' own `?connect=ok|error` handling
  * for the Composio callback. Kept as its own component (`mcp-oauth-status.tsx`)
  * rather than folded into `ToolsPageTabs` (V5-22's file) so this page stays
- * the only file this package edits for it.
+ * the only file this package edits for it. The fallback mirrors the page
+ * (header, tab strip, rows), never a blank area.
  */
 export default function ToolsPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<ToolsPageSkeleton />}>
       <McpOauthReturnToast />
       <ToolsPageTabs />
     </Suspense>

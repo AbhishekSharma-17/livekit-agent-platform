@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Field } from "@/components/shared/field";
 import { RelativeTime } from "@/components/shared/relative-time";
-import { StatusChip, type StatusTone } from "@/components/shared/status-chip";
+import { LifecycleBadge } from "@/components/shared/status-chip";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import {
   useDisconnectApp,
@@ -25,22 +25,28 @@ import {
   useToolProviderToolkit,
   useUpdateConnection,
 } from "@/components/console/lib/api-hooks";
-import { appsErrorMessage } from "@/components/console/tools/apps/use-composio";
+import { appsErrorToast } from "@/components/console/tools/apps/use-composio";
 import { fieldsFor } from "@/components/console/tools/apps/connect-app-dialog";
 import { ActionsDialog } from "@/components/console/tools/apps/actions-dialog";
 import { RenameAccountDialog } from "@/components/console/tools/apps/rename-account-dialog";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { useWriteGate } from "@/components/console/tools/write-gate";
+import { LoadingRow } from "@/components/shared/loading-state";
+import { Tag } from "@/components/shared/tag";
 import { pluralize } from "@/lib/format";
 import type { ConnectionStatus } from "@/components/console/tools/apps/types";
 import type { AppAuthField, ToolkitOut } from "@/contracts/lkap-contracts";
 
-const STATUS_TONE: Record<ConnectionStatus, StatusTone> = {
-  active: "success",
-  initiated: "info",
-  expired: "warning",
-  failed: "danger",
-  inactive: "neutral",
-  unknown: "neutral",
+/**
+ * A connection's state, read through the shared lifecycle map (tone) with the
+ * Apps wording for the label: every broken state asks for the same next step.
+ */
+const STATUS_STATE: Record<ConnectionStatus, string> = {
+  active: "connected",
+  initiated: "connecting",
+  expired: "needs_reauth",
+  failed: "failed",
+  inactive: "disabled",
+  unknown: "unknown",
 };
 
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
@@ -79,8 +85,7 @@ export function ConnectionRow({
   const [keyDialogOpen, setKeyDialogOpen] = React.useState(false);
   const [actionsOpen, setActionsOpen] = React.useState(false);
   const [redirectUrl, setRedirectUrl] = React.useState<string | null>(null);
-  const { canWrite } = useWriteAccess();
-  const writeReason = writeAccessReason();
+  const gate = useWriteGate();
   // `toolkit` here is the *list* read (`AppCard`'s `ToolkitOut`), whose
   // `auth_fields` is always `{}` (`toolkit_out(item, detail=False)`,
   // docs/v5/COMPOSIO.md §4) — the reconnect key form needs the *detail*
@@ -89,7 +94,7 @@ export function ConnectionRow({
 
   const connection = connectionQuery.data;
   if (!connection) {
-    return <p className="text-[0.8125rem] text-muted-foreground">Loading connection…</p>;
+    return <LoadingRow label="Loading connection…" className="rounded border border-border px-3" />;
   }
 
   const needsReconnect = connection.needs_reconnect || connection.status !== "active";
@@ -104,7 +109,7 @@ export function ConnectionRow({
       await updateMutation.mutateAsync({ id: connectionId, body: { is_default: true } });
       toast.success(`${label} is now ${toolkit.name}'s default account`);
     } catch (error) {
-      toast.error(`Couldn't set the default — ${appsErrorMessage(error)}`);
+      appsErrorToast("set the default", error);
     }
   }
 
@@ -120,7 +125,7 @@ export function ConnectionRow({
         setRedirectUrl(result.redirect_url);
       }
     } catch (error) {
-      toast.error(`Couldn't reconnect — ${appsErrorMessage(error)}`);
+      appsErrorToast("reconnect", error);
     }
   }
 
@@ -129,7 +134,7 @@ export function ConnectionRow({
       await disconnectMutation.mutateAsync({ id: connectionId, purge: false });
       toast.success(`${toolkit.name} disconnected`);
     } catch (error) {
-      toast.error(`Couldn't disconnect — ${appsErrorMessage(error)}`);
+      appsErrorToast("disconnect", error);
     }
   }
 
@@ -140,80 +145,76 @@ export function ConnectionRow({
       : `Agents lose access to ${toolkit.name} until it's reconnected.`;
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+    <div className="flex flex-col gap-2 rounded border border-border p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium text-foreground">{label}</span>
-          {connection.is_default ? (
-            <StatusChip tone="neutral" size="sm">
-              Default
-            </StatusChip>
-          ) : null}
-          <StatusChip tone={STATUS_TONE[status]} dot size="sm">
-            {STATUS_LABEL[status]}
-          </StatusChip>
+          <span className="text-body font-medium text-foreground">{label}</span>
+          {connection.is_default ? <Tag>Default</Tag> : null}
+          <LifecycleBadge state={STATUS_STATE[status]} label={STATUS_LABEL[status]} size="sm" />
           {connection.last_checked_at ? (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-caption text-text-secondary">
               Checked <RelativeTime iso={connection.last_checked_at} />
             </span>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-1">
-          <RenameAccountDialog
-            connectionId={connectionId}
-            currentLabel={label}
-            toolkitName={toolkit.name}
-            trigger={
-              <Button type="button" variant="ghost" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
-                Rename
+        {gate.show ? (
+          <div className="flex flex-wrap items-center gap-1">
+            <RenameAccountDialog
+              connectionId={connectionId}
+              currentLabel={label}
+              toolkitName={toolkit.name}
+              trigger={
+                <Button type="button" variant="ghost" size="sm" disabled={gate.pending}>
+                  Rename
+                </Button>
+              }
+            />
+            {!connection.is_default ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={gate.pending || updateMutation.isPending}
+                onClick={() => void makeDefault()}
+              >
+                Make default
               </Button>
-            }
-          />
-          {!connection.is_default ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={!canWrite || updateMutation.isPending}
-              title={canWrite ? undefined : writeReason}
-              onClick={() => void makeDefault()}
-            >
-              Make default
-            </Button>
-          ) : null}
-          {needsReconnect ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!canWrite || reconnectMutation.isPending}
-              title={canWrite ? undefined : writeReason}
-              onClick={() => void startReconnect()}
-            >
-              Reconnect
-            </Button>
-          ) : null}
-          <Button type="button" variant="outline" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason} onClick={() => setActionsOpen(true)}>
-            Actions
-          </Button>
-          <ConfirmDialog
-            trigger={
-              <Button type="button" variant="ghost" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
-                Disconnect
+            ) : null}
+            {needsReconnect ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={gate.pending || reconnectMutation.isPending}
+                onClick={() => void startReconnect()}
+              >
+                Reconnect
               </Button>
-            }
-            title={`Disconnect ${toolkit.name}?`}
-            description={disconnectDescription}
-            confirmLabel="Disconnect"
-            onConfirm={handleDisconnect}
-          />
-        </div>
+            ) : null}
+            <Button type="button" variant="secondary" size="sm" disabled={gate.pending} onClick={() => setActionsOpen(true)}>
+              Actions
+            </Button>
+            <ConfirmDialog
+              trigger={
+                <Button type="button" variant="ghost" size="sm" disabled={gate.pending}>
+                  Disconnect
+                </Button>
+              }
+              title={`Disconnect ${toolkit.name}?`}
+              description={disconnectDescription}
+              confirmLabel="Disconnect"
+              onConfirm={handleDisconnect}
+            />
+          </div>
+        ) : null}
       </div>
 
       {status === "initiated" && redirectUrl ? (
-        <a href={redirectUrl} target="_blank" rel="noreferrer noopener" className="text-[0.8125rem] font-medium text-foreground underline underline-offset-2">
-          Open sign-in page again
-        </a>
+        <Button asChild variant="link" className="w-fit">
+          <a href={redirectUrl} target="_blank" rel="noreferrer noopener">
+            Open sign-in page again
+          </a>
+        </Button>
       ) : null}
 
       <ReconnectKeyDialog
@@ -274,7 +275,7 @@ function ReconnectKeyDialog({
       await onSubmit(values);
       setValues({});
     } catch (error) {
-      toast.error(`Couldn't reconnect — ${appsErrorMessage(error)}`);
+      appsErrorToast("reconnect", error);
     } finally {
       setPending(false);
     }
@@ -290,7 +291,7 @@ function ReconnectKeyDialog({
           </DialogHeader>
           <DialogBody>
             {loading ? (
-              <p className="text-[0.8125rem] text-muted-foreground">Loading…</p>
+              <LoadingRow label="Loading the key fields…" />
             ) : (
               fields.map((field) => (
                 <Field key={field.name} label={field.label} htmlFor={`reconnect-field-${field.name}`} required={field.required}>
@@ -306,11 +307,11 @@ function ReconnectKeyDialog({
             )}
           </DialogBody>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={pending}>
-              {pending ? "Reconnecting…" : "Reconnect"}
+            <Button type="submit" variant="primary" busy={pending} busyLabel="Reconnecting…">
+              Reconnect
             </Button>
           </DialogFooter>
         </form>

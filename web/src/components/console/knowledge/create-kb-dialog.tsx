@@ -27,7 +27,10 @@ import {
   MANAGED_SEARCH_CONNECTION_KINDS,
   VECTOR_STORE_CONNECTION_KINDS,
 } from "@/components/console/settings/knowledge-connection-dialog";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { readOnlyCopy } from "@/components/console/shared/permission";
+import { ReadOnlyNote } from "@/components/shared/read-only-note";
+import { LoadingRow } from "@/components/shared/loading-state";
+import { useWriteGate } from "@/components/console/tools/write-gate";
 import { cn } from "@/lib/utils";
 import type { KbCreate, KnowledgeConnectionOut } from "@/contracts/lkap-contracts";
 
@@ -58,15 +61,15 @@ function ChoiceCard({
     <Label
       htmlFor={id}
       className={cn(
-        "flex cursor-pointer flex-col gap-1.5 rounded-md border border-border p-3 text-sm font-normal",
-        selected && "border-primary bg-muted/50",
+        "flex cursor-pointer flex-col gap-1.5 rounded border border-border p-3 text-body font-normal",
+        selected && "border-brand bg-brand-subtle",
       )}
     >
       <span className="flex items-center justify-between gap-2">
         <span className="font-medium text-foreground">{title}</span>
         <RadioGroupItem id={id} value={value} />
       </span>
-      <span className="text-xs text-muted-foreground">{hint}</span>
+      <span className="text-caption text-text-secondary">{hint}</span>
       {children}
     </Label>
   );
@@ -97,7 +100,7 @@ function ChoiceCard({
  * and there's no update-knowledge-base hook in WP-6's scope to edit it
  * afterwards); it can be added once WP-0 ships one.
  */
-export function CreateKbDialog() {
+export function CreateKbDialog({ variant = "primary" }: { variant?: "primary" | "secondary" } = {}) {
   const uid = React.useId();
   const [open, setOpen] = React.useState(false);
   const [name, setName] = React.useState("");
@@ -106,7 +109,7 @@ export function CreateKbDialog() {
   const [connectionId, setConnectionId] = React.useState("");
   const [partition, setPartition] = React.useState("");
   const createKb = useCreateKb();
-  const { canWrite } = useWriteAccess();
+  const gate = useWriteGate();
 
   const connectionsQuery = useKnowledgeConnections({ enabled: open && storage !== "platform" });
   const storeConnections = React.useMemo(
@@ -173,11 +176,14 @@ export function CreateKbDialog() {
     }
   }
 
+  // Viewers get a read-only note in place of the page's primary (decision D12).
+  if (!gate.show) return <ReadOnlyNote>{readOnlyCopy("builder", "add knowledge bases")}</ReadOnlyNote>;
+
   return (
-    <Dialog open={canWrite && open} onOpenChange={(next) => canWrite && setOpen(next)}>
+    <Dialog open={gate.can && open} onOpenChange={(next) => gate.can && setOpen(next)}>
       <DialogTrigger asChild>
-        <Button type="button" disabled={!canWrite} title={canWrite ? undefined : writeAccessReason()}>
-          <PlusIcon className="size-4" /> New knowledge base
+        <Button type="button" variant={variant} disabled={gate.pending}>
+          <PlusIcon aria-hidden="true" /> New knowledge base
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -202,7 +208,7 @@ export function CreateKbDialog() {
             </Field>
 
             <div className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium" id={`${uid}-storage-label`}>
+              <span className="text-body font-medium" id={`${uid}-storage-label`}>
                 Where is this knowledge stored?
               </span>
               <RadioGroup
@@ -284,7 +290,7 @@ export function CreateKbDialog() {
               // Both "platform" and "connection" still embed the uploaded documents — only "managed_search"
               // (Ragie holds and searches its own) has no embedder to choose.
               <div className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium">Embedder</span>
+                <span className="text-body font-medium">Embedder</span>
                 <RadioGroup
                   value={embedderId}
                   onValueChange={setEmbedderId}
@@ -311,11 +317,11 @@ export function CreateKbDialog() {
             )}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={createKb.isPending}>
-              {createKb.isPending ? "Creating…" : "Create"}
+            <Button type="submit" variant="primary" busy={createKb.isPending} busyLabel="Creating…">
+              Create
             </Button>
           </DialogFooter>
         </form>
@@ -351,17 +357,17 @@ function ConnectionPicker({
   const labelId = `${idPrefix}-label`;
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium" id={labelId}>
+      <span className="text-body font-medium" id={labelId}>
         {label}
       </span>
       {loading ? (
-        <p className="text-xs text-muted-foreground">Loading connections…</p>
+        <LoadingRow label="Loading connections…" />
       ) : connections.length === 0 ? (
-        <p className="text-xs text-muted-foreground" role="status">
+        <p className="text-caption text-text-secondary" role="status">
           {emptyMessage}{" "}
           <Link
             href="/console/settings?tab=knowledge-connections"
-            className="font-medium text-foreground underline underline-offset-2"
+            className="font-medium text-brand underline-offset-3 hover:underline"
           >
             Add one in Settings
           </Link>

@@ -3,14 +3,14 @@
 import * as React from "react";
 import { StoreIcon } from "lucide-react";
 
-import { Input } from "@/components/ui/input";
+import { SearchField } from "@/components/shared/search-field";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingRegion } from "@/components/shared/loading-state";
-import { EmptyState } from "@/components/shared/empty-state";
+import { EmptyState, NoMatches } from "@/components/shared/empty-state";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useToolProviderCategories, useToolProviderToolkits } from "@/components/console/lib/api-hooks";
 import { appsErrorMessage } from "@/components/console/tools/apps/use-composio";
@@ -70,6 +70,13 @@ export function AppGallery() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [categoriesQuery.data]);
 
+  const clearFilters = () => {
+    setSearchInput("");
+    setSearch("");
+    setCategory("all");
+    setConnectedOnly(false);
+  };
+
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = toolkitsQuery;
   const prefetchNext = React.useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
@@ -96,12 +103,12 @@ export function AppGallery() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Input
+        <SearchField
           value={searchInput}
-          onChange={(event) => setSearchInput(event.target.value)}
-          placeholder="Search apps"
+          onValueChange={setSearchInput}
+          placeholder="Search apps…"
           aria-label="Search apps"
-          className="w-full sm:w-64"
+          wrapperClassName="w-full sm:w-64 sm:max-w-64"
         />
         <SearchableSelect
           value={category}
@@ -117,7 +124,7 @@ export function AppGallery() {
         />
         <div className="flex items-center gap-2">
           <Switch id="apps-gallery-connected-only" checked={connectedOnly} onCheckedChange={setConnectedOnly} aria-label="Connected only" />
-          <Label htmlFor="apps-gallery-connected-only" className="text-sm font-normal">
+          <Label htmlFor="apps-gallery-connected-only" className="text-body font-normal">
             Connected only
           </Label>
         </div>
@@ -130,14 +137,22 @@ export function AppGallery() {
           ))}
         </LoadingRegion>
       ) : toolkitsQuery.isError ? (
-        <ErrorBanner message={`Couldn't load apps — ${appsErrorMessage(toolkitsQuery.error)}`} onRetry={() => toolkitsQuery.refetch()} />
+        <ErrorBanner title="Couldn't load apps" message={appsErrorMessage(toolkitsQuery.error)} onRetry={() => toolkitsQuery.refetch()} />
       ) : items.length === 0 ? (
-        <EmptyState
-          icon={StoreIcon}
-          title="No apps match"
-          description={connectedOnly ? "Nothing is connected yet." : "Try a different search or category."}
-          compact
-        />
+        connectedOnly && !search && category === "all" ? (
+          <EmptyState
+            icon={StoreIcon}
+            title="Nothing is connected yet"
+            description="Turn off “Connected only” to browse every app and connect one."
+            action={
+              <Button type="button" variant="secondary" size="sm" onClick={() => setConnectedOnly(false)}>
+                Show every app
+              </Button>
+            }
+          />
+        ) : (
+          <NoMatches items="apps" query={search} onClear={clearFilters} />
+        )
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -154,13 +169,14 @@ export function AppGallery() {
         <div>
           <Button
             type="button"
-            variant="outline"
-            disabled={toolkitsQuery.isFetchingNextPage}
+            variant="secondary"
+            busy={toolkitsQuery.isFetchingNextPage}
+            busyLabel="Loading more…"
             onMouseEnter={prefetchNext}
             onFocus={prefetchNext}
             onClick={() => void toolkitsQuery.fetchNextPage()}
           >
-            {toolkitsQuery.isFetchingNextPage ? "Loading…" : "Load more"}
+            Load more
           </Button>
         </div>
       ) : null}
@@ -169,7 +185,7 @@ export function AppGallery() {
 }
 
 /** Placeholder matching `AppCard`'s real shape (logo, name, description, category chips, action) — no layout jump when data lands. */
-function AppCardSkeleton() {
+export function AppCardSkeleton() {
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
       <div className="flex items-start gap-3">
@@ -178,8 +194,8 @@ function AppCardSkeleton() {
           <Skeleton className="h-4 w-2/3" />
           <Skeleton className="h-3 w-full" />
           <div className="flex gap-1">
-            <Skeleton className="h-5 w-16 rounded-full" />
-            <Skeleton className="h-5 w-20 rounded-full" />
+            <Skeleton className="h-[22px] w-16 rounded-sm" />
+            <Skeleton className="h-[22px] w-20 rounded-sm" />
           </div>
         </div>
       </div>

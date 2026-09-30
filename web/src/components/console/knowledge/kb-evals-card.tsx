@@ -2,15 +2,19 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Loader2Icon, PencilIcon, PlayIcon } from "lucide-react";
+import { PencilIcon, PlayIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Icon } from "@/components/shared/icon";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatCard, StatGrid } from "@/components/shared/data-display";
+import { LoadingRegion, LoadingRow } from "@/components/shared/loading-state";
+import { LifecycleBadge } from "@/components/shared/status-chip";
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { KbEvalDialog } from "@/components/console/knowledge/kb-eval-dialog";
+import { plainStatusError } from "@/components/console/knowledge/status-error";
+import { useWriteGate } from "@/components/console/tools/write-gate";
 import {
   useEvaluateKb,
   useKbEvalRun,
@@ -35,63 +39,45 @@ function formatDate(iso: string): string {
   }
 }
 
+/** Found / Skipped / Missed, through the shared lifecycle map. */
 function ItemStatusChip({ status }: { status: KbEvalItemResult["status"] }) {
-  if (status === "found") return <StatusChip tone="success">Found</StatusChip>;
-  if (status === "skipped") return <StatusChip tone="neutral">Skipped</StatusChip>;
-  return <StatusChip tone="danger">Missed</StatusChip>;
+  return <LifecycleBadge state={status === "found" || status === "skipped" ? status : "missed"} />;
 }
 
 function ResultSummary({ run, result }: { run: KbEvalRunOut; result: KbEvalResult }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-caption text-text-secondary tabular-nums">
           Last run {formatDate(result.finished_at)} · {result.mode === "hybrid" ? "Hybrid" : "Vector only"}
           {run.options.rerank === "local" ? " + re-ranked" : ""} · top {result.k}
         </p>
       </div>
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div>
-          <dt className="text-xs text-muted-foreground">Recall@1</dt>
-          <dd className="text-lg font-semibold tabular-nums text-foreground">{pct(result.recall_at_1)}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Recall@{result.k}</dt>
-          <dd className="text-lg font-semibold tabular-nums text-foreground">{pct(result.recall_at_k)}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">MRR</dt>
-          <dd className="text-lg font-semibold tabular-nums text-foreground">
-            {result.mrr === null ? "—" : result.mrr.toFixed(2)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Found</dt>
-          <dd className="text-lg font-semibold tabular-nums text-foreground">
-            {result.found} / {result.scored}
-            {result.skipped > 0 ? (
-              <span className="ml-1 text-xs font-normal text-muted-foreground">
-                ({pluralize(result.skipped, "skipped", "skipped")})
-              </span>
-            ) : null}
-          </dd>
-        </div>
-      </dl>
+      <StatGrid>
+        <StatCard label="Recall@1" value={pct(result.recall_at_1)} hint="Right passage ranked first" />
+        <StatCard label={`Recall@${result.k}`} value={pct(result.recall_at_k)} hint={`Right passage in the top ${result.k}`} />
+        <StatCard label="MRR" value={result.mrr === null ? "—" : result.mrr.toFixed(2)} hint="How high it ranks, on average" />
+        <StatCard
+          label="Found"
+          value={`${result.found} / ${result.scored}`}
+          hint={result.skipped > 0 ? pluralize(result.skipped, "question skipped", "questions skipped") : "Questions answered"}
+        />
+      </StatGrid>
       {result.items && result.items.length > 0 ? (
         <details className="group/details">
-          <summary className="cursor-pointer text-[0.8125rem] font-medium text-muted-foreground hover:text-foreground">
+          <summary className="cursor-pointer text-label font-medium text-text-secondary transition-colors duration-(--duration-fast) hover:text-foreground">
             Show every question
           </summary>
           <ul className="mt-2 flex flex-col gap-1.5">
             {result.items.map((item) => (
               <li
                 key={item.eval_id}
-                className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm"
+                className="flex items-center justify-between gap-3 rounded border border-border px-3 py-2 text-body"
               >
                 <span className="min-w-0 flex-1 truncate">{item.question}</span>
                 <span className="flex shrink-0 items-center gap-2">
                   {item.status === "found" && item.rank ? (
-                    <span className="text-xs tabular-nums text-muted-foreground">rank {item.rank}</span>
+                    <span className="text-caption tabular-nums text-text-secondary">rank {item.rank}</span>
                   ) : null}
                   <ItemStatusChip status={item.status} />
                 </span>
@@ -125,6 +111,8 @@ export function KbEvalsCard({ kbId }: { kbId: string }) {
   // The run just triggered this session wins over whatever was last saved; before that, the last finished run.
   const shown: KbEvalRunOut | null | undefined = activeJobId ? activeRun.data : latestRun.data;
 
+  const gate = useWriteGate();
+
   async function handleRun() {
     try {
       const run = await evaluate.mutateAsync(undefined);
@@ -135,53 +123,68 @@ export function KbEvalsCard({ kbId }: { kbId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">Evaluate</h2>
-          <p className="text-[0.8125rem] text-muted-foreground">
-            {total === 0 ? "No questions yet." : pluralize(total, "golden question", "golden questions")}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
-            <Icon as={PencilIcon} size="sm" /> Edit questions
-          </Button>
-          <Button type="button" size="sm" disabled={total === 0 || evaluate.isPending || running} onClick={() => void handleRun()}>
-            {evaluate.isPending || running ? (
-              <>
-                <Icon as={Loader2Icon} size="sm" className="animate-spin" /> Running…
-              </>
-            ) : (
-              <>
-                <Icon as={PlayIcon} size="sm" /> Run
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h2>Evaluate</h2>
+        </CardTitle>
+        <CardDescription className="tabular-nums">
+          {total === 0 ? "No questions yet." : pluralize(total, "golden question", "golden questions")}
+        </CardDescription>
+        {gate.show ? (
+          <CardAction className="flex-wrap">
+            <Button type="button" variant="ghost" size="sm" disabled={gate.pending} onClick={() => setDialogOpen(true)}>
+              <PencilIcon aria-hidden="true" /> Edit questions
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={gate.pending || total === 0}
+              busy={evaluate.isPending || running}
+              busyLabel="Running…"
+              onClick={() => void handleRun()}
+            >
+              <PlayIcon aria-hidden="true" /> Run
+            </Button>
+          </CardAction>
+        ) : null}
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {activeRun.data?.status === "failed" || activeRun.data?.status === "dead" ? (
+          <ErrorBanner
+            title="The evaluation run failed"
+            message={plainStatusError(activeRun.data.error, "Something went wrong while scoring the questions. Run it again in a moment.")}
+            onRetry={gate.can && total > 0 ? () => void handleRun() : undefined}
+            retryLabel="Run again"
+          />
+        ) : null}
 
-      {activeRun.data?.status === "failed" || activeRun.data?.status === "dead" ? (
-        <ErrorBanner message={activeRun.data.error ?? "The evaluation run failed."} />
-      ) : null}
-
-      {latestRun.isLoading && !activeJobId ? (
-        <Skeleton className="h-16 w-full" />
-      ) : shown?.result ? (
-        <ResultSummary run={shown} result={shown.result} />
-      ) : total === 0 ? (
-        <EmptyState
-          title="No golden questions yet"
-          description="Add a few questions with a known answer, then run Evaluate to see how well retrieval finds them."
-          compact
-        />
-      ) : running ? (
-        <p className="text-sm text-muted-foreground">Running the evaluation set…</p>
-      ) : (
-        <p className="text-sm text-muted-foreground">Run the evaluation set to see recall and MRR.</p>
-      )}
+        {latestRun.isLoading && !activeJobId ? (
+          <LoadingRegion label="Loading the last evaluation">
+            <Skeleton className="mb-3 h-3.5 w-2/5" />
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-[104px] w-full rounded-lg" />
+              ))}
+            </div>
+          </LoadingRegion>
+        ) : shown?.result ? (
+          <ResultSummary run={shown} result={shown.result} />
+        ) : total === 0 ? (
+          <EmptyState
+            title="No golden questions yet"
+            description="Add a few questions with a known answer, then run Evaluate to see how well retrieval finds them."
+            compact
+          />
+        ) : running ? (
+          <LoadingRow label="Running the evaluation set…" />
+        ) : (
+          <p className="text-label text-text-secondary">Run the evaluation set to see recall and MRR.</p>
+        )}
+      </CardContent>
 
       <KbEvalDialog kbId={kbId} open={dialogOpen} onOpenChange={setDialogOpen} evals={evalsQuery.data?.items ?? []} />
-    </div>
+    </Card>
   );
 }

@@ -5,26 +5,29 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { PencilIcon, PlayIcon, PlusIcon, Trash2Icon, WrenchIcon } from "lucide-react";
 
+import { EmptyState, NoMatches } from "@/components/shared/empty-state";
+import { SkeletonRows } from "@/components/shared/loading-state";
+import { ReadOnlyNote } from "@/components/shared/read-only-note";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
+import { Tag } from "@/components/shared/tag";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { Button } from "@/components/ui/button";
 import { useAgents, useDeleteTool, useProviders, useToolProviderConnections, useTools } from "@/components/console/lib/api-hooks";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
-import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { readOnlyCopy } from "@/components/console/shared/permission";
 import { DatasetToolEditorDialog } from "@/components/console/tools/dataset-tool-editor-dialog";
 import { DryRunDialog } from "@/components/console/tools/dry-run-dialog";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
+import { Highlight, ListToolbar, SEARCH_THRESHOLD, matchesQuery, useRememberedChoice } from "@/components/console/tools/list-search";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
 import { ProviderToolEditorDialog } from "@/components/console/tools/provider-tool-editor-dialog";
 import { requestSummary } from "@/components/console/tools/tool-row";
 import { ToolTemplateDialog } from "@/components/console/tools/tool-template-dialog";
+import { useWriteGate } from "@/components/console/tools/write-gate";
 import type { AppConnectionOut, ProviderSpec, ProviderToolDefinition, ToolOut } from "@/contracts/lkap-contracts";
-import { PageHeader } from "@/components/shared/page-header";
-import { SkeletonRows } from "@/components/shared/loading-state";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 
 /**
  * V5-47's `ProviderToolDefinition`/`McpServerOrigin` — checked structurally
@@ -68,14 +71,85 @@ function appNameFor(tool: ToolOut, connectionsById: Map<string, AppConnectionOut
   return connection?.toolkit_name ?? connection?.toolkit ?? definition.toolkit ?? "App";
 }
 
+type ToolKind = "http" | "mcp" | "dataset" | "app";
+type KindFilter = "all" | ToolKind;
+const KIND_FILTERS: readonly KindFilter[] = ["all", "http", "mcp", "dataset", "app"];
+const KIND_FILTER_LABEL: Record<ToolKind, string> = { http: "HTTP", mcp: "MCP", dataset: "Lookup", app: "Apps" };
+
+function kindOf(tool: ToolOut): ToolKind {
+  if (isProviderTool(tool)) return "app";
+  if (tool.kind === "dataset") return "dataset";
+  return tool.kind === "http" ? "http" : "mcp";
+}
+
+/**
+ * The Tools tab's header actions (docs/ui/DESIGN-SYSTEM.md section 7.3): the
+ * secondary "add" routes first, then the one primary, "Add HTTP tool", last.
+ * Below the builder floor they are replaced by a read-only note (decision
+ * D12); while the role loads they render disabled.
+ */
+export function ToolsAddActions() {
+  const toolsQuery = useTools();
+  const providersQuery = useProviders();
+  const secretBagSpec = providersQuery.data?.providers.find((p) => p.kind === "secret_bag");
+  const refetch = () => void toolsQuery.refetch();
+  const gate = useWriteGate();
+  if (!gate.show) return <ReadOnlyNote>{readOnlyCopy("builder", "add tools")}</ReadOnlyNote>;
+  return (
+    <>
+      <ToolTemplateDialog
+        agentId={null}
+        secretBagSpec={secretBagSpec}
+        onInstantiated={refetch}
+        trigger={
+          <Button type="button" variant="secondary" disabled={gate.pending}>
+            <PlusIcon aria-hidden="true" /> From a template
+          </Button>
+        }
+      />
+      <McpToolEditorDialog
+        agentId={null}
+        secretBagSpec={secretBagSpec}
+        onSaved={refetch}
+        trigger={
+          <Button type="button" variant="secondary" disabled={gate.pending}>
+            <PlusIcon aria-hidden="true" /> Add MCP server
+          </Button>
+        }
+      />
+      <DatasetToolEditorDialog
+        agentId={null}
+        onSaved={refetch}
+        trigger={
+          <Button type="button" variant="secondary" disabled={gate.pending}>
+            <PlusIcon aria-hidden="true" /> Add lookup tool
+          </Button>
+        }
+      />
+      <HttpToolEditorDialog
+        agentId={null}
+        secretBagSpec={secretBagSpec}
+        onSaved={refetch}
+        trigger={
+          <Button type="button" variant="primary" disabled={gate.pending}>
+            <PlusIcon aria-hidden="true" /> Add HTTP tool
+          </Button>
+        }
+      />
+    </>
+  );
+}
+
 /**
  * `/console/tools` (docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §1, §3 WP-5
  * "Change"): every HTTP tool and MCP server across agents, plus tools
  * created with no agent (`agent_id: null`, attachable from any agent's
- * Tools section). WP-1's sidebar links here; there is no v1 UX for this
- * page (it did not exist before v2), so this mirrors the Knowledge list's
- * conventions (`kb-list.tsx`): a `ResponsiveTable`, row actions, an empty
- * state.
+ * Tools section). The page header and its add actions sit above the tab
+ * strip (`ToolsPageTabs`, `ToolsAddActions`); this is the list itself: a
+ * search field and a kind filter once there are six or more tools
+ * (docs/ui/DESIGN-SYSTEM.md section 9; the filter is remembered per person),
+ * a `ResponsiveTable` with row actions, and separate "nothing yet" and
+ * "no matches" states.
  */
 export function ToolsList() {
   const toolsQuery = useTools();
@@ -87,94 +161,18 @@ export function ToolsList() {
   const connectionsQuery = useToolProviderConnections();
   const connectionsById = new Map((connectionsQuery.data?.items ?? []).map((c) => [c.id, c]));
   const secretBagSpec = providersQuery.data?.providers.find((p) => p.kind === "secret_bag");
-  const { canWrite } = useWriteAccess();
-  const writeReason = writeAccessReason();
+  const gate = useWriteGate();
+  const [query, setQuery] = React.useState("");
+  const [kind, setKind] = useRememberedChoice<KindFilter>("lkap.tools.kind", KIND_FILTERS, "all");
 
-  // The two "add" actions live in the page header, like every other console
-  // list's primary action (UI_UX_SPEC §3.2), and stay reachable while the
-  // list loads or errors.
   const refetch = () => void toolsQuery.refetch();
-  const header = (
-    <PageHeader
-      title="Tools"
-      description="HTTP tools and MCP servers, shared across agents."
-      actions={
-        <>
-          <ToolTemplateDialog
-            agentId={null}
-            secretBagSpec={secretBagSpec}
-            onInstantiated={refetch}
-            trigger={
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!canWrite}
-                title={canWrite ? undefined : writeReason}
-              >
-                <PlusIcon className="size-3.5" /> From a template
-              </Button>
-            }
-          />
-          <McpToolEditorDialog
-            agentId={null}
-            secretBagSpec={secretBagSpec}
-            onSaved={refetch}
-            trigger={
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!canWrite}
-                title={canWrite ? undefined : writeReason}
-              >
-                <PlusIcon className="size-3.5" /> Add MCP server
-              </Button>
-            }
-          />
-          <DatasetToolEditorDialog
-            agentId={null}
-            onSaved={refetch}
-            trigger={
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!canWrite}
-                title={canWrite ? undefined : writeReason}
-              >
-                <PlusIcon className="size-3.5" /> Add lookup tool
-              </Button>
-            }
-          />
-          <HttpToolEditorDialog
-            agentId={null}
-            secretBagSpec={secretBagSpec}
-            onSaved={refetch}
-            trigger={
-              <Button type="button" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
-                <PlusIcon className="size-3.5" /> Add HTTP tool
-              </Button>
-            }
-          />
-        </>
-      }
-    />
-  );
 
   if (toolsQuery.isLoading) {
-    return (
-      <div>
-        {header}
-        <SkeletonRows label="Loading tools" rowClassName="h-12" />
-      </div>
-    );
+    return <SkeletonRows label="Loading tools" rows={4} rowClassName="h-14" />;
   }
 
   if (toolsQuery.isError) {
-    return (
-      <div>
-        {header}
-        <ErrorBanner message={`Couldn't load tools — ${errorMessage(toolsQuery.error)}`} onRetry={refetch} />
-      </div>
-    );
+    return <ErrorBanner error={toolsQuery.error} context={{ action: "load tools" }} onRetry={refetch} />;
   }
 
   const tools = toolsQuery.data?.items ?? [];
@@ -188,106 +186,139 @@ export function ToolsList() {
       : { label: "One agent" };
   }
 
+  const counts: Record<ToolKind, number> = { http: 0, mcp: 0, dataset: 0, app: 0 };
+  for (const tool of tools) counts[kindOf(tool)] += 1;
+  const filtering = query.trim() !== "" || kind !== "all";
+  const showToolbar = tools.length >= SEARCH_THRESHOLD || filtering;
+  const visible = tools.filter(
+    (tool) =>
+      (kind === "all" || kindOf(tool) === kind) &&
+      matchesQuery([tool.name, requestSummary(tool), kindLabel(tool), scopeOf(tool).label, appNameFor(tool, connectionsById)], query),
+  );
+  const clearFilters = () => {
+    setQuery("");
+    setKind("all");
+  };
+  const kindOptions = [
+    { value: "all" as KindFilter, label: "All", count: tools.length },
+    ...(Object.keys(KIND_FILTER_LABEL) as ToolKind[])
+      .filter((key) => counts[key] > 0 || key === kind)
+      .map((key) => ({ value: key as KindFilter, label: KIND_FILTER_LABEL[key], count: counts[key] })),
+  ];
+
+  const nameBlock = (tool: ToolOut) => (
+    <div className="min-w-0">
+      <div className="truncate font-mono text-body text-foreground">
+        <Highlight text={tool.name} query={query} />
+      </div>
+      <div className="truncate text-caption text-text-secondary">
+        <Highlight text={requestSummary(tool)} query={query} />
+      </div>
+    </div>
+  );
+
+  const kindCell = (tool: ToolOut) =>
+    isProviderTool(tool) ? (
+      <Tag>
+        <VendorMark vendor={appNameFor(tool, connectionsById) ?? "App"} size="sm" />
+        App
+      </Tag>
+    ) : (
+      <span className="text-text-secondary">{kindLabel(tool)}</span>
+    );
+
+  const statusPill = (tool: ToolOut) =>
+    tool.enabled ? <StatusPill tone="success">Enabled</StatusPill> : <StatusPill tone="neutral">Disabled</StatusPill>;
+
   const columns: ResponsiveTableColumn<ToolOut>[] = [
-    {
-      id: "name",
-      header: "Name",
-      cell: (tool) => (
-        <div className="min-w-0">
-          <div className="truncate font-mono text-sm text-foreground">{tool.name}</div>
-          <div className="truncate text-xs text-muted-foreground">{requestSummary(tool)}</div>
-        </div>
-      ),
-    },
-    {
-      id: "kind",
-      header: "Kind",
-      cell: (tool) =>
-        isProviderTool(tool) ? (
-          <StatusChip tone="info" size="sm">
-            <VendorMark vendor={appNameFor(tool, connectionsById) ?? "App"} size="sm" />
-            App
-          </StatusChip>
-        ) : (
-          <span className="text-muted-foreground">{kindLabel(tool)}</span>
-        ),
-    },
+    { id: "name", header: "Name", cell: nameBlock },
+    { id: "kind", header: "Kind", cell: kindCell },
     {
       id: "scope",
       header: "Used by",
       cell: (tool) => {
         const scope = scopeOf(tool);
         return scope.href ? (
-          <Link href={scope.href} className="text-brand-text hover:underline">
+          <Link href={scope.href} className="text-brand underline-offset-3 hover:underline">
             {scope.label}
           </Link>
         ) : (
-          <span className="text-muted-foreground">{scope.label}</span>
+          <span className="text-text-secondary">{scope.label}</span>
         );
       },
     },
-    {
-      id: "status",
-      header: "Status",
-      cell: (tool) => (tool.enabled ? <StatusChip tone="success">Enabled</StatusChip> : <StatusChip tone="neutral">Disabled</StatusChip>),
-    },
+    { id: "status", header: "Status", cell: statusPill },
     {
       id: "updated",
       header: "Updated",
-      cell: (tool) => <RelativeTime iso={tool.updated_at} />,
+      cell: (tool) => <RelativeTime iso={tool.updated_at} className="text-text-secondary" />,
     },
     {
       id: "actions",
       header: <span className="sr-only">Actions</span>,
       align: "end",
       interactive: true,
-      cell: (tool) => <ToolActions tool={tool} secretBagSpec={secretBagSpec} onRefetch={() => void toolsQuery.refetch()} />,
+      cell: (tool) => <ToolActions tool={tool} secretBagSpec={secretBagSpec} onRefetch={refetch} />,
     },
   ];
 
   return (
     <div>
-      {header}
+      {showToolbar ? (
+        <ListToolbar
+          items="tools"
+          query={query}
+          onQueryChange={setQuery}
+          filter={{ label: "Filter by kind", value: kind, onValueChange: setKind, options: kindOptions }}
+        />
+      ) : null}
       <ResponsiveTable
         columns={columns}
-        rows={tools}
+        rows={visible}
         label="Tools"
         getRowKey={(tool) => tool.id}
-        renderCard={(tool) => {
-          const scope = scopeOf(tool);
-          return (
-            <div className="flex flex-col gap-1">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate font-mono text-sm text-foreground">{tool.name}</div>
-                  <div className="truncate text-xs text-muted-foreground">{requestSummary(tool)}</div>
-                </div>
-                <ToolActions tool={tool} secretBagSpec={secretBagSpec} onRefetch={() => void toolsQuery.refetch()} />
-              </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>{kindLabel(tool)}</span>
-                <span aria-hidden="true">·</span>
-                <span>{scope.label}</span>
-                <span aria-hidden="true">·</span>
-                {tool.enabled ? <StatusChip tone="success">Enabled</StatusChip> : <StatusChip tone="neutral">Disabled</StatusChip>}
-              </div>
+        renderCard={(tool) => (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-start justify-between gap-2">
+              {nameBlock(tool)}
+              <ToolActions tool={tool} secretBagSpec={secretBagSpec} onRefetch={refetch} />
             </div>
-          );
-        }}
+            <div className="flex flex-wrap items-center gap-2 text-caption text-text-secondary">
+              {kindCell(tool)}
+              <span aria-hidden="true">·</span>
+              <span>{scopeOf(tool).label}</span>
+              {statusPill(tool)}
+            </div>
+          </div>
+        )}
         empty={
-          <EmptyState
-            icon={WrenchIcon}
-            title="No tools yet"
-            description="Connect an API or MCP server the agent can call, then attach it from an agent's Tools section."
-            action={
-              <HttpToolEditorDialog
-                agentId={null}
-                secretBagSpec={secretBagSpec}
-                onSaved={refetch}
-                trigger={<Button type="button">Add HTTP tool</Button>}
-              />
-            }
-          />
+          filtering ? (
+            <NoMatches items="tools" query={query} onClear={clearFilters} />
+          ) : (
+            <EmptyState
+              icon={WrenchIcon}
+              title="No tools yet"
+              description={
+                gate.show
+                  ? "Connect an API or MCP server the agent can call, then attach it from an agent's Tools section."
+                  : readOnlyCopy("builder", "add tools")
+              }
+              action={
+                gate.show ? (
+                  <HttpToolEditorDialog
+                    agentId={null}
+                    secretBagSpec={secretBagSpec}
+                    onSaved={refetch}
+                    trigger={
+                      <Button type="button" variant="secondary" disabled={gate.pending}>
+                        <PlusIcon aria-hidden="true" /> Add HTTP tool
+                      </Button>
+                    }
+                  />
+                ) : undefined
+              }
+            />
+          )
         }
       />
     </div>
@@ -299,7 +330,8 @@ export function ToolsList() {
  * uncontrolled open state via its `trigger`, so (unlike a menu) nothing here
  * needs to reach into them to open one programmatically. Mirrors
  * `tool-row.tsx`'s buttons, minus the per-agent "Use in this agent" switch
- * that only makes sense inside an agent's Tools section.
+ * that only makes sense inside an agent's Tools section. Edit and Delete are
+ * not rendered for viewers (decision D12); Dry run stays, it changes nothing.
  */
 function ToolActions({
   tool,
@@ -311,8 +343,7 @@ function ToolActions({
   onRefetch: () => void;
 }) {
   const deleteTool = useDeleteTool();
-  const { canWrite } = useWriteAccess();
-  const writeReason = writeAccessReason();
+  const gate = useWriteGate();
 
   async function handleDelete() {
     try {
@@ -328,8 +359,14 @@ function ToolActions({
   // §6): the agent's own Connected apps card creates, updates and removes
   // this row as the mode changes, so no edit or delete control is offered here.
   if (originOf(tool)) {
-    return <p className="text-right text-xs text-muted-foreground">Managed from the Connected apps card</p>;
+    return <p className="text-right text-caption text-text-secondary">Managed from the Connected apps card</p>;
   }
+
+  const editTrigger = (
+    <Button type="button" variant="ghost" size="icon-sm" aria-label={`Edit ${tool.name}`} disabled={gate.pending}>
+      <PencilIcon aria-hidden="true" />
+    </Button>
+  );
 
   return (
     <div className="flex items-center justify-end gap-1">
@@ -338,104 +375,51 @@ function ToolActions({
           toolId={tool.id}
           trigger={
             <Button type="button" variant="ghost" size="icon-sm" aria-label={`Dry run ${tool.name}`}>
-              <PlayIcon className="size-3.5" />
+              <PlayIcon aria-hidden="true" />
             </Button>
           }
         />
       ) : null}
-      {tool.kind === "http" ? (
+      {!gate.show ? null : tool.kind === "http" ? (
         <HttpToolEditorDialog
           agentId={tool.agent_id ?? null}
           tool={tool}
           secretBagSpec={secretBagSpec}
           onSaved={onRefetch}
-          trigger={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Edit ${tool.name}`}
-              disabled={!canWrite}
-              title={canWrite ? undefined : writeReason}
-            >
-              <PencilIcon className="size-3.5" />
-            </Button>
-          }
+          trigger={editTrigger}
         />
       ) : tool.kind === "provider" ? (
         // R-V5-8, V5-50: a `ProviderToolDefinition` gets its own dialog, never the MCP one.
         <ProviderToolEditorDialog
           tool={tool as ToolOut & { definition: ProviderToolDefinition }}
           onSaved={onRefetch}
-          trigger={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Edit ${tool.name}`}
-              disabled={!canWrite}
-              title={canWrite ? undefined : writeReason}
-            >
-              <PencilIcon className="size-3.5" />
-            </Button>
-          }
+          trigger={editTrigger}
         />
       ) : tool.kind === "dataset" ? (
         // V6-19: a lookup-table tool (`DatasetToolDefinition`, D-V6-27) — its own editor, never the MCP one.
-        <DatasetToolEditorDialog
-          agentId={tool.agent_id ?? null}
-          tool={tool}
-          onSaved={onRefetch}
-          trigger={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Edit ${tool.name}`}
-              disabled={!canWrite}
-              title={canWrite ? undefined : writeReason}
-            >
-              <PencilIcon className="size-3.5" />
-            </Button>
-          }
-        />
+        <DatasetToolEditorDialog agentId={tool.agent_id ?? null} tool={tool} onSaved={onRefetch} trigger={editTrigger} />
       ) : (
         <McpToolEditorDialog
           agentId={tool.agent_id ?? null}
           tool={tool}
           secretBagSpec={secretBagSpec}
           onSaved={onRefetch}
-          trigger={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Edit ${tool.name}`}
-              disabled={!canWrite}
-              title={canWrite ? undefined : writeReason}
-            >
-              <PencilIcon className="size-3.5" />
-            </Button>
-          }
+          trigger={editTrigger}
         />
       )}
-      <ConfirmDialog
-        trigger={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Delete ${tool.name}`}
-            disabled={!canWrite}
-            title={canWrite ? undefined : writeReason}
-          >
-            <Trash2Icon className="size-3.5" />
-          </Button>
-        }
-        title={`Delete "${tool.name}"?`}
-        description="This removes the tool everywhere it's attached."
-        onConfirm={handleDelete}
-      />
+      {gate.show ? (
+        <ConfirmDialog
+          trigger={
+            <Button type="button" variant="ghost" size="icon-sm" aria-label={`Delete ${tool.name}`} disabled={gate.pending}>
+              <Trash2Icon aria-hidden="true" />
+            </Button>
+          }
+          title={`Delete “${tool.name}”?`}
+          description="This removes the tool everywhere it's attached."
+          confirmLabel="Delete tool"
+          onConfirm={handleDelete}
+        />
+      ) : null}
     </div>
   );
 }

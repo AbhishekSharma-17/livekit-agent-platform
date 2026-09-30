@@ -231,7 +231,7 @@ describe("ConnectionRow — Rename and Make default (R-V5-13)", () => {
     fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Work" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Rename" }));
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't rename — Another account of this app already uses that name"));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't rename", { description: "Another account of this app already uses that name" }));
   });
 });
 

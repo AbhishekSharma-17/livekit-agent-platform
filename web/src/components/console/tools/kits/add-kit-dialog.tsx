@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/shared/field";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { StatusChip, type StatusTone } from "@/components/shared/status-chip";
+import { StatusPill, type StatusTone } from "@/components/shared/status-chip";
 import {
   Collapsible,
   CollapsibleContent,
@@ -38,7 +38,10 @@ import {
 } from "@/components/console/lib/api-hooks";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { readOnlyCopy } from "@/components/console/shared/permission";
+import { ReadOnlyNote } from "@/components/shared/read-only-note";
+import { Alert } from "@/components/ui/alert";
+import { useWriteGate } from "@/components/console/tools/write-gate";
 import { KIT_PREFIX_PATTERN } from "@/components/console/tools/kits/constants";
 import type {
   AgentOut,
@@ -142,8 +145,7 @@ export function AddKitDialog({
   const providersQuery = useProviders({ enabled: open });
   const connectionsQuery = useToolProviderConnections({ enabled: open });
   const datasetsQuery = useDatasets({ enabled: open });
-  const { canWrite: canAdmin } = useWriteAccess("admin");
-  const adminReason = writeAccessReason("admin");
+  const adminGate = useWriteGate("admin");
 
   React.useEffect(() => {
     if (open) {
@@ -263,7 +265,7 @@ export function AddKitDialog({
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="mt-1 text-[0.8125rem] text-muted-foreground">{variant.summary}</p>
+                <p className="mt-1 text-label text-text-secondary">{variant.summary}</p>
               </Field>
             ) : null}
 
@@ -276,7 +278,7 @@ export function AddKitDialog({
             >
               <Input
                 id={`${uid}-prefix`}
-                className="w-48 font-mono text-sm"
+                className="w-48 font-mono text-body"
                 value={draft.blockPrefix}
                 onChange={(e) => set("blockPrefix", e.target.value)}
               />
@@ -303,11 +305,7 @@ export function AddKitDialog({
 
             {requires.secretNames.length > 0 ? (
               secretBagSpec ? (
-                <div
-                  className={canAdmin ? undefined : "pointer-events-none opacity-50"}
-                  aria-disabled={!canAdmin}
-                  title={canAdmin ? undefined : adminReason}
-                >
+                adminGate.show ? (
                   <CredentialPicker
                     spec={secretBagSpec}
                     value={draft.credentialId}
@@ -315,17 +313,19 @@ export function AddKitDialog({
                     required={false}
                     label="Key"
                   />
-                </div>
+                ) : (
+                  <ReadOnlyNote variant="block">{readOnlyCopy("admin", "attach a key to this kit")}</ReadOnlyNote>
+                )
               ) : null
             ) : null}
             {requires.secretNames.length > 0 && !draft.credentialId ? (
-              <p className="text-[0.8125rem] text-muted-foreground">
+              <p className="text-label text-text-secondary">
                 Added without a key; the calls run unauthenticated until an admin adds one.
               </p>
             ) : null}
 
             {variant.source === "composio_action" ? (
-              canAdmin ? (
+              adminGate.show ? (
                 <Field label="Connected app" htmlFor={`${uid}-connection`} required>
                   <Select value={draft.connectionId ?? undefined} onValueChange={(next) => set("connectionId", next)}>
                     <SelectTrigger id={`${uid}-connection`} className="w-full">
@@ -340,15 +340,13 @@ export function AddKitDialog({
                     </SelectContent>
                   </Select>
                   {connections.length === 0 ? (
-                    <p className="mt-1 text-[0.8125rem] text-muted-foreground">
+                    <p className="mt-1 text-label text-text-secondary">
                       No connected app of this kind yet — connect one under Tools → Apps.
                     </p>
                   ) : null}
                 </Field>
               ) : (
-                <p className="text-[0.8125rem] text-muted-foreground">
-                  Connecting an app needs an admin — {adminReason}.
-                </p>
+                <ReadOnlyNote variant="block">{readOnlyCopy("admin", "choose the connected app for this kit")}</ReadOnlyNote>
               )
             ) : null}
 
@@ -369,7 +367,7 @@ export function AddKitDialog({
                 {dataset ? (
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
                     {dataset.key_columns.map((column) => (
-                      <label key={column.name} className="flex items-center gap-1.5 text-sm">
+                      <label key={column.name} className="flex items-center gap-1.5 text-body">
                         <input
                           type="checkbox"
                           className="size-4"
@@ -383,13 +381,13 @@ export function AddKitDialog({
                             )
                           }
                         />
-                        <span className="font-mono text-[0.8125rem]">{column.name}</span>
+                        <span className="font-mono text-label">{column.name}</span>
                       </label>
                     ))}
                   </div>
                 ) : null}
                 {needsMoreKeyColumns ? (
-                  <p className="mt-1 text-[0.8125rem] text-danger-text">
+                  <p className="mt-1 text-label text-destructive-text">
                     Match on at least {requires.minKeyColumns}{" "}
                     {requires.minKeyColumns === 1 ? "column" : "columns"}.
                   </p>
@@ -432,21 +430,21 @@ export function AddKitDialog({
 
           {preview ? (
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">What this adds</h3>
+              <h3 className="text-body font-semibold text-foreground">What this adds</h3>
               {CHANGE_GROUPS.map((group) => {
                 const rows = preview.changes.filter((change) => group.kinds.includes(change.kind));
                 if (rows.length === 0) return null;
                 return (
                   <div key={group.heading} className="flex flex-col gap-1.5">
-                    <h4 className="text-sm font-medium text-foreground">{group.heading}</h4>
-                    <ul className="flex flex-col gap-1 rounded-md border border-border p-2.5">
+                    <h4 className="text-body font-medium text-foreground">{group.heading}</h4>
+                    <ul className="flex flex-col gap-1 rounded border border-border p-2.5">
                       {rows.map((change) => (
-                        <li key={`${change.kind}-${change.id}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.8125rem]">
-                          <StatusChip tone={STATUS_TONE[change.status]} size="sm">
+                        <li key={`${change.kind}-${change.id}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-label">
+                          <StatusPill tone={STATUS_TONE[change.status]} size="sm">
                             {STATUS_LABEL[change.status]}
-                          </StatusChip>
+                          </StatusPill>
                           <span className="font-medium text-foreground">{change.label || change.id}</span>
-                          {change.note ? <span className="text-muted-foreground">— {change.note}</span> : null}
+                          {change.note ? <span className="text-text-secondary">— {change.note}</span> : null}
                         </li>
                       ))}
                     </ul>
@@ -457,7 +455,7 @@ export function AddKitDialog({
               {(preview.notes ?? []).length > 0 ? (
                 <ul className="flex flex-col gap-1">
                   {(preview.notes ?? []).map((note) => (
-                    <li key={note} className="text-[0.8125rem] text-muted-foreground">
+                    <li key={note} className="text-label text-text-secondary">
                       {note}
                     </li>
                   ))}
@@ -465,20 +463,17 @@ export function AddKitDialog({
               ) : null}
 
               {!preview.validation.ok ? (
-                <div className="rounded-md border border-danger-text/20 bg-danger-soft p-2.5 text-[0.8125rem]">
-                  <p className="font-medium text-danger-text">This would leave the agent&rsquo;s configuration invalid.</p>
-                  <ul className="mt-1 flex flex-col gap-0.5">
+                <Alert tone="danger" title="This would leave the agent’s configuration invalid.">
+                  <ul className="flex flex-col gap-0.5">
                     {(preview.validation.errors ?? []).map((message) => (
-                      <li key={message} className="text-danger-text">
-                        {message}
-                      </li>
+                      <li key={message}>{message}</li>
                     ))}
                   </ul>
-                </div>
+                </Alert>
               ) : (preview.validation.warnings ?? []).length > 0 ? (
                 <ul className="flex flex-col gap-0.5">
                   {(preview.validation.warnings ?? []).map((message) => (
-                    <li key={message} className="text-[0.8125rem] text-warning-text">
+                    <li key={message} className="text-label text-warning-text">
                       {message}
                     </li>
                   ))}
@@ -487,12 +482,12 @@ export function AddKitDialog({
 
               <Collapsible open={snippetOpen} onOpenChange={setSnippetOpen}>
                 <CollapsibleTrigger asChild>
-                  <Button type="button" variant="ghost" size="sm" className="w-fit text-xs text-muted-foreground">
+                  <Button type="button" variant="ghost" size="sm" className="w-fit text-caption text-text-secondary">
                     {snippetOpen ? "Hide" : "Show"} the instructions this adds
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <pre className="mt-1 max-h-48 overflow-y-auto rounded-md bg-muted p-2.5 text-xs whitespace-pre-wrap">
+                  <pre className="mt-1 max-h-48 overflow-y-auto rounded bg-muted p-2.5 text-caption whitespace-pre-wrap">
                     {preview.instructions_snippet}
                   </pre>
                 </CollapsibleContent>
@@ -502,15 +497,15 @@ export function AddKitDialog({
         </DialogBody>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+          <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
             Cancel
           </Button>
           {preview === null ? (
-            <Button type="button" disabled={!canPreview} onClick={() => void handlePreview()}>
+            <Button type="button" variant="primary" disabled={!canPreview} onClick={() => void handlePreview()}>
               {instantiate.isPending ? "Checking…" : "Preview"}
             </Button>
           ) : (
-            <Button type="button" disabled={!canAdd || instantiate.isPending} onClick={() => void handleAdd()}>
+            <Button type="button" variant="primary" disabled={!canAdd || instantiate.isPending} onClick={() => void handleAdd()}>
               {instantiate.isPending ? "Adding…" : "Add"}
             </Button>
           )}

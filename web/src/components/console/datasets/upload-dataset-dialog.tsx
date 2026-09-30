@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { PlusIcon, UploadCloudIcon } from "lucide-react";
+import { PlusIcon, UploadIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/shared/field";
@@ -29,7 +29,10 @@ import { useUploadDataset } from "@/components/console/lib/api-hooks";
 import { DATASET_UPLOAD_MAX_MB, datasetUploadCapErrorMessage, isDatasetFileOverUploadCap } from "@/components/console/lib/upload";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { datasetFormatFromFilename, sniffDatasetFileColumns } from "@/components/console/datasets/dataset-columns";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { readOnlyCopy } from "@/components/console/shared/permission";
+import { LoadingRow } from "@/components/shared/loading-state";
+import { ReadOnlyNote } from "@/components/shared/read-only-note";
+import { useWriteGate } from "@/components/console/tools/write-gate";
 
 const ACCEPT_ATTR = ".csv,.tsv,.json";
 
@@ -59,7 +62,7 @@ interface ColumnDraft {
  * The column list is sniffed client-side from the file's header row (`dataset-columns.ts`);
  * the api still decides for real when it parses the upload.
  */
-export function UploadDatasetDialog() {
+export function UploadDatasetDialog({ variant = "primary" }: { variant?: "primary" | "secondary" } = {}) {
   const uid = React.useId();
   const [open, setOpen] = React.useState(false);
   const [file, setFile] = React.useState<File | null>(null);
@@ -69,8 +72,7 @@ export function UploadDatasetDialog() {
   const [fileError, setFileError] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const upload = useUploadDataset();
-  const { canWrite } = useWriteAccess();
-  const writeReason = writeAccessReason();
+  const gate = useWriteGate();
 
   function reset() {
     setFile(null);
@@ -141,6 +143,9 @@ export function UploadDatasetDialog() {
     }
   }
 
+  // Viewers get a read-only note in place of the page's primary (decision D12).
+  if (!gate.show) return <ReadOnlyNote>{readOnlyCopy("builder", "upload lookup tables")}</ReadOnlyNote>;
+
   return (
     <Dialog
       open={open}
@@ -150,8 +155,8 @@ export function UploadDatasetDialog() {
       }}
     >
       <DialogTrigger asChild>
-        <Button type="button" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
-          <PlusIcon className="size-3.5" /> Upload a lookup table
+        <Button type="button" variant={variant} disabled={gate.pending}>
+          <PlusIcon aria-hidden="true" /> Upload a lookup table
         </Button>
       </DialogTrigger>
       <DialogContent size="lg" aria-describedby={`${uid}-description`}>
@@ -184,12 +189,14 @@ export function UploadDatasetDialog() {
                     fileInputRef.current?.click();
                   }
                 }}
-                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border px-6 py-6 text-center hover:bg-muted/30"
+                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border px-6 py-6 text-center transition-colors duration-(--duration-fast) hover:bg-muted"
               >
-                <Icon as={UploadCloudIcon} size="lg" className="text-muted-foreground" />
-                <p className="text-sm text-foreground">{file ? file.name : "Choose a .csv, .tsv or .json file"}</p>
+                <span className="flex size-10 items-center justify-center rounded bg-muted text-text-secondary">
+                  <Icon as={UploadIcon} size="tile" />
+                </span>
+                <p className="text-body text-foreground">{file ? file.name : "Choose a .csv, .tsv or .json file"}</p>
               </div>
-              {fileError ? <p className="text-[0.8125rem] text-danger-text">{fileError}</p> : null}
+              {fileError ? <p className="text-label text-destructive-text">{fileError}</p> : null}
             </div>
 
             <Field label="Name" htmlFor={`${uid}-name`} required>
@@ -202,28 +209,28 @@ export function UploadDatasetDialog() {
             </Field>
 
             {sniffing ? (
-              <p className="text-[0.8125rem] text-muted-foreground">Reading the file&rsquo;s columns…</p>
+              <LoadingRow label="Reading the file’s columns…" />
             ) : columns.length > 0 ? (
               <div className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-foreground">Columns</span>
-                <p className="text-[0.8125rem] text-muted-foreground">
+                <span className="text-body font-medium text-foreground">Columns</span>
+                <p className="text-label text-text-secondary">
                   Pick which columns a lookup must match on, and how each is compared.
                 </p>
-                <div className="flex flex-col gap-1 rounded-md border border-border p-2">
+                <div className="flex flex-col gap-1 rounded border border-border p-2">
                   {columns.map((column) => (
                     <div key={column.name} className="flex flex-wrap items-center gap-3 py-1">
-                      <label className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+                      <label className="flex min-w-0 flex-1 items-center gap-2 text-body">
                         <input
                           type="checkbox"
                           className="size-4 shrink-0"
                           checked={column.matchOn}
                           onChange={(e) => toggleMatchOn(column.name, e.target.checked)}
                         />
-                        <span className="truncate font-mono text-[0.8125rem]">{column.name}</span>
+                        <span className="truncate font-mono text-label">{column.name}</span>
                       </label>
                       {column.matchOn ? (
                         <Select value={column.type} onValueChange={(next) => setType(column.name, next as DatasetKeyType)}>
-                          <SelectTrigger className="w-40 shrink-0" aria-label={`${column.name} — type`}>
+                          <SelectTrigger className="w-40 shrink-0 max-sm:w-full" aria-label={`${column.name} — type`}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -243,11 +250,11 @@ export function UploadDatasetDialog() {
           </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={upload.isPending || !file || sniffing}>
-              {upload.isPending ? "Uploading…" : "Upload"}
+            <Button type="submit" variant="primary" disabled={!file || sniffing} busy={upload.isPending} busyLabel="Uploading…">
+              Upload
             </Button>
           </DialogFooter>
         </form>

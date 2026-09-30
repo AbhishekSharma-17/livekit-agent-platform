@@ -17,10 +17,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { StatusChip } from "@/components/shared/status-chip";
+import { Alert } from "@/components/ui/alert";
+import { isPresentable } from "@/components/console/lib/friendly-error";
 import { Field } from "@/components/shared/field";
 import { useCreateCredential, useEnableApps, useTestAppsKey, useUpdateCredential } from "@/components/console/lib/api-hooks";
-import { appsErrorMessage } from "@/components/console/tools/apps/use-composio";
+import { appsErrorMessage, appsErrorToast } from "@/components/console/tools/apps/use-composio";
 import { suggestedCredentialLabel } from "@/components/console/registry/provider-meta";
 import type { AppKeyTestOut } from "@/contracts/lkap-contracts";
 
@@ -38,14 +39,14 @@ export interface EnableComposioDialogProps {
 
 type TestState = { kind: "idle" } | { kind: "testing" } | { kind: "done"; result: AppKeyTestOut };
 
-/** "Connected to <name> — N apps available", the count-only fallback, or the vendor's own message. */
+/** "Connected to <name> — N apps available", or the count-only fallback. Never the vendor's own message. */
 export function testSummary(result: AppKeyTestOut): string {
   const name = result.project_name || result.account_name;
   const count = result.toolkits_count;
   if (name && count != null) return `Connected to ${name} — ${count} apps available`;
   if (name) return `Connected to ${name}`;
   if (count != null) return `Key works — ${count} apps available`;
-  return result.message || "Key works";
+  return "Key works";
 }
 
 /**
@@ -134,7 +135,7 @@ export function EnableComposioDialog({
       toast.success(mode === "enable" ? "Composio enabled" : "Key rotated");
       setSaved(true);
     } catch (error) {
-      toast.error(`Couldn't save — ${appsErrorMessage(error)}`);
+      appsErrorToast("save", error);
     }
   }
 
@@ -155,10 +156,9 @@ export function EnableComposioDialog({
         <DialogBody>
           {saved ? (
             <div className="flex flex-col gap-2">
-              <StatusChip tone="success" dot size="sm">
-                {mode === "enable" ? "Composio enabled" : "Key rotated"}
-              </StatusChip>
-              <p className="text-[0.8125rem] text-muted-foreground">Stored securely; you won&apos;t see it again.</p>
+              <Alert tone="success" title={mode === "enable" ? "Composio enabled" : "Key rotated"}>
+                Stored securely; you won&apos;t see it again.
+              </Alert>
             </div>
           ) : (
             <>
@@ -185,29 +185,37 @@ export function EnableComposioDialog({
                 <div>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
-                    disabled={apiKey.trim().length === 0 || test.kind === "testing"}
+                    disabled={apiKey.trim().length === 0}
+                    busy={test.kind === "testing"}
+                    busyLabel="Testing…"
                     onClick={() => void runTest()}
                   >
-                    {test.kind === "testing" ? "Testing…" : "Test key"}
+                    Test key
                   </Button>
                 </div>
-                <div role="status" aria-live="polite">
-                  {test.kind === "testing" ? (
-                    <span className="text-[0.8125rem] text-muted-foreground">Testing…</span>
-                  ) : test.kind === "done" ? (
-                    <StatusChip tone={test.result.ok ? "success" : "danger"} dot size="sm">
-                      {test.result.ok ? testSummary(test.result) : test.result.message || "Test failed"}
-                    </StatusChip>
-                  ) : null}
-                </div>
+                {test.kind === "done" ? (
+                  test.result.ok ? (
+                    <Alert tone="success">{testSummary(test.result)}</Alert>
+                  ) : (
+                    <Alert tone="danger" title="This key didn't work">
+                      {/* Composio's own reason only when it reads as plain copy ("Incorrect API key provided"). */}
+                      <p>
+                        {test.result.message && isPresentable(test.result.message)
+                          ? test.result.message
+                          : "Test failed: Composio didn't say why."}
+                      </p>
+                      <p>Check the key in your Composio project&apos;s settings and test again.</p>
+                    </Alert>
+                  )
+                ) : null}
               </div>
 
               {!passed ? (
                 <div className="flex items-center gap-2">
                   <Checkbox id="enable-composio-override" checked={override} onCheckedChange={(v) => setOverride(v === true)} />
-                  <Label htmlFor="enable-composio-override" className="text-[0.8125rem] font-normal text-muted-foreground">
+                  <Label htmlFor="enable-composio-override" className="text-label font-normal text-text-secondary">
                     Save this key anyway, without a passing test
                   </Label>
                 </div>
@@ -218,14 +226,14 @@ export function EnableComposioDialog({
 
         <DialogFooter>
           {saved ? (
-            <Button type="submit">Done</Button>
+            <Button type="submit" variant="primary">Done</Button>
           ) : (
             <>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={!canSave || saving}>
-                {saving ? "Saving…" : mode === "enable" ? "Save key" : "Replace key"}
+              <Button type="submit" variant="primary" disabled={!canSave} busy={saving} busyLabel="Saving…">
+                {mode === "enable" ? "Save key" : "Replace key"}
               </Button>
             </>
           )}

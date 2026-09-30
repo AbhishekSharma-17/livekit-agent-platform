@@ -141,10 +141,10 @@ export function PhoneCallsCard() {
       <SectionRow>
         <div className="flex flex-col gap-3">
           <div>
-            <h3 id={listId} className="text-sm font-medium">
+            <h3 id={listId} className="text-body font-medium">
               Transfer destinations
             </h3>
-            <p className="mt-0.5 max-w-[65ch] text-[0.8125rem] text-muted-foreground">
+            <p className="mt-0.5 max-w-[72ch] text-label text-text-secondary">
               The only people or numbers the agent may transfer a caller to. Use a number like +15551234567 or a
               sip: address; each must be allowed by the workspace&apos;s outbound dialing policy (Telephony page).
             </p>
@@ -183,7 +183,7 @@ export function PhoneCallsCard() {
                           inputMode="tel"
                           autoComplete="off"
                           spellCheck={false}
-                          className="font-mono text-[0.8125rem]"
+                          className="font-mono tabular-nums"
                           data-issue-path={`telephony.transfer_targets[${index}].to`}
                           {...register(`config.telephony.transfer_targets.${index}.to`)}
                         />
@@ -215,7 +215,7 @@ export function PhoneCallsCard() {
                       </Button>
                     </div>
                     {modeWarning ? (
-                      <p data-issue-path={`telephony.transfer_targets[${index}].mode`} className="text-[0.8125rem] text-warning-text">
+                      <p data-issue-path={`telephony.transfer_targets[${index}].mode`} className="text-label text-warning-text">
                         {modeWarning}
                       </p>
                     ) : null}
@@ -224,14 +224,14 @@ export function PhoneCallsCard() {
               })}
             </ul>
           ) : (
-            <p className="text-[0.8125rem] text-muted-foreground">
+            <p className="text-label text-text-secondary">
               No destinations: the agent cannot transfer calls.
             </p>
           )}
           <div>
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
               disabled={fields.length >= 50}
               onClick={() => append({ label: "", to: "", mode: "cold" }, { shouldFocus: true })}
@@ -253,7 +253,7 @@ export function PhoneCallsCard() {
  * calls only — inbound calls and browser/text sessions never see this.
  */
 export function VoicemailCard() {
-  const { control, register, watch, formState } = useFormContext<AgentEditorForm>();
+  const { control, watch, formState } = useFormContext<AgentEditorForm>();
   const { issueFor } = useSectionIssues("tools");
   const enabled = watch("config.telephony.amd.enabled");
   const onMachine = watch("config.telephony.amd.on_machine");
@@ -294,7 +294,7 @@ export function VoicemailCard() {
           />
         </Field>
         {enabledWarning ? (
-          <p data-issue-path="telephony.amd.enabled" className="text-[0.8125rem] text-warning-text">
+          <p data-issue-path="telephony.amd.enabled" className="text-label text-warning-text">
             {enabledWarning}
           </p>
         ) : null}
@@ -345,7 +345,7 @@ export function VoicemailCard() {
               />
             </Field>
             {messageWarning ? (
-              <p data-issue-path="telephony.amd.message" className="text-[0.8125rem] text-warning-text">
+              <p data-issue-path="telephony.amd.message" className="text-label text-warning-text">
                 {messageWarning}
               </p>
             ) : null}
@@ -423,7 +423,7 @@ export function SmsContactsCard() {
                         inputMode="tel"
                         autoComplete="off"
                         spellCheck={false}
-                        className="font-mono text-[0.8125rem]"
+                        className="font-mono tabular-nums"
                         data-issue-path={`telephony.sms_targets[${index}].to`}
                         {...register(`config.telephony.sms_targets.${index}.to`)}
                       />
@@ -443,14 +443,14 @@ export function SmsContactsCard() {
               })}
             </ul>
           ) : (
-            <p className="text-[0.8125rem] text-muted-foreground">
+            <p className="text-label text-text-secondary">
               No saved contacts: off a phone call, the agent has no one to text.
             </p>
           )}
           <div>
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
               disabled={fields.length >= 50}
               onClick={() => append({ label: "", to: "" }, { shouldFocus: true })}

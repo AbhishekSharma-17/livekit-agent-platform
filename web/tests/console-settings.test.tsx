@@ -14,6 +14,8 @@ const routerReplace = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: routerReplace, push: vi.fn() }),
   useSearchParams: () => searchParams,
+  // The ThemeProvider reads the path to force dark on the session surface.
+  usePathname: () => "/console/settings",
 }));
 
 function stubLocalStorage(): Storage {

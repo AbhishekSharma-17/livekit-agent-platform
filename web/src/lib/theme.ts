@@ -6,14 +6,23 @@ import { MonitorIcon, MoonIcon, SunIcon, type LucideIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 
 /**
- * Console theme preference (docs/UI_UX_SPEC.md §2.2, §4.11). The provider
- * lives in `components/console/shell/theme-provider.tsx` and is mounted by
- * `app/console/layout.tsx` only; the session surface is dark, fixed.
+ * Theme preference (docs/ui/DESIGN-SYSTEM.md: class-based, defaulting to the
+ * system setting). The provider lives in `components/theme/theme-provider.tsx`
+ * and is mounted once by the root layout; the session surface is dark, fixed.
  */
 export type ThemePreference = "light" | "dark" | "system";
 
 export const THEME_STORAGE_KEY = "lkap-theme";
-export const DEFAULT_THEME: ThemePreference = "light";
+export const DEFAULT_THEME: ThemePreference = "system";
+
+/** Routes whose surface is fixed dark (the caller-facing session page, decision D3). */
+export const FIXED_DARK_PATH_PREFIXES: readonly string[] = ["/s/"];
+
+/** `"dark"` on a fixed-dark route, otherwise `undefined` (the person's choice applies). */
+export function forcedThemeForPath(pathname: string | null | undefined): "dark" | undefined {
+  if (!pathname) return undefined;
+  return FIXED_DARK_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix)) ? "dark" : undefined;
+}
 
 export interface ThemeOption {
   value: ThemePreference;

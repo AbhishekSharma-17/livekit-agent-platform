@@ -151,7 +151,8 @@ describe("ConsoleShell", () => {
     renderShell();
     const triggers = screen.getAllByRole("button", { name: "Theme" });
     expect(triggers.length).toBeGreaterThan(0);
-    expect(triggers[0].textContent).toContain("Light");
+    // No stored preference: the default is the system setting (UI-1, decision D2).
+    expect(triggers[0].textContent).toContain("System");
   });
 
   it("renders no workspace switcher while auth/me 404s (not built yet)", async () => {

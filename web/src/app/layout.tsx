@@ -1,15 +1,16 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 
 import "./globals.css";
-import { cn } from "@/lib/utils";
+import { ThemeProvider } from "@/components/theme/theme-provider";
+import { THEME_COLOR } from "@/lib/browser-colors";
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+/**
+ * Inter (docs/ui/DESIGN-SYSTEM.md section 3), self-hosted by `next/font` with
+ * `font-display: swap`. It is exposed as `--font-inter`; `globals.css` builds
+ * the `--font-sans` stack (Inter, then the system fallbacks) on top of it.
+ */
+const inter = Inter({ subsets: ["latin"], display: "swap", variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "LKAP",
@@ -17,11 +18,16 @@ export const metadata: Metadata = {
     "LiveKit Agent Platform — configure and run real-time voice + video agents.",
 };
 
+/** Browser chrome follows the page background in each theme (literal mirrors of the tokens). */
+export const viewport: Viewport = { themeColor: THEME_COLOR };
+
 /**
- * Base theme root layout. Route groups own their own visual theme on top of
- * this: `(session)/layout.tsx` (dark session surface) and
- * `console/layout.tsx` (light "studio" console). Nobody edits this file
- * after W0-SCAFFOLD (docs/IMPLEMENTATION_PLAN.md W0-SCAFFOLD).
+ * Root layout. UI-1 (docs/ui/AUDIT.md) owns this file: it loads the font and
+ * the token stylesheet and mounts the one app-wide `ThemeProvider`, so every
+ * route (console, `/`, `/login`, not-found) gets class-based theming with no
+ * flash on load. `suppressHydrationWarning` is required because next-themes
+ * sets the `<html>` class before React hydrates. Route groups add their own
+ * surface on top: `(session)/layout.tsx` is fixed dark.
  */
 export default function RootLayout({
   children,
@@ -29,15 +35,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={cn("font-sans", geist.variable)}
-    >
-      <body
-        className={`${geist.variable} ${geistMono.variable} font-sans antialiased`}
-      >
-        {children}
+    <html lang="en" suppressHydrationWarning className={inter.variable}>
+      <body className="font-sans antialiased">
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

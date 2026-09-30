@@ -1,9 +1,10 @@
 "use client";
 
 /**
- * `navigator.onLine`, kept current by the `online` / `offline` events, for the
- * pre-call card's "you're offline" state (docs/ui/DESIGN-SYSTEM.md section
- * 8.8). The server snapshot, and so the first client render, is "online": the
+ * `navigator.onLine`, kept current by the `online` / `offline` events
+ * (docs/ui/DESIGN-SYSTEM.md section 8.8, offline or unavailable): the console
+ * shell's offline banner, the session's pre-call card and its in-call
+ * connection banner. The server snapshot, and so the first client render, is "online": the
  * hydrated markup matches the server's, and an offline browser switches over
  * right after hydration.
  */

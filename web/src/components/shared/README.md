@@ -58,6 +58,7 @@ Nothing in `components/shared/**` imports screen code. The permission helpers re
 | Danger zone (7.4) | `console/shared/danger-zone-card.tsx` | `DangerZoneCard`: a detail page's last card, danger-outline entry and a typed `DELETE` confirmation listing what goes |
 | Phone tables (10) | `shared/stacked-table.tsx` | `STACKED_TABLE`, `STACKED_CONTROL`, `PhoneLabel`: editable tables stack into blocks below `sm` instead of scrolling sideways |
 | Worker errors | `shared/status-error.ts` | `plainStatusError(raw, fallback)`: a stored import/indexing failure reason, shown only when it reads as plain copy |
+| Offline (8.8) | `hooks/use-online-status.ts`, `console/shell/offline-banner.tsx`, `session/connection-banner.tsx` | `useOnlineStatus`; the console shell mounts `OfflineBanner` once ("Changes save when you're back online. Reconnecting…", and the API-down alert steps aside); the caller page says it on the pre-call card and, mid-call, in `ConnectionBanner offline`. Screens don't add their own |
 | Icons (5) | `shared/icon.tsx` | `Icon` (sizes `xs` 12, `sm` 14, `select` 15, `md` 16, `nav` 17, `tile` 18, `lg` 20, `xl` 24, via `size-*` classes) |
 
 Earlier primitives keep their contracts: `StateMeter`, `CopyButton`, `RelativeTime`, `VendorMark`,

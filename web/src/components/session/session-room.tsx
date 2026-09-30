@@ -52,6 +52,7 @@ import {
   type StageAvatarFraming,
 } from "@/components/session/avatar-framing";
 import { useAgentRpc } from "@/hooks/useAgentRpc";
+import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useUiRequests } from "@/hooks/useUiRequests";
 import { useUiState } from "@/hooks/useUiState";
 import { toPanelConnectionState } from "@/lib/livekit";
@@ -138,6 +139,9 @@ export function SessionRoom({
   const stageFraming = avatarFraming ?? stageAvatarFraming(agent.avatar_framing);
 
   /* ------------------------- §5.4 state model --------------------------- */
+
+  // The browser can lose its network a moment before LiveKit notices (§8.8).
+  const online = useOnlineStatus();
 
   const hasConnectedRef = useRef(false);
   if (connectionState === "connected") hasConnectedRef.current = true;
@@ -375,7 +379,7 @@ export function SessionRoom({
       testBar={
         testMode ? <TestModeBar backHref={`/console/agents/${agent.id}`} /> : undefined
       }
-      banner={<ConnectionBanner agentState={agentState} />}
+      banner={<ConnectionBanner agentState={agentState} offline={!online} />}
       stage={
         <AgentStage
           agentName={agent.name}

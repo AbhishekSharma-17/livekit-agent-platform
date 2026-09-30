@@ -61,6 +61,20 @@ describe("ConnectionBanner", () => {
     expect(banner.querySelector(".lucide")).toBeNull();
     expect(screen.getByRole("status").contains(banner)).toBe(true);
   });
+
+  it("says so when the browser is offline mid-call, before LiveKit notices", () => {
+    render(<ConnectionBanner agentState="listening" offline />);
+    const banner = screen.getByTestId("connection-banner");
+    expect(banner.textContent).toMatch(/You.re offline\. Reconnecting…/);
+    expect(banner.textContent).toMatch(/continues when you.re back online/);
+  });
+
+  it("stays quiet while online, and once the call has ended", () => {
+    const { rerender } = render(<ConnectionBanner agentState="listening" />);
+    expect(screen.queryByTestId("connection-banner")).toBeNull();
+    rerender(<ConnectionBanner agentState="ended" offline />);
+    expect(screen.queryByTestId("connection-banner")).toBeNull();
+  });
 });
 
 describe("StageView failure overlay", () => {

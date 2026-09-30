@@ -304,6 +304,32 @@ describe("ConsoleShell", () => {
     renderShell(<div>Hello from a page</div>);
     expect(screen.getByText("Hello from a page")).toBeTruthy();
   });
+
+  it("shows one app-wide offline notice that says what will happen, and drops it when back online", () => {
+    const onLine = vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(true);
+    try {
+      renderShell();
+      const region = document.querySelector('[data-slot="offline-banner"]');
+      expect(region?.getAttribute("aria-live")).toBe("polite");
+      expect(screen.queryByText("You're offline")).toBeNull();
+
+      onLine.mockReturnValue(false);
+      act(() => {
+        window.dispatchEvent(new Event("offline"));
+      });
+      expect(screen.getByText("You're offline")).toBeTruthy();
+      expect(region?.textContent).toMatch(/Changes save when you.re back online\. Reconnecting…/);
+      expect(document.querySelectorAll('[data-slot="offline-banner"]')).toHaveLength(1);
+
+      onLine.mockReturnValue(true);
+      act(() => {
+        window.dispatchEvent(new Event("online"));
+      });
+      expect(screen.queryByText("You're offline")).toBeNull();
+    } finally {
+      onLine.mockRestore();
+    }
+  });
 });
 
 describe("phone bottom tab bar", () => {

@@ -12,6 +12,7 @@ import { AppSidebar } from "./app-sidebar";
 import { ApiHealthBanner } from "./api-health-banner";
 import { BottomTabBar, BottomTabBarProvider, useShowBottomTabBar } from "./bottom-tab-bar";
 import { BreadcrumbProvider } from "./breadcrumb-context";
+import { OfflineBanner } from "./offline-banner";
 import { TopBar } from "./top-bar";
 
 /**
@@ -66,6 +67,7 @@ function ShellFrame({ children, tabBarHiddenByPage }: { children: React.ReactNod
           className="flex min-w-0 flex-1 flex-col bg-background min-[821px]:rounded-lg min-[821px]:border min-[821px]:border-border min-[821px]:shadow-raised"
         >
           <TopBar />
+          <OfflineBanner />
           <ApiHealthBanner />
           <main
             id="main-content"

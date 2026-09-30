@@ -25,7 +25,7 @@ import {
   SessionUnavailable,
   type SessionUnavailableKind,
 } from "@/components/session/session-unavailable";
-import { useOnlineStatus } from "@/components/session/use-online-status";
+import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useMicCheck } from "@/hooks/use-mic-check";
 import type { ConnectErrorKind } from "@/lib/livekit";
 

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { MoreHorizontalIcon, PlusIcon, RefreshCwIcon, ServerIcon } from "lucide-react";
+import { RefreshCwIcon, ServerIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,35 +14,51 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState, Field, Icon, ResponsiveTable, Section, StatusChip } from "@/components/shared";
-import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
+import { SimpleSelect } from "@/components/ui/select";
+import { EmptyState } from "@/components/shared/empty-state";
+import { Field, FieldRow, FormError } from "@/components/shared/field";
+import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "@/components/shared/list-search";
+import { SkeletonRows } from "@/components/shared/loading-state";
+import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
+import { RowMenu } from "@/components/shared/row-menu";
+import { Section, SectionRow } from "@/components/shared/section";
+import { StatusPill } from "@/components/shared/status-chip";
+import { lifecycleStatus } from "@/components/shared/status-map";
+import { Tag } from "@/components/shared/tag";
+import { busyLabelFor } from "@/components/shared/busy-label";
+import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { useCan } from "@/components/console/shared/permission";
 import type { ConnectionOut, TrunkOut } from "@/contracts/lkap-contracts";
 
 import { useCreateTrunk, useDeleteTrunk, useSyncTrunk, useTrunks } from "./hooks";
 import { E164_PATTERN, type ProviderHint, sipEnabled, splitNumbers, type TrunkDirection } from "./model";
-import { NativeSelect } from "./native-select";
+
 const PROVIDER_LABEL: Record<ProviderHint, string> = { twilio: "Twilio", telnyx: "Telnyx", other: "Other" };
+
+function directionLabel(trunk: TrunkOut): string {
+  return trunk.direction === "inbound" ? "Inbound" : "Outbound";
+}
 
 /**
  * Trunks (V2-17): the carrier side of every call. Inbound trunks accept calls
  * to their numbers; outbound trunks dial through the carrier's SIP address.
  * Every row mirrors a LiveKit trunk (`lk_trunk_id`); "Re-sync" re-creates it.
+ * "Add trunk" is the page header's primary action (`TelephonyPage`).
  */
 export function TrunksSection({ connections }: { connections: ConnectionOut[] }) {
   const { data, isLoading, isError, error, refetch } = useTrunks();
-  const [creating, setCreating] = React.useState(false);
-  const trunks = data?.items ?? [];
-  const connectionName = (id: string) => connections.find((c) => c.id === id)?.name ?? id.slice(0, 8);
+  const trunks = React.useMemo(() => data?.items ?? [], [data]);
+  const connectionName = (id: string) => connections.find((c) => c.id === id)?.name ?? "Unknown connection";
+  const search = useListSearch("telephony-trunks", trunks, (trunk) => [
+    trunk.name,
+    PROVIDER_LABEL[trunk.provider_hint ?? "other"],
+    connectionName(trunk.connection_id),
+    directionLabel(trunk),
+    ...(trunk.numbers ?? []),
+  ]);
+  const query = search.query;
 
   const columns: ResponsiveTableColumn<TrunkOut>[] = [
     {
@@ -50,8 +66,10 @@ export function TrunksSection({ connections }: { connections: ConnectionOut[] })
       header: "Name",
       cell: (trunk) => (
         <div className="min-w-0">
-          <p className="truncate font-medium">{trunk.name}</p>
-          <p className="truncate text-xs text-muted-foreground">
+          <p className="truncate font-medium text-foreground">
+            <Highlight text={trunk.name} query={query} />
+          </p>
+          <p className="truncate text-caption text-text-secondary">
             {PROVIDER_LABEL[trunk.provider_hint ?? "other"]} · {connectionName(trunk.connection_id)}
           </p>
         </div>
@@ -60,18 +78,14 @@ export function TrunksSection({ connections }: { connections: ConnectionOut[] })
     {
       id: "direction",
       header: "Direction",
-      cell: (trunk) => (
-        <StatusChip tone={trunk.direction === "inbound" ? "info" : "neutral"} size="sm">
-          {trunk.direction === "inbound" ? "Inbound" : "Outbound"}
-        </StatusChip>
-      ),
+      cell: (trunk) => <Tag>{directionLabel(trunk)}</Tag>,
     },
     {
       id: "numbers",
       header: "Numbers",
       cell: (trunk) => (
-        <span className="font-mono text-[0.8125rem] text-muted-foreground">
-          {trunk.numbers?.length ? trunk.numbers.join(", ") : "Any"}
+        <span className="font-mono text-label text-text-secondary tabular-nums">
+          {trunk.numbers?.length ? <Highlight text={trunk.numbers.join(", ")} query={query} /> : "Any"}
         </span>
       ),
     },
@@ -80,11 +94,11 @@ export function TrunksSection({ connections }: { connections: ConnectionOut[] })
       header: "LiveKit",
       cell: (trunk) =>
         trunk.lk_trunk_id ? (
-          <span className="font-mono text-xs text-muted-foreground">{trunk.lk_trunk_id}</span>
+          <span className="font-mono text-caption text-text-secondary">{trunk.lk_trunk_id}</span>
         ) : (
-          <StatusChip tone="warning" size="sm">
+          <StatusPill tone={lifecycleStatus("needs_review").tone} size="sm">
             Not synced
-          </StatusChip>
+          </StatusPill>
         ),
     },
     {
@@ -96,66 +110,68 @@ export function TrunksSection({ connections }: { connections: ConnectionOut[] })
     },
   ];
 
-  // Telephony config needs `admin` server-side (`auth/roles.py::ROUTE_POLICY`).
-  const { canWrite } = useWriteAccess("admin");
-  const canCreate = canWrite && connections.some(sipEnabled);
-
   return (
     <Section
       id="trunks"
       title="SIP trunks"
       description="Connect a carrier (Twilio, Telnyx, any SIP provider) to a LiveKit connection."
-      aside={
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => setCreating(true)}
-          disabled={!canCreate}
-          title={canWrite ? undefined : writeAccessReason("admin")}
-        >
-          <Icon as={PlusIcon} size="sm" />
-          Add trunk
-        </Button>
-      }
     >
       {isLoading ? (
-        <div className="p-5">
-          <Skeleton className="h-10 w-full" />
-        </div>
+        <SectionRow>
+          <SkeletonRows label="Loading trunks" rows={2} rowClassName="h-14" />
+        </SectionRow>
       ) : isError ? (
-        <div className="p-5">
-          <ErrorBanner message={`Couldn't load trunks: ${errorMessage(error)}`} onRetry={() => refetch()} />
-        </div>
+        <SectionRow>
+          <ErrorBanner error={error} context={{ action: "load trunks" }} onRetry={() => void refetch()} />
+        </SectionRow>
       ) : trunks.length === 0 ? (
-        <EmptyState
-          compact
-          icon={ServerIcon}
-          title="No trunks yet"
-          description={
-            canCreate
-              ? "Add an inbound trunk to receive calls, or an outbound trunk to place them."
-              : "No connection has SIP enabled. Test a connection first; self-hosted servers need the LiveKit SIP service."
-          }
-          className="p-5"
-        />
+        <SectionRow>
+          <EmptyState
+            variant="plain"
+            icon={ServerIcon}
+            title="No trunks yet"
+            description={
+              connections.some(sipEnabled)
+                ? "Add an inbound trunk to receive calls, or an outbound trunk to place them."
+                : "No connection has SIP enabled. Test a connection first; self-hosted servers need the LiveKit SIP service."
+            }
+          />
+        </SectionRow>
       ) : (
-        <ResponsiveTable<TrunkOut>
-          columns={columns}
-          rows={trunks}
-          label="SIP trunks"
-          getRowKey={(trunk) => trunk.id}
-          renderCard={(trunk) => (
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-medium">{trunk.name}</p>
-                <p className="font-mono text-xs text-muted-foreground">{(trunk.numbers ?? []).join(", ") || "Any number"}</p>
-              </div>
-              <TrunkRowMenu trunk={trunk} />
-            </div>
+        <>
+          {search.showSearch ? (
+            <SectionRow>
+              <ListSearchField search={search} label="Search trunks" total={trunks.length} className="mb-0" />
+            </SectionRow>
+          ) : null}
+          {search.noMatches ? (
+            <SectionRow>
+              <ListNoMatches search={search} items="trunks" />
+            </SectionRow>
+          ) : (
+            <ResponsiveTable<TrunkOut>
+              columns={columns}
+              rows={search.filtered}
+              label="SIP trunks"
+              getRowKey={(trunk) => trunk.id}
+              renderCard={(trunk) => (
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <p className="font-medium text-foreground">
+                      <Highlight text={trunk.name} query={query} />
+                    </p>
+                    <p className="font-mono text-caption break-all text-text-secondary tabular-nums">
+                      {(trunk.numbers ?? []).join(", ") || "Any number"}
+                    </p>
+                    <Tag>{directionLabel(trunk)}</Tag>
+                  </div>
+                  <TrunkRowMenu trunk={trunk} />
+                </div>
+              )}
+            />
           )}
-        />
+        </>
       )}
-      <TrunkDialog open={creating} onOpenChange={setCreating} connections={connections} />
     </Section>
   );
 }
@@ -164,65 +180,39 @@ function TrunkRowMenu({ trunk }: { trunk: TrunkOut }) {
   const sync = useSyncTrunk();
   const remove = useDeleteTrunk();
   const [confirming, setConfirming] = React.useState(false);
-  const { canWrite } = useWriteAccess("admin");
+  // Row actions a person can't use are not rendered (decision D12).
+  const { can } = useCan("admin");
+  if (!can) return null;
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" size="icon" aria-label={`Actions for ${trunk.name}`}>
-            <Icon as={MoreHorizontalIcon} size="md" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            disabled={!canWrite}
-            onSelect={() =>
+      <RowMenu
+        label={`Actions for ${trunk.name}`}
+        actions={[
+          {
+            label: sync.isPending ? "Re-syncing to LiveKit…" : "Re-sync to LiveKit",
+            icon: RefreshCwIcon,
+            disabled: sync.isPending,
+            onSelect: () =>
               sync.mutate(trunk.id, {
                 onSuccess: () => toast.success(`${trunk.name} re-created on LiveKit`),
                 onError: (err) => toast.error(errorMessage(err)),
-              })
-            }
-          >
-            <Icon as={RefreshCwIcon} size="sm" />
-            Re-sync to LiveKit
-          </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" disabled={!canWrite} onSelect={() => setConfirming(true)}>
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Dialog open={confirming} onOpenChange={setConfirming}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete {trunk.name}?</DialogTitle>
-            <DialogDescription>
-              The trunk and its dispatch rules are removed from LiveKit. Numbers on it stop receiving calls.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setConfirming(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={remove.isPending}
-              onClick={() =>
-                remove.mutate(trunk.id, {
-                  onSuccess: () => {
-                    setConfirming(false);
-                    toast.success("Trunk deleted");
-                  },
-                  onError: (err) => toast.error(errorMessage(err)),
-                })
-              }
-            >
-              Delete trunk
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              }),
+          },
+        ]}
+        destructive={{ label: "Delete", icon: Trash2Icon, onSelect: () => setConfirming(true) }}
+      />
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={`Delete ${trunk.name}?`}
+        description="The trunk and its dispatch rules are removed from LiveKit. Numbers on it stop receiving calls."
+        confirmLabel="Delete trunk"
+        onConfirm={async () => {
+          await remove.mutateAsync(trunk.id);
+          toast.success("Trunk deleted");
+        }}
+      />
     </>
   );
 }
@@ -303,56 +293,48 @@ export function TrunkDialog({
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="gap-4">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <FieldRow>
               <Field label="Direction" htmlFor="trunk-direction">
-                <NativeSelect
+                <SimpleSelect
                   id="trunk-direction"
                   value={direction}
-                  onChange={(e) => setDirection(e.target.value as TrunkDirection)}
-                >
-                  <option value="inbound">Inbound (receive calls)</option>
-                  <option value="outbound">Outbound (place calls)</option>
-                </NativeSelect>
+                  onValueChange={(next) => setDirection(next as TrunkDirection)}
+                  options={[
+                    { value: "inbound", label: "Inbound (receive calls)" },
+                    { value: "outbound", label: "Outbound (place calls)" },
+                  ]}
+                />
               </Field>
               <Field label="Connection" htmlFor="trunk-connection">
-                <NativeSelect
+                <SimpleSelect
                   id="trunk-connection"
                   value={chosenConnection}
-                  onChange={(e) => setConnectionId(e.target.value)}
-                >
-                  {sipConnections.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </NativeSelect>
+                  onValueChange={setConnectionId}
+                  options={sipConnections.map((c) => ({ value: c.id, label: c.name }))}
+                />
               </Field>
-              <Field label="Name" htmlFor="trunk-name" required>
+              <Field label="Name" htmlFor="trunk-name">
                 <Input id="trunk-name" value={name} onChange={(e) => setName(e.target.value)} required />
               </Field>
               <Field label="Carrier" htmlFor="trunk-provider">
-                <NativeSelect
+                <SimpleSelect
                   id="trunk-provider"
                   value={provider}
-                  onChange={(e) => setProvider(e.target.value as ProviderHint)}
-                >
-                  <option value="twilio">Twilio</option>
-                  <option value="telnyx">Telnyx</option>
-                  <option value="other">Other</option>
-                </NativeSelect>
+                  onValueChange={(next) => setProvider(next as ProviderHint)}
+                  options={(Object.keys(PROVIDER_LABEL) as ProviderHint[]).map((hint) => ({
+                    value: hint,
+                    label: PROVIDER_LABEL[hint],
+                  }))}
+                />
               </Field>
-            </div>
-            <Field
-              label="Numbers"
-              htmlFor="trunk-numbers"
-              hint="E.164, comma separated"
-              required={direction === "outbound"}
-              optional={direction === "inbound"}
-            >
+            </FieldRow>
+            <Field label="Numbers" htmlFor="trunk-numbers" hint="E.164, comma separated" optional={direction === "inbound"}>
               <Input
                 id="trunk-numbers"
                 value={numbers}
                 placeholder="+15551234567"
+                inputMode="tel"
+                className="font-mono tabular-nums"
                 onChange={(e) => setNumbers(e.target.value)}
               />
             </Field>
@@ -366,12 +348,11 @@ export function TrunkDialog({
                     ? "Telnyx: sip.telnyx.com"
                     : "e.g. example.pstn.twilio.com"
               }
-              required={direction === "outbound"}
               optional={direction === "inbound"}
             >
               <Input id="trunk-address" value={address} onChange={(e) => setAddress(e.target.value)} />
             </Field>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <FieldRow>
               <Field
                 label="Username"
                 htmlFor="trunk-username"
@@ -398,18 +379,20 @@ export function TrunkDialog({
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </Field>
-            </div>
-            {error ? (
-              <p role="alert" className="text-sm text-danger-text">
-                {error}
-              </p>
-            ) : null}
+            </FieldRow>
+            <FormError>{error}</FormError>
           </DialogBody>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={create.isPending || !name.trim() || !chosenConnection}>
+            <Button
+              type="submit"
+              variant="primary"
+              busy={create.isPending}
+              busyLabel={busyLabelFor("Create trunk")}
+              disabled={!name.trim() || !chosenConnection}
+            >
               Create trunk
             </Button>
           </DialogFooter>

@@ -15,7 +15,10 @@ import {
 } from "@/components/ui/dialog";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Field, Icon, StatusChip } from "@/components/shared";
+import { SimpleSelect } from "@/components/ui/select";
+import { Alert } from "@/components/ui/alert";
+import { Field, FormError } from "@/components/shared/field";
+import { StatusPill } from "@/components/shared/status-chip";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { useConnections } from "@/hooks/useConnections";
 import type { AgentOut } from "@/contracts/lkap-contracts";
@@ -23,7 +26,6 @@ import type { AgentOut } from "@/contracts/lkap-contracts";
 import { CallControls } from "./call-controls";
 import { useCall, usePlaceCall, useTrunks } from "./hooks";
 import { callStatusMeta, connectionForAgent, E164_PATTERN, normalizeE164, sipEnabled } from "./model";
-import { NativeSelect } from "./native-select";
 /*
  * "Call a number" on the agent editor's Test call split button (V2-17,
  * editor README "Slots"). The menu item lives inside the dropdown, which
@@ -59,9 +61,9 @@ function useOpenAgent(): string | null {
 export function CallNumberMenuItem({ agent, dirty }: { agent: AgentOut; dirty: boolean }) {
   return (
     <DropdownMenuItem onSelect={() => setOpenAgent(agent.id)}>
-      <Icon as={PhoneOutgoingIcon} size="sm" />
+      <PhoneOutgoingIcon aria-hidden="true" />
       Call a number…
-      {dirty ? <span className="ml-auto text-xs text-muted-foreground">saved version</span> : null}
+      {dirty ? <span className="ml-auto text-caption text-text-tertiary">saved version</span> : null}
     </DropdownMenuItem>
   );
 }
@@ -136,62 +138,62 @@ export function CallNumberDialog({
             </DialogDescription>
           </DialogHeader>
           {blocker ? (
-            <p role="status" className="text-sm text-muted-foreground">
+            <Alert tone="warning">
               {blocker}{" "}
-              <Link href="/console/telephony" className="underline underline-offset-4">
+              <Link href="/console/telephony" className="font-medium underline underline-offset-4">
                 Open Telephony
               </Link>
-            </p>
+            </Alert>
           ) : (
             <>
-              <Field label="Phone number" htmlFor="call-to" required>
+              <Field label="Phone number" htmlFor="call-to">
                 <Input
                   id="call-to"
                   type="tel"
                   value={to}
                   placeholder="+15551234567"
+                  className="font-mono tabular-nums"
                   disabled={Boolean(callId)}
                   onChange={(e) => setTo(e.target.value)}
                 />
               </Field>
               {outbound.length > 1 ? (
                 <Field label="Trunk" htmlFor="call-trunk">
-                  <NativeSelect id="call-trunk" value={chosenTrunk} onChange={(e) => setTrunkId(e.target.value)}>
-                    {outbound.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} ({t.numbers?.[0] ?? "no caller ID"})
-                      </option>
-                    ))}
-                  </NativeSelect>
+                  <SimpleSelect
+                    id="call-trunk"
+                    value={chosenTrunk}
+                    onValueChange={setTrunkId}
+                    options={outbound.map((t) => ({ value: t.id, label: `${t.name} (${t.numbers?.[0] ?? "no caller ID"})` }))}
+                  />
                 </Field>
               ) : null}
             </>
           )}
           {call && meta ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3">
-              <div className="flex items-center gap-2" aria-live="polite">
-                <StatusChip tone={meta.tone} dot>
-                  {meta.label}
-                </StatusChip>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-border bg-muted p-3">
+              <div className="flex flex-wrap items-center gap-2" aria-live="polite">
+                <StatusPill tone={meta.tone}>{meta.label}</StatusPill>
                 {call.hangup_reason && call.status !== "completed" ? (
-                  <span className="text-xs text-muted-foreground">{call.hangup_reason}</span>
+                  <span className="text-caption text-text-secondary">{call.hangup_reason}</span>
                 ) : null}
               </div>
               <CallControls call={call} compact />
             </div>
           ) : null}
-          {error ? (
-            <p role="alert" className="text-sm text-danger-text">
-              {error}
-            </p>
-          ) : null}
+          <FormError>{error}</FormError>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+            <Button type="button" variant="secondary" onClick={() => handleOpenChange(false)}>
               Close
             </Button>
             {callId ? null : (
-              <Button type="submit" disabled={Boolean(blocker) || place.isPending || !to.trim()}>
-                <Icon as={PhoneOutgoingIcon} size="sm" />
+              <Button
+                type="submit"
+                variant="primary"
+                busy={place.isPending}
+                busyLabel="Calling…"
+                disabled={Boolean(blocker) || !to.trim()}
+              >
+                <PhoneOutgoingIcon aria-hidden="true" />
                 Call
               </Button>
             )}

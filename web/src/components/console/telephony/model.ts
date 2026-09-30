@@ -1,18 +1,25 @@
+import { lifecycleStatus, type StatusTone } from "@/components/shared/status-map";
 import type { AgentOut, CallOut, ConnectionOut, PhoneNumberOut } from "@/contracts/lkap-contracts";
 
-/** Call status → chip label and tone (`StatusChip` tones). */
+/**
+ * Call status → pill label and tone. Tones come from the one shared
+ * lifecycle map (docs/ui/DESIGN-SYSTEM.md section 6.6); the labels are this
+ * screen's words.
+ */
 export type CallStatus = NonNullable<CallOut["status"]>;
-export type ChipTone = "neutral" | "info" | "success" | "warning" | "danger" | "live";
+export type ChipTone = StatusTone;
+
+const toneOf = (state: string): StatusTone => lifecycleStatus(state).tone;
 
 export const CALL_STATUS_META: Record<CallStatus, { label: string; tone: ChipTone }> = {
-  dialing: { label: "Dialing", tone: "info" },
-  ringing: { label: "Ringing", tone: "info" },
-  answered: { label: "In call", tone: "live" },
-  completed: { label: "Completed", tone: "success" },
-  transferred: { label: "Transferred", tone: "success" },
-  no_answer: { label: "No answer", tone: "warning" },
-  busy: { label: "Busy", tone: "warning" },
-  failed: { label: "Failed", tone: "danger" },
+  dialing: { label: "Dialing", tone: toneOf("connecting") },
+  ringing: { label: "Ringing", tone: toneOf("connecting") },
+  answered: { label: "In call", tone: toneOf("live") },
+  completed: { label: "Completed", tone: toneOf("done") },
+  transferred: { label: "Transferred", tone: toneOf("done") },
+  no_answer: { label: "No answer", tone: toneOf("missed") },
+  busy: { label: "Busy", tone: toneOf("missed") },
+  failed: { label: "Failed", tone: toneOf("failed") },
 };
 
 export function callStatusMeta(status: CallOut["status"]) {
@@ -105,16 +112,16 @@ export function isHostedNumber(number: Pick<PhoneNumberOut, "source">): boolean 
 export type AttachState = NonNullable<PhoneNumberOut["attach_state"]>;
 
 export const ATTACH_STATE_META: Record<AttachState, { label: string; tone: ChipTone; hint: string }> = {
-  routed: { label: "Routed", tone: "success", hint: "Calls to this number reach its inbound agent." },
+  routed: { label: "Routed", tone: toneOf("ready"), hint: "Calls to this number reach its inbound agent." },
   detached: {
     label: "Detached",
-    tone: "warning",
-    hint: "The number is no longer attached to its LKAP dispatch rule in LiveKit. Re-attach to route it again.",
+    tone: toneOf("needs_review"),
+    hint: "The number is no longer attached to its dispatch rule in LiveKit. Re-attach to route it again.",
   },
-  not_routed: { label: "Not routed", tone: "neutral", hint: "Pick an inbound agent to route calls." },
-  pending: { label: "Pending", tone: "info", hint: "LiveKit is still activating this number." },
-  offline: { label: "Offline", tone: "warning", hint: "LiveKit reports this number offline." },
-  released: { label: "Released", tone: "neutral", hint: "The number is no longer in your LiveKit project." },
+  not_routed: { label: "Not routed", tone: toneOf("none"), hint: "Pick an inbound agent to route calls." },
+  pending: { label: "Pending", tone: toneOf("in_progress"), hint: "LiveKit is still activating this number." },
+  offline: { label: "Offline", tone: toneOf("waiting"), hint: "LiveKit reports this number offline." },
+  released: { label: "Released", tone: toneOf("gone"), hint: "The number is no longer in your LiveKit project." },
 };
 
 /** A number's routing state; older payloads without `attach_state` fall back to the rule id. */

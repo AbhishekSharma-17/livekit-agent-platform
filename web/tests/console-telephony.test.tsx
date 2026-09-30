@@ -56,8 +56,20 @@ class StubResizeObserver {
   unobserve() {}
   disconnect() {}
 }
-beforeEach(() => vi.stubGlobal("ResizeObserver", StubResizeObserver));
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", StubResizeObserver);
+  // The custom Select (Radix) in jsdom, as in tests/ui-select.test.tsx.
+  Element.prototype.scrollIntoView = vi.fn();
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.releasePointerCapture = vi.fn();
+});
 afterEach(() => vi.unstubAllGlobals());
+
+/** Open a custom Select from the keyboard and pick an option (its listbox is portaled to the body). */
+function choose(trigger: HTMLElement, option: string | RegExp) {
+  fireEvent.keyDown(trigger, { key: "ArrowDown" });
+  fireEvent.click(screen.getByRole("option", { name: option }));
+}
 
 const SIP_CONN: ConnectionOut = {
   id: "conn-1",
@@ -200,10 +212,10 @@ describe("TelephonyPage", () => {
     const requests = stubApi();
     renderWithClient(<TelephonyPage />);
     const table = within(await screen.findByRole("table", { name: "Phone numbers" }));
-    const picker = (await table.findByLabelText("Inbound agent for +15551230000")) as HTMLSelectElement;
+    const picker = (await table.findByRole("combobox", { name: "Inbound agent for +15551230000" })) as HTMLButtonElement;
     await waitFor(() => expect(picker.disabled).toBe(false));
 
-    fireEvent.change(picker, { target: { value: "agent-1" } });
+    choose(picker, "Support bot");
 
     await waitFor(() =>
       expect(requests).toContainEqual({
@@ -219,20 +231,24 @@ describe("TelephonyPage", () => {
     renderWithClient(<TelephonyPage />);
 
     expect(await screen.findByText(/None of your connections reports SIP/)).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Add trunk" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(((await screen.findByRole("button", { name: "Add trunk" })) as HTMLButtonElement).disabled).toBe(true);
   });
 
   // -------------------------------------------------- V2-20-5: role gating
-  it("disables Add trunk/Add number/Add rule for a builder (below the admin floor)", async () => {
+  it("offers a builder (below the admin floor) no Add trunk/Add number/Add rule, only a read-only note", async () => {
     stubApi(meWith("builder"));
     renderWithClient(<TelephonyPage />);
     await screen.findByRole("table", { name: "Phone numbers" });
 
     // `/v1/telephony` writes need `admin` (auth/roles.py::ROUTE_POLICY),
-    // stricter than every other console page's `builder` floor.
-    expect((screen.getByRole("button", { name: "Add trunk" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Add number" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Add rule" }) as HTMLButtonElement).disabled).toBe(true);
+    // stricter than every other console page's `builder` floor. Decision D12:
+    // controls the person can't use are not rendered; the page's primary
+    // becomes a note that names the next step.
+    expect(await screen.findByText(/Ask an admin to change trunks, numbers or rules/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add trunk" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add number" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add rule" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: /Inbound agent for/ })).toBeNull();
   });
 
   it("enables Add trunk/Add number/Add rule for an admin", async () => {
@@ -240,8 +256,9 @@ describe("TelephonyPage", () => {
     renderWithClient(<TelephonyPage />);
     await screen.findByRole("table", { name: "Phone numbers" });
 
-    expect((screen.getByRole("button", { name: "Add number" }) as HTMLButtonElement).disabled).toBe(false);
-    expect((screen.getByRole("button", { name: "Add rule" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(((await screen.findByRole("button", { name: "Add trunk" })) as HTMLButtonElement).disabled).toBe(false);
+    expect(((await screen.findByRole("button", { name: "Add number" })) as HTMLButtonElement).disabled).toBe(false);
+    expect(((await screen.findByRole("button", { name: "Add rule" })) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("hangs up a live call from the calls log", async () => {
@@ -284,6 +301,50 @@ describe("TelephonyPage", () => {
     expect(calls.queryByText(/Answered by:/)).toBeNull();
     expect(calls.queryByRole("button", { name: "View summary" })).toBeNull();
   });
+
+  // ------------------------------------------------ S3: calls search and the viewer's read-only log
+  it("shows a live call's status but no call controls to a viewer (calls writes need a builder)", async () => {
+    stubApi(meWith("viewer"));
+    renderWithClient(<TelephonyPage />);
+    const calls = within(await screen.findByRole("table", { name: "Calls" }));
+
+    expect(await calls.findByText("In call")).toBeTruthy();
+    await screen.findByText(/Ask an admin to change trunks, numbers or rules/);
+    expect(calls.queryByRole("button", { name: "Hang up" })).toBeNull();
+    expect(calls.queryByRole("button", { name: "Transfer" })).toBeNull();
+  });
+
+  it("searches the calls log once it has 6 calls, with a no-matches state", async () => {
+    const data = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      get length() {
+        return data.size;
+      },
+      clear: () => data.clear(),
+      getItem: (key: string) => data.get(key) ?? null,
+      key: (index: number) => Array.from(data.keys())[index] ?? null,
+      removeItem: (key: string) => void data.delete(key),
+      setItem: (key: string, value: string) => void data.set(key, String(value)),
+    } satisfies Storage);
+    const many: CallOut[] = Array.from({ length: 6 }, (_, index) => ({
+      ...CALL,
+      id: `call-${index}`,
+      status: "completed",
+      to_e164: `+1555765432${index}`,
+    }));
+    stubApi({ "GET calls": { items: many, total: many.length } });
+    renderWithClient(<TelephonyPage />);
+    const search = await screen.findByRole("searchbox", { name: "Search calls" });
+
+    fireEvent.change(search, { target: { value: "+15557654324" } });
+    await waitFor(() =>
+      expect(within(screen.getByRole("table", { name: "Calls" })).getAllByRole("row")).toHaveLength(2),
+    );
+
+    fireEvent.change(search, { target: { value: "+4420" } });
+    expect(await screen.findByText("No calls match “+4420”")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeTruthy();
+  });
 });
 
 describe("TrunkDialog", () => {
@@ -292,7 +353,7 @@ describe("TrunkDialog", () => {
     const onOpenChange = vi.fn();
     renderWithClient(<TrunkDialog open onOpenChange={onOpenChange} connections={[SIP_CONN]} />);
 
-    fireEvent.change(screen.getByLabelText(/Direction/), { target: { value: "outbound" } });
+    choose(screen.getByLabelText(/Direction/), "Outbound (place calls)");
     fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: "Twilio out" } });
     fireEvent.change(screen.getByLabelText(/^Numbers/), { target: { value: "+1 555 123 9999" } });
     fireEvent.change(screen.getByLabelText(/SIP address/), { target: { value: "example.pstn.twilio.com" } });
@@ -587,10 +648,10 @@ describe("PhoneCallsCard", () => {
     let latest: AgentEditorForm | undefined;
     render(<PhoneCardHarness targets={[{ label: "Sales", to: "+15550001111" }]} onValues={(v) => (latest = v)} />);
 
-    const select = screen.getByLabelText("How the call is handed over") as HTMLSelectElement;
-    expect(select.value).toBe("cold");
+    const select = screen.getByRole("combobox", { name: "How the call is handed over" });
+    expect(select.textContent).toBe("Put through directly");
 
-    fireEvent.change(select, { target: { value: "warm" } });
+    choose(select, "Introduce the caller first (LiveKit Cloud)");
 
     await waitFor(() =>
       expect(latest?.config.telephony.transfer_targets).toEqual([
@@ -655,7 +716,7 @@ describe("VoicemailCard", () => {
     expect(screen.getByLabelText("When a machine answers")).toBeTruthy();
     expect(screen.getByLabelText("Message")).toHaveProperty("disabled", true);
 
-    fireEvent.change(screen.getByLabelText("When a machine answers"), { target: { value: "leave_message" } });
+    choose(screen.getByLabelText("When a machine answers"), "Leave a message");
     await waitFor(() => expect(latest?.config.telephony.amd?.on_machine).toBe("leave_message"));
     expect(screen.getByLabelText("Message")).toHaveProperty("disabled", false);
 
@@ -670,7 +731,7 @@ describe("VoicemailCard", () => {
     let latest: AgentEditorForm | undefined;
     render(<VoicemailCardHarness onValues={(v) => (latest = v)} />);
     fireEvent.click(screen.getByRole("switch", { name: "Detect answering machines" }));
-    fireEvent.change(await screen.findByLabelText("When a machine answers"), { target: { value: "leave_message" } });
+    choose(await screen.findByLabelText("When a machine answers"), "Leave a message");
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Call back" } });
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "" } });
     await waitFor(() => expect(latest?.config.telephony.amd?.message).toBeNull());

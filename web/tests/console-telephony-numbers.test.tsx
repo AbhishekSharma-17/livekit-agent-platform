@@ -48,8 +48,25 @@ class StubResizeObserver {
 }
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", StubResizeObserver);
+  // The custom Select (Radix) in jsdom, as in tests/ui-select.test.tsx.
+  Element.prototype.scrollIntoView = vi.fn();
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.releasePointerCapture = vi.fn();
   Object.values(toasts).forEach((fn) => fn.mockClear());
 });
+
+/** The option names of a custom Select (its listbox is portaled to the body), closing it again. */
+function optionNames(trigger: HTMLElement): string[] {
+  fireEvent.keyDown(trigger, { key: "ArrowDown" });
+  const names = screen.getAllByRole("option").map((option) => option.textContent ?? "");
+  fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
+  return names;
+}
+
+function choose(trigger: HTMLElement, option: string | RegExp) {
+  fireEvent.keyDown(trigger, { key: "ArrowDown" });
+  fireEvent.click(screen.getByRole("option", { name: option }));
+}
 afterEach(() => vi.unstubAllGlobals());
 
 const CONN_A: ConnectionOut = {
@@ -214,8 +231,8 @@ describe("NumbersSection with LiveKit-hosted numbers", () => {
       "POST telephony/numbers/refresh": [],
     });
     renderWithClient(<NumbersSection agents={[AGENT_A]} />);
-    const picker = (await screen.findByLabelText("Connection to refresh")) as HTMLSelectElement;
-    fireEvent.change(picker, { target: { value: "conn-b" } });
+    const picker = await screen.findByRole("combobox", { name: "Connection to refresh" });
+    choose(picker, "Cloud B");
     const button = screen.getByRole("button", { name: "Refresh from LiveKit" }) as HTMLButtonElement;
     await waitFor(() => expect(button.disabled).toBe(false));
 
@@ -262,10 +279,10 @@ describe("NumbersSection with LiveKit-hosted numbers", () => {
     renderWithClient(<NumbersSection agents={[AGENT_A, AGENT_B]} />);
     const table = await numbersTable();
 
-    const hosted = (await table.findByLabelText("Inbound agent for +15550100001")) as HTMLSelectElement;
-    await waitFor(() => expect(Array.from(hosted.options).map((o) => o.text)).toEqual(["Nobody", "Front desk"]));
-    const trunk = table.getByLabelText("Inbound agent for +15551230000") as HTMLSelectElement;
-    expect(Array.from(trunk.options).map((o) => o.text)).toEqual(["Nobody", "Front desk", "Other project bot"]);
+    const hosted = await table.findByRole("combobox", { name: "Inbound agent for +15550100001" });
+    await waitFor(() => expect(optionNames(hosted)).toEqual(["Nobody", "Front desk"]));
+    const trunk = table.getByRole("combobox", { name: "Inbound agent for +15551230000" });
+    expect(optionNames(trunk)).toEqual(["Nobody", "Front desk", "Other project bot"]);
   });
 
   it("keeps an offline hosted number assignable (a new number starts offline)", async () => {
@@ -276,7 +293,9 @@ describe("NumbersSection with LiveKit-hosted numbers", () => {
       },
     });
     renderWithClient(<NumbersSection agents={[AGENT_A]} />);
-    const picker = (await (await numbersTable()).findByLabelText("Inbound agent for +15550100001")) as HTMLSelectElement;
+    const picker = (await (await numbersTable()).findByRole("combobox", {
+      name: "Inbound agent for +15550100001",
+    })) as HTMLButtonElement;
 
     await waitFor(() => expect(picker.disabled).toBe(false));
   });
@@ -290,7 +309,8 @@ describe("NumbersSection with LiveKit-hosted numbers", () => {
 
     fireEvent.click(remove);
 
-    const dialog = await screen.findByRole("dialog");
+    // A destructive confirmation is an alertdialog (docs/ui/DESIGN-SYSTEM.md section 6.4).
+    const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText(/stays in your LiveKit project/)).toBeTruthy();
     expect(requests.some((r) => r.method === "DELETE")).toBe(false);
     fireEvent.click(within(dialog).getByRole("button", { name: "Remove number" }));
@@ -306,7 +326,7 @@ describe("NumbersSection with LiveKit-hosted numbers", () => {
 
     fireEvent.click(remove);
 
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText(/trunk keeps the number/)).toBeTruthy();
   });
 
@@ -373,10 +393,10 @@ describe("TrunkDialog with Telnyx (V4-05 addition)", () => {
     stubApi();
     renderWithClient(<TrunkDialog open onOpenChange={() => {}} connections={[CONN_A]} />);
 
-    const carrier = screen.getByLabelText(/Carrier/) as HTMLSelectElement;
-    expect(Array.from(carrier.options).map((o) => o.text)).toContain("Telnyx");
-    fireEvent.change(screen.getByLabelText(/Direction/), { target: { value: "outbound" } });
-    fireEvent.change(carrier, { target: { value: "telnyx" } });
+    const carrier = screen.getByLabelText(/Carrier/);
+    expect(optionNames(carrier)).toContain("Telnyx");
+    choose(screen.getByLabelText(/Direction/), "Outbound (place calls)");
+    choose(carrier, "Telnyx");
 
     expect(screen.getByText("Telnyx: sip.telnyx.com")).toBeTruthy();
     expect(screen.getByText(/X-Telnyx-Username/)).toBeTruthy();
@@ -396,5 +416,121 @@ describe("dialogs only (R-V3-2)", () => {
     for (const file of ["numbers-section.tsx", "hooks.ts", "model.ts"]) {
       expect(readFileSync(join(dir, file), "utf8")).not.toMatch(/PurchasePhoneNumber|ReleasePhoneNumbers|numbers\/purchase/);
     }
+  });
+});
+
+// ------------------------------------------------ S3: list search, permission pattern, confirmations
+describe("NumbersSection search (docs/ui/DESIGN-SYSTEM.md section 9)", () => {
+  beforeEach(() => {
+    // A fresh store per test: the search query is remembered per list.
+    const data = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      get length() {
+        return data.size;
+      },
+      clear: () => data.clear(),
+      getItem: (key: string) => data.get(key) ?? null,
+      key: (index: number) => Array.from(data.keys())[index] ?? null,
+      removeItem: (key: string) => void data.delete(key),
+      setItem: (key: string, value: string) => void data.set(key, String(value)),
+    } satisfies Storage);
+  });
+
+  const many: PhoneNumberOut[] = Array.from({ length: 6 }, (_, index) => ({
+    ...TRUNK_NUMBER,
+    id: `num-${index}`,
+    e164: `+1555123000${index}`,
+    label: index === 3 ? "Zoë's claims line" : `Line ${index}`,
+  }));
+
+  it("hides the search field below 6 numbers", async () => {
+    stubApi();
+    renderWithClient(<NumbersSection agents={[AGENT_A]} />);
+    await numbersTable();
+    expect(screen.queryByRole("searchbox", { name: "Search phone numbers" })).toBeNull();
+  });
+
+  it("filters accent-insensitively, then shows a distinct no-matches state with Clear filters", async () => {
+    stubApi({ "GET telephony/numbers": { items: many, total: many.length } });
+    renderWithClient(<NumbersSection agents={[AGENT_A]} />);
+    const search = await screen.findByRole("searchbox", { name: "Search phone numbers" });
+
+    fireEvent.change(search, { target: { value: "zoe claims" } });
+    await waitFor(async () => expect((await numbersTable()).getAllByRole("row")).toHaveLength(2)); // header + one match
+    expect((await numbersTable()).getByText("+15551230003")).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: "nothing like this" } });
+    expect(await screen.findByText("No numbers match “nothing like this”")).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "Phone numbers" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect((await numbersTable()).getAllByRole("row")).toHaveLength(7);
+  });
+});
+
+describe("NumbersSection for a builder (below the admin floor)", () => {
+  it("renders no write controls and shows each number's agent as text", async () => {
+    stubApi({
+      "GET auth/me": {
+        user: { id: "u1", email: "builder@example.test" },
+        workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: "builder" }],
+      },
+    });
+    renderWithClient(<NumbersSection agents={[AGENT_A]} />);
+    const table = await numbersTable();
+
+    expect(await table.findByText("Front desk")).toBeTruthy();
+    expect(table.getByText("Nobody")).toBeTruthy();
+    expect(table.queryByRole("combobox")).toBeNull();
+    expect(table.queryByRole("button", { name: /^Delete / })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add number" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Refresh from LiveKit" })).toBeNull();
+    // How to get a number stays readable for everyone.
+    expect(screen.getByRole("button", { name: "Get a number" })).toBeTruthy();
+  });
+
+  it("explains, as text, why a number on an outbound trunk can't be routed", async () => {
+    const outbound: TrunkOut = { ...IN_TRUNK, id: "trunk-out", direction: "outbound", name: "Twilio out" };
+    stubApi({
+      "GET telephony/trunks": { items: [outbound], total: 1 },
+      "GET telephony/numbers": { items: [{ ...TRUNK_NUMBER, trunk_id: "trunk-out" }], total: 1 },
+    });
+    renderWithClient(<NumbersSection agents={[AGENT_A]} />);
+    const table = await numbersTable();
+
+    expect(await table.findByText("Needs an inbound trunk to route calls")).toBeTruthy();
+    expect(table.queryByRole("combobox", { name: "Inbound agent for +15551230000" })).toBeNull();
+  });
+});
+
+describe("RulesSection delete", () => {
+  it("asks before deleting a dispatch rule", async () => {
+    const rule: DispatchRuleOut = {
+      id: "rule-1",
+      connection_id: "conn-a",
+      lk_rule_id: "SDR_1",
+      trunk_id: "trunk-in",
+      agent_id: "agent-a",
+      numbers: [],
+      room_prefix: "call-",
+      has_pin: false,
+      managed_by_number: null,
+      created_at: "2026-09-25T10:00:00Z",
+    };
+    const requests = stubApi({
+      "GET telephony/dispatch-rules": { items: [rule], total: 1 },
+      "DELETE telephony/dispatch-rules/rule-1": {},
+    });
+    renderWithClient(<RulesSection agents={[AGENT_A]} />);
+    const table = within(await screen.findByRole("table", { name: "Dispatch rules" }));
+
+    fireEvent.click(await table.findByRole("button", { name: "Delete rule" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Delete this dispatch rule?" });
+    expect(requests.some((r) => r.method === "DELETE")).toBe(false);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete rule" }));
+    await waitFor(() =>
+      expect(requests).toContainEqual({ method: "DELETE", path: "telephony/dispatch-rules/rule-1", body: undefined }),
+    );
   });
 });

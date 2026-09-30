@@ -109,7 +109,9 @@ export function SectionNav({ sections, active, onSelect, summary, variant, class
                   <span
                     data-tone={tone}
                     className={cn(
-                      "size-2 shrink-0 rounded-pill",
+                      // `relative`: the sr-only label is absolute; without a positioned box here it escapes the
+                      // scrolling phone bar and widens the page (render check, 390 px).
+                      "relative size-2 shrink-0 rounded-pill",
                       tone === "error" ? "bg-destructive-solid" : "bg-warning-solid",
                     )}
                   >

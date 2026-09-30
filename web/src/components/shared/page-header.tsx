@@ -60,7 +60,7 @@ export function PageHeader({
       data-slot="page-header"
       className={cn(
         "mb-[18px] flex flex-col gap-3 sm:mb-6",
-        sticky && "sticky top-0 z-20 -mx-4 border-b border-border bg-background px-4 py-3 md:-mx-6 md:px-6",
+        sticky && "sticky top-0 z-20 -mx-4 border-b border-border bg-background px-4 py-3 sm:-mx-5 sm:px-5 min-[901px]:-mx-6 min-[901px]:px-6",
         className,
       )}
     >

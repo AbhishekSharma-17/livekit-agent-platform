@@ -43,7 +43,8 @@ import type { SectionIssueSummary } from "./validation-map";
  * the shell may override it with `--console-topbar-height`, and the gutter
  * bleed mirrors `main`'s padding.
  */
-const BLEED = "-mx-4 px-4 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8";
+/** Full-bleed to the page gutters (`Page`: 16 px below 640, 20 px to 900, then 32 px). */
+const BLEED = "-mx-4 px-4 sm:-mx-5 sm:px-5 min-[901px]:-mx-8 min-[901px]:px-8";
 /**
  * < 1024 px only the actions row and the section bar stay pinned: the header
  * sticks at a negative offset (`--editor-header-collapse` = the height of the

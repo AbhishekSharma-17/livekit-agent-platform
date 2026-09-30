@@ -277,7 +277,10 @@ describe("ConsoleShell", () => {
     fireEvent.click(trigger);
     const dialog = await screen.findByRole("dialog", { name: "Menu" });
     expect(within(dialog).getAllByRole("link", { name: "Overview" }).length).toBeGreaterThan(0);
-    expect(await within(dialog).findByRole("button", { name: "Preferences" })).toBeTruthy();
+    // 48 px phone targets in the menu: nav rows and the account trigger.
+    expect(within(dialog).getByRole("link", { name: "Overview" }).getAttribute("data-size")).toBe("touch");
+    const preferences = await within(dialog).findByRole("button", { name: "Preferences" });
+    expect(preferences.className).toContain("min-h-12");
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
 
     fireEvent.keyDown(dialog, { key: "Escape" });

@@ -8,6 +8,7 @@ import { Icon } from "@/components/shared/icon";
 import { ThemeSwitcher } from "@/components/shared/theme-switcher";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BREAK_GLASS_USER_ID, signOut } from "@/components/console/lib/sign-out";
+import { cn } from "@/lib/utils";
 import { useMe } from "./use-me";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
@@ -40,7 +41,7 @@ function Separator() {
  * break-glass admin token has no session to end, so its menu says so instead
  * of offering a sign-out that does nothing.
  */
-export function AccountMenu({ version }: { version?: string }) {
+export function AccountMenu({ version, touch = false }: { version?: string; /** 48 px trigger (the Menu dialog on phones). */ touch?: boolean }) {
   const { me, isLoading } = useMe();
   const [open, setOpen] = React.useState(false);
 
@@ -58,7 +59,7 @@ export function AccountMenu({ version }: { version?: string }) {
       <PopoverTrigger
         data-testid={user ? "account-menu-trigger" : "preferences-menu-trigger"}
         aria-label={displayName ? `Account: ${displayName}` : "Preferences"}
-        className={TRIGGER}
+        className={cn(TRIGGER, touch && "min-h-12")}
       >
         {user ? (
           <span

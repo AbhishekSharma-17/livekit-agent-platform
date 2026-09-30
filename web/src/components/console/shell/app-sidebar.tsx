@@ -21,6 +21,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useHealth } from "@/components/console/lib/api-hooks";
+import { cn } from "@/lib/utils";
 import { NAV_GROUPS, isNavItemActive, type NavItem } from "./nav-config";
 import { useLiveSessionCount } from "./nav-state";
 import { AccountMenu } from "./account-menu";
@@ -102,13 +103,13 @@ function SidebarBody({ touch = false }: { touch?: boolean }) {
             href={docsUrl}
             target="_blank"
             rel="noreferrer noopener"
-            className="flex h-[34px] items-center gap-2.5 rounded px-2.5 text-control font-medium text-text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-sidebar-hover hover:text-foreground focus-visible:shadow-focus"
+            className={cn(touch ? "h-12" : "h-[34px]", "flex items-center gap-2.5 rounded px-2.5 text-control font-medium text-text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-sidebar-hover hover:text-foreground focus-visible:shadow-focus")}
           >
             <Icon as={ExternalLinkIcon} size="nav" />
             <span className="min-w-0 flex-1 truncate">Documentation</span>
           </a>
         ) : null}
-        <AccountMenu version={health?.version} />
+        <AccountMenu version={health?.version} touch={touch} />
       </SidebarFooter>
     </>
   );

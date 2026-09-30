@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 export interface LoadingRegionProps {
@@ -11,8 +12,8 @@ export interface LoadingRegionProps {
 }
 
 /**
- * The accessible wrapper for every skeleton (docs/UI_UX_SPEC.md §6
- * "Loading"): a `status` live region whose name is real text, so the
+ * The accessible wrapper for every skeleton (docs/ui/DESIGN-SYSTEM.md
+ * section 8.1): a `status` live region whose name is real text, so the
  * skeleton blocks themselves stay decorative. An `aria-label` on a roleless
  * `div` is not announced and is flagged by axe (`aria-prohibited-attr`). No
  * `aria-busy`: several screen readers hold a busy region's announcement until
@@ -46,5 +47,24 @@ export function SkeletonRows({ label, rows = 3, rowClassName = "h-10", className
         <Skeleton key={index} className={cn("w-full", rowClassName)} />
       ))}
     </LoadingRegion>
+  );
+}
+
+/**
+ * Loading row (section 6.5) for small in-card loads: the spinner plus a
+ * 13 px secondary label, in a `role="status"` region. Never the only loading
+ * state for a page; pages use skeletons that mirror their layout.
+ */
+export function LoadingRow({ label, className }: { label: string; className?: string }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      data-slot="loading-row"
+      className={cn("flex items-center gap-2 py-2 text-label text-text-secondary", className)}
+    >
+      <Spinner />
+      <span>{label}</span>
+    </div>
   );
 }

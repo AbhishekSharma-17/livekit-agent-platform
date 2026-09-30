@@ -22,7 +22,6 @@ allow raw-shadow       2  src/components/ui/sidebar.tsx
 allow native-select    2  src/components/preview/preview-shell.tsx
 allow opacity-colour   1  src/components/shared/responsive-table.tsx
 allow colour-literal   1  src/components/shared/vendor-mark.tsx   # keep: per-vendor computed tint (AUDIT C6)
-allow opacity-colour  11  src/components/ui/badge.tsx
 allow colour-literal   4  src/components/ui/bubble.tsx
 allow opacity-colour   8  src/components/ui/bubble.tsx
 allow opacity-colour   2  src/components/ui/card.tsx

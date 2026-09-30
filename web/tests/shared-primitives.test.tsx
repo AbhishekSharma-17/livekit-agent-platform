@@ -100,41 +100,44 @@ describe("StateMeter", () => {
   });
 });
 
-describe("StatusChip", () => {
+describe("StatusChip / StatusPill (spec 6.6)", () => {
   it.each([
     ["neutral", "bg-muted"],
-    ["info", "bg-info-soft"],
-    ["success", "bg-success-soft"],
-    ["warning", "bg-warning-soft"],
-    ["danger", "bg-danger-soft"],
-    ["live", "bg-brand-soft"],
-  ] as const)("tone %s uses token classes (%s)", (tone: StatusTone, bg) => {
+    ["info", "bg-info-subtle"],
+    ["success", "bg-success-subtle"],
+    ["warning", "bg-warning-subtle"],
+    ["danger", "bg-destructive-subtle"],
+    ["live", "bg-brand-subtle"],
+  ] as const)("tone %s uses token classes (%s) on a hairline pill", (tone: StatusTone, bg) => {
     const { container } = render(<StatusChip tone={tone}>Label</StatusChip>);
     const chip = container.querySelector('[data-slot="status-chip"]');
     expect(chip?.getAttribute("data-tone")).toBe(tone);
     expect(chip?.className).toContain(bg);
-    expect(chip?.className).toContain("rounded-xs");
+    expect(chip?.className).toContain("rounded-pill");
+    expect(chip?.className).toContain("border");
     expect(chip?.className).not.toMatch(/emerald|amber|sky|blue-|red-/);
   });
 
-  it("live renders a decorative xs state meter", () => {
+  it("live renders a decorative pulsing dot", () => {
     const { container } = render(<StatusChip tone="live">Live</StatusChip>);
-    const meter = container.querySelector('[data-slot="state-meter"]');
-    expect(meter?.getAttribute("data-size")).toBe("xs");
-    expect(meter?.closest('[aria-hidden="true"]')).toBeTruthy();
+    const dot = container.querySelector('[data-slot="status-dot"]');
+    expect(dot?.hasAttribute("data-pulse")).toBe(true);
+    expect(dot?.getAttribute("aria-hidden")).toBe("true");
     expect(screen.queryByRole("img")).toBeNull();
     expect(container.textContent).toBe("Live");
   });
 
-  it("shows a dot only when asked", () => {
+  it("always shows a currentColor dot, pulsing only when live", () => {
     const { container, rerender } = render(<StatusChip tone="danger">Failed</StatusChip>);
-    expect(container.querySelector(".bg-danger")).toBeNull();
+    const dot = () => container.querySelector('[data-slot="status-dot"]');
+    expect(dot()?.className).toContain("bg-current");
+    expect(dot()?.hasAttribute("data-pulse")).toBe(false);
     rerender(
       <StatusChip tone="danger" dot size="sm">
         Failed
       </StatusChip>,
     );
-    expect(container.querySelector(".bg-danger")).toBeTruthy();
+    expect(dot()).toBeTruthy();
   });
 });
 

@@ -1,37 +1,39 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "@/lib/utils"
 import { Slot } from "radix-ui"
 
+import { cn } from "@/lib/utils"
+
+/**
+ * Badge (docs/ui/DESIGN-SYSTEM.md section 6.6): 22 px, padding 0 8 px,
+ * 12 px / 500, a hairline border and a pill radius, in a tone's subtle fill,
+ * border and text. For **status** use `StatusPill` / `LifecycleBadge`
+ * (`components/shared/status-chip`), which add the mandatory dot; for
+ * freeform labels use `Tag`. Legacy `variant` names map onto the tones.
+ */
+const TONES = {
+  neutral: "border-border bg-muted text-text-secondary",
+  brand: "border-brand-border bg-brand-subtle text-brand",
+  info: "border-info-border bg-info-subtle text-info-text",
+  success: "border-success-border bg-success-subtle text-success-text",
+  warning: "border-warning-border bg-warning-subtle text-warning-text",
+  danger: "border-destructive-border bg-destructive-subtle text-destructive-text",
+} as const
+
 const badgeVariants = cva(
-  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex h-[22px] w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-pill border px-2 text-caption leading-none font-medium whitespace-nowrap transition-colors duration-(--duration-fast) has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
-        secondary:
-          "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
-        destructive:
-          "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
-        outline:
-          "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
-        ghost:
-          "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
-        link: "text-primary underline-offset-4 hover:underline",
+        default: TONES.neutral,
+        secondary: TONES.neutral,
+        destructive: TONES.danger,
+        outline: "border-border bg-card text-foreground",
+        ghost: "border-transparent bg-transparent text-text-secondary [a]:hover:bg-muted",
+        link: "border-transparent bg-transparent text-brand underline-offset-3 [a]:hover:underline",
       },
-      /**
-       * Token-mapped status tones (docs/UI_UX_SPEC.md §2.2). When set, the
-       * tone's soft surface + text colour win over `variant` colours. Prefer
-       * `components/shared/status-chip` for status; this is for ad-hoc badges.
-       */
-      tone: {
-        neutral: "border-transparent bg-muted text-muted-foreground",
-        brand: "border-transparent bg-brand-soft text-brand-text",
-        info: "border-transparent bg-info-soft text-info-text",
-        success: "border-transparent bg-success-soft text-success-text",
-        warning: "border-transparent bg-warning-soft text-warning-text",
-        danger: "border-transparent bg-danger-soft text-danger-text",
-      },
+      /** Token tones; when set they win over `variant`. */
+      tone: TONES,
     },
     defaultVariants: {
       variant: "default",
@@ -45,8 +47,7 @@ function Badge({
   tone,
   asChild = false,
   ...props
-}: React.ComponentProps<"span"> &
-  VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
+}: React.ComponentProps<"span"> & VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
   const Comp = asChild ? Slot.Root : "span"
 
   return (

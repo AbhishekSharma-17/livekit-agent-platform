@@ -248,6 +248,7 @@ export function SearchableSelect({
           id={id}
           type="button"
           data-slot="combobox-trigger"
+          // eslint-disable-next-line jsx-a11y/role-has-required-aria-props -- Radix PopoverTrigger sets aria-controls to the real popover id
           role="combobox"
           aria-expanded={open}
           aria-label={ariaLabel}

@@ -49,9 +49,13 @@ export function useWriteAccess(min: Role = "builder"): WriteAccessState {
   return { role: workspace?.role, canWrite: roleAtLeast(workspace?.role, min), isLoading };
 }
 
-/** The tooltip/inline copy a gated control shows when `min` isn't met. */
+/**
+ * The inline copy shown when `min` isn't met: what the rule is plus the next
+ * step (docs/ui/DESIGN-SYSTEM.md section 8.5). Prefer `ReadOnlyNote` /
+ * `IfCan` (`console/shared/permission.tsx`) over a disabled control.
+ */
 export function writeAccessReason(min: Role = "builder"): string {
-  return min === "admin"
-    ? "Only admins and owners can do this."
-    : "Viewers can't do this — ask a builder, admin or owner.";
+  return min === "admin" || min === "owner"
+    ? "Only admins and owners can do this. Ask an admin for access."
+    : "Viewers can't do this. Ask a builder, admin or owner for access.";
 }

@@ -20,17 +20,12 @@ allow raw-shadow       2  src/components/ui/sidebar.tsx
 
 # UI-2 primitives and styleguide (113 in 27 files)
 allow native-select    2  src/components/preview/preview-shell.tsx
-allow opacity-colour   1  src/components/shared/responsive-table.tsx
 allow colour-literal   1  src/components/shared/vendor-mark.tsx   # keep: per-vendor computed tint (AUDIT C6)
 allow colour-literal   4  src/components/ui/bubble.tsx
 allow opacity-colour   8  src/components/ui/bubble.tsx
-allow opacity-colour   2  src/components/ui/card.tsx
 allow opacity-colour   2  src/components/ui/command.tsx
-allow opacity-colour   2  src/components/ui/kbd.tsx
 allow opacity-colour   1  src/components/ui/scroll-area.tsx
 allow opacity-colour   1  src/components/ui/slider.tsx
-allow opacity-colour   3  src/components/ui/table.tsx
-allow opacity-colour   3  src/components/ui/tabs.tsx
 allow opacity-colour   3  src/components/ui/toggle.tsx
 
 # S1 agents (45 in 23 files)

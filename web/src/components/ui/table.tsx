@@ -23,21 +23,29 @@ function useHorizontallyScrollable(ref: React.RefObject<HTMLDivElement | null>) 
   return scrollable
 }
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+/**
+ * Table (docs/ui/DESIGN-SYSTEM.md section 6.7): 36 px headers on `--muted`
+ * in 12 px / 500 secondary, cells padded `10px 14px`, hairlines between rows
+ * and a `--muted` row hover. Number columns: add `numeric` to the head and
+ * cell (right-aligned, tabular figures). `framed` puts the table in the
+ * spec's bordered, rounded wrapper that scrolls horizontally; leave it off
+ * when a card already frames the table.
+ */
+function Table({ className, framed = false, ...props }: React.ComponentProps<"table"> & { framed?: boolean }) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const scrollable = useHorizontallyScrollable(containerRef)
   return (
     <div
       ref={containerRef}
       data-slot="table-container"
+      data-framed={framed ? "" : undefined}
       tabIndex={scrollable ? 0 : undefined}
-      className="relative w-full overflow-x-auto rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={cn(
+        "relative w-full overflow-x-auto rounded-sm",
+        framed && "rounded-lg border border-border bg-card"
+      )}
     >
-      <table
-        data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
-        {...props}
-      />
+      <table data-slot="table" className={cn("w-full caption-bottom text-label", className)} {...props} />
     </div>
   )
 }
@@ -67,7 +75,7 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
     <tfoot
       data-slot="table-footer"
       className={cn(
-        "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+        "border-t border-border bg-muted font-medium [&>tr]:last:border-b-0",
         className
       )}
       {...props}
@@ -80,7 +88,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+        "border-b border-border transition-colors duration-(--duration-fast) hover:bg-muted has-aria-expanded:bg-muted data-[state=selected]:bg-muted",
         className
       )}
       {...props}
@@ -88,12 +96,13 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   )
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+function TableHead({ className, numeric = false, ...props }: React.ComponentProps<"th"> & { numeric?: boolean }) {
   return (
     <th
       data-slot="table-head"
       className={cn(
-        "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+        "h-9 bg-muted px-3.5 text-left align-middle text-caption font-medium whitespace-nowrap text-text-secondary [&:has([role=checkbox])]:pr-0",
+        numeric && "text-right",
         className
       )}
       {...props}
@@ -101,12 +110,13 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   )
 }
 
-function TableCell({ className, ...props }: React.ComponentProps<"td">) {
+function TableCell({ className, numeric = false, ...props }: React.ComponentProps<"td"> & { numeric?: boolean }) {
   return (
     <td
       data-slot="table-cell"
       className={cn(
-        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
+        "px-3.5 py-2.5 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
+        numeric && "text-right tabular-nums",
         className
       )}
       {...props}
@@ -121,7 +131,7 @@ function TableCaption({
   return (
     <caption
       data-slot="table-caption"
-      className={cn("mt-4 text-sm text-muted-foreground", className)}
+      className={cn("mt-4 text-label text-text-secondary", className)}
       {...props}
     />
   )

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 export interface DescriptionItem {
   term: React.ReactNode;
   detail: React.ReactNode;
-  /** Render the detail in Geist Mono with tabular numbers (ids, models, counts). */
+  /** Render the detail in the mono stack (ids, models). */
   mono?: boolean;
 }
 
@@ -28,11 +28,11 @@ export function DescriptionList({ items, columns = 1, className }: DescriptionLi
     <dl data-slot="description-list" className={cn("grid gap-x-6 gap-y-4", COLUMN_CLASSES[columns], className)}>
       {items.map((item, index) => (
         <div key={index} className="flex min-w-0 flex-col gap-1">
-          <dt className="text-xs font-medium text-muted-foreground">{item.term}</dt>
+          <dt className="text-caption text-text-tertiary">{item.term}</dt>
           <dd
             className={cn(
-              "min-w-0 text-sm break-words text-foreground",
-              item.mono && "font-mono text-[0.8125rem] tabular-nums",
+              "min-w-0 text-control break-words text-foreground tabular-nums",
+              item.mono && "font-mono text-caption",
             )}
           >
             {item.detail}

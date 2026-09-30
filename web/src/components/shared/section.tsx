@@ -26,15 +26,15 @@ export function Section({ id, title, description, aside, children, className }: 
       id={id}
       aria-labelledby={titleId}
       data-slot="section"
-      className={cn("scroll-mt-20 rounded-lg border border-border bg-card text-card-foreground", className)}
+      className={cn("scroll-mt-20 rounded-lg border border-border bg-card text-foreground", className)}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
         <div className="min-w-0 flex-1">
-          <h2 id={titleId} className="text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em]">
+          <h2 id={titleId} className="text-title font-semibold tracking-[-0.008em]">
             {title}
           </h2>
           {description ? (
-            <p className="mt-0.5 max-w-[65ch] text-sm text-pretty text-muted-foreground">{description}</p>
+            <p className="mt-0.5 max-w-[72ch] text-label text-pretty text-text-secondary">{description}</p>
           ) : null}
         </div>
         {aside ? <div className="flex shrink-0 items-center gap-2">{aside}</div> : null}

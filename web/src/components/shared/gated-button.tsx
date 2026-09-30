@@ -14,6 +14,11 @@ export interface GatedButtonProps extends React.ComponentProps<typeof Button> {
 }
 
 /**
+ * @deprecated Decision D12 (docs/ui/AUDIT.md): don't render controls a person
+ * can't use. Hide row and edit actions with `IfCan` and replace page-level
+ * primaries with `ReadOnlyNote` (`components/console/shared/permission.tsx`).
+ * Kept as a thin shim until the screen packages move off it.
+ *
  * A `Button` that disables itself with an explanatory tooltip instead of
  * letting the caller reach a control the api will refuse (docs/v2/_asks.md
  * V2-20-5). Carries its own `TooltipProvider` rather than relying on the one

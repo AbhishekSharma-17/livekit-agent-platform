@@ -76,7 +76,6 @@ export function ResponsiveTable<T>({
                 <TableHead
                   key={column.id}
                   className={cn(
-                    "h-9 text-xs font-medium text-muted-foreground",
                     column.align === "end" && "text-right",
                     column.className,
                     column.headerClassName,
@@ -94,7 +93,7 @@ export function ResponsiveTable<T>({
                 <TableRow
                   key={keyFor(row, index)}
                   data-href={href}
-                  className={cn(href && "relative cursor-pointer focus-within:bg-muted/50")}
+                  className={cn(href && "relative cursor-pointer focus-within:bg-muted")}
                 >
                   {columns.map((column, columnIndex) => {
                     const content = column.cell(row);
@@ -102,7 +101,7 @@ export function ResponsiveTable<T>({
                       <TableCell
                         key={column.id}
                         className={cn(
-                          "py-3 text-[0.8125rem]",
+                          "py-3 text-label",
                           column.align === "end" && "text-right",
                           href && column.interactive && LIFTED,
                           column.className,
@@ -132,7 +131,7 @@ export function ResponsiveTable<T>({
           return (
             <li
               key={keyFor(row, index)}
-              className="relative rounded-lg border border-border bg-card p-4 text-card-foreground"
+              className="relative rounded-lg border border-border bg-card p-4 text-foreground"
             >
               {href ? (
                 <Link

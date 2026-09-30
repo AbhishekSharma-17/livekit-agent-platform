@@ -2,37 +2,38 @@
 
 import { LockIcon } from "lucide-react";
 
-import { EmptyState } from "@/components/shared/empty-state";
 import { useWriteAccess, writeAccessReason, type Role } from "@/components/console/lib/roles";
+import { EmptyState } from "@/components/shared/empty-state";
+import { LoadingRow } from "@/components/shared/loading-state";
 
 export interface RequireWriteProps {
   children: React.ReactNode;
   /** Role floor; defaults to `"builder"`. */
   min?: Role;
   title?: string;
+  /** The next step, e.g. "Ask an admin to add connections." */
+  description?: string;
 }
 
 /**
- * Gates an entire page/section behind a role floor (docs/v2/_asks.md
- * V2-20-5) — for a create form reached by direct URL (`/console/*\/new`)
- * rather than from a button this package already hides, so there is no
- * earlier point to intercept the visit. Renders nothing (not even the empty
- * state) while the role is still loading, to avoid a flash of "no access"
- * for someone who does have it.
+ * Gates an entire page or section behind a role floor (decision D12), for a
+ * create form reached by direct URL (`/console/*\/new`) rather than from a
+ * button the page already hides. While the role loads it shows a loading
+ * row (never a blank area); below the floor it shows a complete alternative
+ * that names the next step ("Ask an admin"), not a lone padlock.
  *
  * Kept as a small client wrapper so the page itself can stay a server
- * component (and keep exporting `metadata`, which a `"use client"` page
- * cannot).
+ * component (and keep exporting `metadata`).
  */
-export function RequireWrite({ children, min = "builder", title }: RequireWriteProps) {
+export function RequireWrite({ children, min = "builder", title, description }: RequireWriteProps) {
   const { canWrite, isLoading } = useWriteAccess(min);
-  if (isLoading) return null;
+  if (isLoading) return <LoadingRow label="Checking your access…" />;
   if (canWrite) return <>{children}</>;
   return (
     <EmptyState
       icon={LockIcon}
       title={title ?? "You don't have access to this"}
-      description={writeAccessReason(min)}
+      description={description ?? writeAccessReason(min)}
     />
   );
 }

@@ -1,17 +1,21 @@
 "use client";
-
 import Link from "next/link";
 
+import { readOnlyCopy } from "@/components/console/shared/permission";
+import { useWriteAccess, type Role } from "@/components/console/lib/roles";
 import { Button } from "@/components/ui/button";
-import { GatedButton } from "@/components/shared/gated-button";
-import { useWriteAccess, writeAccessReason, type Role } from "@/components/console/lib/roles";
+
+import { ReadOnlyNote } from "./read-only-note";
 
 interface NewResourceButtonBaseProps {
   children: React.ReactNode;
   /** Role floor to create this resource; defaults to `"builder"`. */
   min?: Role;
   size?: React.ComponentProps<typeof Button>["size"];
+  /** Defaults to `primary`: a "New …" button is the page's one main action. */
   variant?: React.ComponentProps<typeof Button>["variant"];
+  /** What a person below the floor reads instead, e.g. "Ask an admin to add connections." */
+  readOnlyNote?: string;
   className?: string;
 }
 
@@ -30,23 +34,32 @@ interface NewResourceActionProps extends NewResourceButtonBaseProps {
 export type NewResourceButtonProps = NewResourceLinkProps | NewResourceActionProps;
 
 /**
- * A page-header/empty-state "New X" button, gated by role
- * (docs/v2/_asks.md V2-20-5). Two forms: `href` navigates to a create page,
- * `onClick` opens a create dialog. A next/link Link cannot be disabled the
- * way a button can, so below the role floor either form renders a plain
- * disabled button with a tooltip instead — a viewer never reaches a create
- * form they can't submit. Used from server-component pages
- * (app/console/*\/page.tsx) as a client child passed into PageHeader's
- * actions prop.
+ * A page-header or empty-state "New X" button, gated by role (decision D12):
+ * below the role floor it is **replaced by a read-only note** that names the
+ * next step, never a disabled button behind a tooltip. While the role is
+ * still loading the button renders disabled, so nothing flashes. `href`
+ * navigates to a create page; `onClick` opens a create dialog. Used from
+ * server-component pages as a client child of PageHeader's `actions`.
  */
-export function NewResourceButton({ children, min = "builder", size, variant, className, ...target }: NewResourceButtonProps) {
-  const { canWrite } = useWriteAccess(min);
-  if (!canWrite) {
+export function NewResourceButton({
+  children,
+  min = "builder",
+  size,
+  variant = "primary",
+  readOnlyNote,
+  className,
+  ...target
+}: NewResourceButtonProps) {
+  const { canWrite, isLoading } = useWriteAccess(min);
+  if (isLoading) {
     return (
-      <GatedButton allowed={false} reason={writeAccessReason(min)} size={size} variant={variant} className={className}>
+      <Button type="button" size={size} variant={variant} className={className} disabled>
         {children}
-      </GatedButton>
+      </Button>
     );
+  }
+  if (!canWrite) {
+    return <ReadOnlyNote className={className}>{readOnlyNote ?? readOnlyCopy(min)}</ReadOnlyNote>;
   }
   if (target.onClick) {
     return (

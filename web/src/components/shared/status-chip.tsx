@@ -59,7 +59,8 @@ export interface StatusChipProps extends StatusPillProps {
 }
 
 /** @deprecated Use `StatusPill`; kept so existing screens keep compiling. */
-export function StatusChip({ dot: _dot, ...props }: StatusChipProps) {
+export function StatusChip(props: StatusChipProps) {
+  // `dot` is ignored: StatusPill always draws it.
   return <StatusPill {...props} />;
 }
 

@@ -3,7 +3,7 @@ import * as React from "react";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-import { SearchableSelect, type SearchableSelectOption } from "@/components/ui/searchable-select";
+import { Combobox, SearchableSelect, type SearchableSelectOption } from "@/components/ui/searchable-select";
 
 /**
  * `SearchableSelect` (Console -> Tools -> Apps' category filter and other long
@@ -227,5 +227,98 @@ describe("SearchableSelect", () => {
     expect(trigger("Categories").textContent).toContain("CRM");
     fireEvent.click(screen.getByText("Scheduling"));
     expect(trigger("Categories").textContent).toContain("2 selected");
+  });
+});
+
+describe("Combobox (spec 6.3): row cap, free text, accent-insensitive search, paging", () => {
+  const MANY: SearchableSelectOption[] = Array.from({ length: 30 }, (_, i) => ({
+    value: `model-${i + 1}`,
+    label: `Model ${i + 1}`,
+  }));
+
+  function Plain({
+    options = MANY,
+    maxRows,
+    allowCustom,
+    onChangeSpy,
+  }: {
+    options?: SearchableSelectOption[];
+    maxRows?: number;
+    allowCustom?: boolean;
+    onChangeSpy?: (value: string) => void;
+  }) {
+    const [value, setValue] = React.useState("");
+    return (
+      <Combobox
+        aria-label="Model"
+        options={options}
+        value={value}
+        maxRows={maxRows}
+        allowCustom={allowCustom}
+        onValueChange={(next) => {
+          setValue(next);
+          onChangeSpy?.(next);
+        }}
+      />
+    );
+  }
+
+  it("caps the rendered rows and says how many more there are", async () => {
+    render(<Plain maxRows={10} />);
+    open("Model");
+    await screen.findByText("Model 1");
+    expect(document.querySelectorAll("[cmdk-item]")).toHaveLength(10);
+    expect(screen.getByText("20 more. Type to narrow the list.")).toBeTruthy();
+  });
+
+  it("offers the typed text as a free-text value when nothing matches it exactly", async () => {
+    const onChangeSpy = vi.fn();
+    render(<Plain allowCustom onChangeSpy={onChangeSpy} />);
+    open("Model");
+    const input = await screen.findByPlaceholderText("Search…");
+    fireEvent.change(input, { target: { value: "my-finetune" } });
+    fireEvent.click(await screen.findByText("Use “my-finetune”"));
+    expect(onChangeSpy).toHaveBeenCalledWith("my-finetune");
+    expect(trigger("Model").textContent).toContain("my-finetune");
+  });
+
+  it("hides the free-text row when the query matches an option exactly", async () => {
+    render(<Plain allowCustom />);
+    open("Model");
+    const input = await screen.findByPlaceholderText("Search…");
+    fireEvent.change(input, { target: { value: "Model 3" } });
+    await screen.findByText("Model 3");
+    expect(screen.queryByText("Use “Model 3”")).toBeNull();
+  });
+
+  it("matches accent-insensitively and needs every word to match", async () => {
+    render(
+      <Plain
+        options={[
+          { value: "cafe", label: "Café desk" },
+          { value: "front", label: "Front desk" },
+        ]}
+      />,
+    );
+    open("Model");
+    const input = await screen.findByPlaceholderText("Search…");
+    fireEvent.change(input, { target: { value: "cafe desk" } });
+    await waitFor(() => expect(screen.queryByText("Front desk")).toBeNull());
+    expect(screen.getByText("Café desk")).toBeTruthy();
+  });
+
+  it("moves ten rows with PageDown and back with PageUp", async () => {
+    render(<Plain />);
+    open("Model");
+    const input = await screen.findByPlaceholderText("Search…");
+    await screen.findByText("Model 1");
+    fireEvent.keyDown(input, { key: "PageDown" });
+    await waitFor(() =>
+      expect(document.querySelector('[cmdk-item][data-selected="true"]')?.textContent).toContain("Model 11"),
+    );
+    fireEvent.keyDown(input, { key: "PageUp" });
+    await waitFor(() =>
+      expect(document.querySelector('[cmdk-item][data-selected="true"]')?.textContent).toContain("Model 1"),
+    );
   });
 });

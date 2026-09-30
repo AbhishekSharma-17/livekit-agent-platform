@@ -27,22 +27,22 @@ export function ConnectionDetailTabs({ connection }: { connection: ConnectionOut
         router.replace(`/console/connections/${connection.id}?tab=${next}`, { scroll: false });
       }}
     >
-      <TabsList className="h-auto flex-wrap justify-start group-data-horizontal/tabs:h-auto">
+      <TabsList>
         <TabsTrigger value="overview">Overview</TabsTrigger>
         <TabsTrigger value="fleet">Fleet</TabsTrigger>
         <TabsTrigger value="storage">Storage</TabsTrigger>
         <TabsTrigger value="deploy">Deploy</TabsTrigger>
       </TabsList>
-      <TabsContent value="overview" className="pt-4">
+      <TabsContent value="overview" className="pt-2">
         <ConnectionOverview connection={connection} />
       </TabsContent>
-      <TabsContent value="fleet" className="pt-4">
+      <TabsContent value="fleet" className="pt-2">
         <FleetCard connection={connection} />
       </TabsContent>
-      <TabsContent value="storage" className="pt-4">
+      <TabsContent value="storage" className="pt-2">
         <StorageTab connection={connection} />
       </TabsContent>
-      <TabsContent value="deploy" className="pt-4">
+      <TabsContent value="deploy" className="pt-2">
         <DeployPanel connection={connection} />
       </TabsContent>
     </Tabs>

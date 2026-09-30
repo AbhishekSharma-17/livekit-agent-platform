@@ -38,6 +38,19 @@ const CLASH_MESSAGE =
 
 type Reply = { status: number; body: unknown };
 
+/**
+ * An admin's `/auth/me`: editing a connection and starting its workers are
+ * admin writes server-side (`auth/roles.py::ROUTE_POLICY`), so the console
+ * only offers them to admins (docs/ui/AUDIT.md D12).
+ */
+const ADMIN_ME: Reply = {
+  status: 200,
+  body: {
+    user: { id: "u1", email: "admin@example.test" },
+    workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: "admin" }],
+  },
+};
+
 function stubFetch(route: (url: string, init?: RequestInit) => Reply | undefined) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -142,6 +155,7 @@ describe("ConnectionCreateForm — agent name clash (V6-27)", () => {
 describe("ConnectionOverview edit — agent name clash (V6-27)", () => {
   it("shows the 409 from Save under the Agent name field", async () => {
     stubFetch((url, init) => {
+      if (url.includes("/auth/me")) return ADMIN_ME;
       if (url.includes("/connections/conn-1/fleet")) return { status: 200, body: fleet({ ready_workers: 1 }) };
       if (url.endsWith("/connections/conn-1") && init?.method === "PUT") {
         return { status: 409, body: { error: { code: "agent_name_in_use", message: CLASH_MESSAGE, details: { field: "agent_name" } } } };
@@ -150,7 +164,8 @@ describe("ConnectionOverview edit — agent name clash (V6-27)", () => {
     });
     renderWithClient(<ConnectionOverview connection={CONNECTION} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    // Edit appears once the role has loaded (admins only).
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByLabelText("Agent name"), { target: { value: "taken-name" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -172,7 +187,11 @@ describe("WorkerStatusNotice (V6-27)", () => {
 
   it("offers Start for a supervised connection", async () => {
     const fetchMock = stubFetch((url, init) =>
-      url.includes("/fleet") ? { status: 200, body: init?.method === "POST" ? fleet({ desired_replicas: 1 }) : fleet() } : undefined,
+      url.includes("/auth/me")
+        ? ADMIN_ME
+        : url.includes("/fleet")
+          ? { status: 200, body: init?.method === "POST" ? fleet({ desired_replicas: 1 }) : fleet() }
+          : undefined,
     );
     renderWithClient(<WorkerStatusNotice connection={{ ...CONNECTION, deployment_mode: "supervised", replicas: 2 }} />);
 

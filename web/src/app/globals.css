@@ -110,6 +110,27 @@
   --duration-slow: var(--duration-slow);
   --ease-entrance: var(--ease-entrance);
 
+  /* type scale (spec 3): text-tab 11, text-nav 11.5, text-caption 12, text-stat-label 12.5,
+     text-label 13, text-control 13.5, text-body 14, text-title 15, text-dialog 17,
+     text-page 22, text-stat 24, text-display 26 */
+  --text-tab: var(--type-tab);
+  --text-nav: var(--type-nav);
+  --text-caption: var(--type-caption);
+  --text-stat-label: var(--type-stat-label);
+  --text-label: var(--type-label);
+  --text-control: var(--type-control);
+  --text-body: var(--type-body);
+  --text-title: var(--type-title);
+  --text-title--line-height: var(--type-title-leading);
+  --text-dialog: var(--type-dialog);
+  --text-dialog--line-height: var(--type-dialog-leading);
+  --text-page: var(--type-page);
+  --text-page--line-height: var(--type-page-leading);
+  --text-stat: var(--type-stat);
+  --text-stat--line-height: var(--type-stat-leading);
+  --text-display: var(--type-display);
+  --text-display--line-height: var(--type-display-leading);
+
   /* layout (spec 2.4): h-topbar, p-panel-inset, h-bottombar */
   --spacing-topbar: var(--layout-topbar);
   --spacing-panel-inset: var(--layout-panel-inset);
@@ -332,6 +353,30 @@
   /* focus: inputs and open triggers; everything else gets the global :focus-visible outline */
   --focus-shadow: 0 0 0 1px var(--brand), 0 0 0 4px var(--brand-subtle);
 
+  /* type scale (spec 3); bridged as text-caption, text-label, text-control … */
+  --type-tab: 11px; /* phone tab label */
+  --type-nav: 11.5px; /* nav group label */
+  --type-caption: 12px; /* hints, badges, meta, table headers, eyebrow */
+  --type-stat-label: 12.5px;
+  --type-label: 13px; /* form labels, descriptions, table cells, alerts */
+  --type-control: 13.5px; /* buttons, nav, menu and select items, inputs above 640 px */
+  --type-body: 14px;
+  --type-title: 15px; /* card and section titles */
+  --type-title-leading: 1.4;
+  --type-dialog: 17px;
+  --type-dialog-leading: 1.35;
+  --type-page: 22px; /* h1 */
+  --type-page-leading: 1.3;
+  --type-stat: 24px;
+  --type-stat-leading: 1.2;
+  --type-display: 26px; /* sign-in title */
+  --type-display-leading: 1.25;
+
+  /* toasts (spec 6.4): 24 px from the edges, 16 px on phones, lifted above the phone tab bar */
+  --toast-offset: 24px;
+  --toast-offset-mobile: 16px;
+  --toast-offset-mobile-bottom: 16px;
+
   /* layout */
   --layout-topbar: 56px;
   --layout-panel-inset: 8px;
@@ -412,16 +457,17 @@
     outline-offset: 2px;
   }
   /* Icons (spec 5): one stroke width, 16 px by default; override size by
-     context with size-* utilities, never the stroke. The Icon wrapper
-     (data-slot=icon) still sizes through width/height attributes, so the
-     default size skips it until UI-2 moves it to classes. */
+     context with size-* utilities (the Icon wrapper does), never the stroke. */
   .lucide {
+    width: 16px;
+    height: 16px;
     stroke-width: 1.75px;
     flex: none;
   }
-  .lucide:not([data-slot="icon"]) {
-    width: 16px;
-    height: 16px;
+  /* Native checkboxes and radios (spec 6.2) take the accent. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--brand);
   }
   h1,
   h2,
@@ -455,6 +501,12 @@
   }
 }
 
+/* Toasts sit above the phone bottom tab bar when the shell renders one
+   (UI-3 marks it data-slot="bottom-tab-bar"). */
+:root:has([data-slot="bottom-tab-bar"]) {
+  --toast-offset-mobile-bottom: calc(var(--layout-bottombar) + env(safe-area-inset-bottom) + 16px);
+}
+
 /* Reduced motion (spec 5): every animation and transition collapses to 1 ms
    and runs once; the state meter's keyframes stop entirely. */
 @media (prefers-reduced-motion: reduce) {
@@ -467,7 +519,9 @@
     scroll-behavior: auto !important;
   }
   .motion-safe-transform,
-  [data-slot="state-meter"] [data-bar] {
+  [data-slot="state-meter"] [data-bar],
+  [data-slot="status-dot"][data-pulse],
+  [data-slot="skeleton"]::after {
     animation: none !important;
   }
 }
@@ -599,6 +653,57 @@
     }
     100% {
       transform: scaleY(1);
+    }
+  }
+
+  /* Status dot (spec 6.6): 6 px currentColor; brand/live pulses 1 -> .35 over 1.6 s. */
+  [data-slot="status-dot"][data-pulse] {
+    animation: lkap-pulse-dot 1.6s ease-in-out infinite;
+  }
+  @keyframes lkap-pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  /* Skeleton (spec 5, 6.5): a --muted block with a --muted-strong sweep every 1.4 s. */
+  [data-slot="skeleton"] {
+    position: relative;
+    overflow: hidden;
+    background: var(--muted);
+  }
+  [data-slot="skeleton"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, var(--muted-strong), transparent);
+    animation: lkap-skeleton-sweep 1.4s ease-in-out infinite;
+  }
+  @keyframes lkap-skeleton-sweep {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  /* Spinner (spec 5): 14 px, 2 px ring, accent top edge, 0.8 s linear. */
+  [data-slot="spinner"] {
+    display: inline-block;
+    flex: none;
+    width: 14px;
+    height: 14px;
+    border-radius: var(--radius-pill);
+    border: 2px solid var(--muted-strong);
+    border-top-color: var(--brand);
+    animation: lkap-spin 0.8s linear infinite;
+  }
+  @keyframes lkap-spin {
+    100% {
+      transform: rotate(360deg);
     }
   }
 }

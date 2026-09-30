@@ -139,12 +139,15 @@ describe("StatusChip", () => {
 });
 
 describe("Icon", () => {
-  it("is decorative by default with the 1.75 absolute stroke", () => {
+  it("is decorative by default, sized by class, with no per-icon stroke width", () => {
     const { container } = render(<Icon as={BotIcon} size="lg" />);
     const svg = container.querySelector("svg");
     expect(svg?.getAttribute("aria-hidden")).toBe("true");
-    expect(svg?.getAttribute("width")).toBe("20");
+    // Sized by a size-* utility (20 px), which beats the global `.lucide` 16 px rule.
+    expect(svg?.getAttribute("class")).toContain("size-5");
     expect(svg?.getAttribute("data-size")).toBe("lg");
+    // The stroke comes from the global `.lucide` rule (spec 5), never the icon.
+    expect(svg?.getAttribute("stroke-width")).toBe("2");
   });
 
   it("gets a name and img role when labelled", () => {

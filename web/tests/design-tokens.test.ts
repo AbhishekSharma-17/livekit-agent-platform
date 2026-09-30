@@ -169,8 +169,8 @@ describe("global rules (globals.css)", () => {
   const flat = css.replace(/\s+/g, " ");
 
   it("sets the one Lucide stroke width and default size", () => {
-    expect(flat).toContain(".lucide { stroke-width: 1.75px; flex: none; }");
-    expect(flat).toMatch(/\.lucide:not\(\[data-slot="icon"\]\) \{ width: 16px; height: 16px; \}/);
+    expect(flat).toContain(".lucide { width: 16px; height: 16px; stroke-width: 1.75px; flex: none; }");
+    expect(flat).not.toContain('.lucide:not([data-slot="icon"])');
   });
 
   it("collapses motion under prefers-reduced-motion", () => {

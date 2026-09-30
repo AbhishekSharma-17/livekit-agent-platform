@@ -597,14 +597,53 @@ describe("layout (R-V2-7)", () => {
   });
 });
 
+/**
+ * Every module `blocks/index.tsx` loads through `React.lazy`, keyed by block
+ * type. The fixture layout renders one block of every type, so its first
+ * render starts all sixteen dynamic imports at once; under the full suite's
+ * parallel load, transforming them on first import can take longer than
+ * `findBy*`'s 1 s budget (the "renders the layout's blocks in order" flake).
+ * Loading them up front leaves the render with nothing but already-evaluated
+ * modules to resolve, so what the tests wait for is the render itself.
+ */
+const LAZY_BLOCK_MODULES: Record<string, () => Promise<unknown>> = {
+  activity: () => import("@/panels/blocks/activity"),
+  canvas: () => import("@/panels/blocks/canvas"),
+  captions: () => import("@/panels/blocks/captions"),
+  cart: () => import("@/panels/blocks/cart"),
+  chart: () => import("@/panels/blocks/chart"),
+  code: () => import("@/panels/blocks/code"),
+  document: () => import("@/panels/blocks/document"),
+  layout: () => import("@/panels/blocks/layout"),
+  markdown: () => import("@/panels/blocks/markdown"),
+  notebook: () => import("@/panels/blocks/notebook"),
+  signature: () => import("@/panels/blocks/signature"),
+  table: () => import("@/panels/blocks/table"),
+  timer: () => import("@/panels/blocks/timer"),
+  transcript: () => import("@/panels/blocks/transcript"),
+  upload: () => import("@/panels/blocks/upload"),
+  video: () => import("@/panels/blocks/video"),
+};
+
 describe("composite panel", () => {
+  beforeAll(async () => {
+    await Promise.all(Object.values(LAZY_BLOCK_MODULES).map((load) => load()));
+  }, 60_000);
+
+  it("preloads exactly the block index's lazy modules", () => {
+    expect(Object.keys(LAZY_BLOCK_MODULES).sort()).toEqual([...LAZY_BLOCK_TYPES].sort());
+  });
+
   it("renders the layout's blocks in order, except a layout's own children (V6-10, D-V6-18)", async () => {
     render(<CompositePanel {...panelProps()} />);
     const panel = screen.getByTestId("composite-panel");
-    await screen.findByText("Induction hob");
-    // "tabs" (a `layout`) is itself lazy (V6-10): wait for its active tab's
-    // content too, so "claim" has mounted before the order is read.
-    await screen.findByText("H0-44721");
+    // The lazy modules are already loaded (beforeAll), so one act turn resolves
+    // every React.lazy and flushes the re-render: nothing below races a clock.
+    await act(async () => {});
+    screen.getByText("Induction hob");
+    // "tabs" (a `layout`) is itself lazy (V6-10): its active tab's content must
+    // have mounted too, so "claim" is in place before the order is read.
+    screen.getByText("H0-44721");
     const order = [...panel.querySelectorAll("[data-block-id]")].map((el) => el.getAttribute("data-block-id"));
     // The fixture's "tabs" layout claims "claim" and "recap" (`layout.json`): both
     // are left out of the flat top-level flow (`FIXTURE_LAYOUT.blocks` minus them,

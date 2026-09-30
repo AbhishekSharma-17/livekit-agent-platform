@@ -44,7 +44,7 @@ Rules:
 2. **No raw JSON outside a disclosure.** Put payloads in `<DetailsDisclosure><CodeBlock value={prettyJson(x)} /></DetailsDisclosure>`. `prettyJson` is in `timeline-model.ts`.
 3. **Degrade when fields are empty.** The running api still returns pydantic defaults for most v2 fields (see "API gaps"), so use `visible` to hide a tab that has nothing to show (e.g. Recording when `session.recording?.status` is `"none"`/missing), or render a compact `EmptyState`.
 4. **Deep links.** `/console/sessions/<id>?tab=<id>`. Unknown or hidden ids fall back to `timeline`. Selecting the default tab removes the param.
-5. Use WP-0 primitives (`StatusChip`, `DescriptionList`, `EmptyState`, `RelativeTime`, `ResponsiveTable`) and token utilities. No raw `var(--color-*)` in CSS strings (it resolves to light values in dark mode).
+5. Use the shared primitives (`StatusPill` with the lifecycle map, `Tag`, `MetaList`, `DescriptionList`, `EmptyState`, `RelativeTime`, `ResponsiveTable`; see `components/shared/README.md`) and spec token utilities (`text-text-secondary`, `text-caption`, `text-label`; no legacy aliases). No raw `var(--color-*)` in CSS strings (it resolves to light values in dark mode).
 
 ### Timeline row kinds
 

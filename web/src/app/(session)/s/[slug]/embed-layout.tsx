@@ -19,11 +19,35 @@
 import dynamic from "next/dynamic";
 
 import type { AgentPublicOut } from "@/contracts/lkap-contracts";
+import {
+  SessionLoadError,
+  SessionSkeleton,
+  type SessionSkeletonChannel,
+} from "@/components/session/session-skeleton";
 import type { ConnectErrorKind } from "@/lib/livekit";
 
-const EmbedSession = dynamic(() => import("@/components/session/embed/embed-session"), {
+/**
+ * One `next/dynamic` wrapper per channel over the **same** import (one shared
+ * chunk): `loading` receives no props, and each channel's skeleton mirrors its
+ * own layout (the text chat, or the voice pre-call card). A chunk that fails
+ * to load gets the error state with a Reload, never a blank frame. The loaders
+ * stay inline arrows so Next's `next/dynamic` transform can see the import.
+ */
+function embedFallback(channel: SessionSkeletonChannel) {
+  function EmbedFallback({ error }: { error?: Error | null }) {
+    return error ? <SessionLoadError /> : <SessionSkeleton channel={channel} />;
+  }
+  return EmbedFallback;
+}
+
+const TextEmbedSession = dynamic(() => import("@/components/session/embed/embed-session"), {
   ssr: false,
-  loading: () => <div className="h-dvh w-full" aria-hidden="true" />,
+  loading: embedFallback("text"),
+});
+
+const VoiceEmbedSession = dynamic(() => import("@/components/session/embed/embed-session"), {
+  ssr: false,
+  loading: embedFallback("voice"),
 });
 
 export interface EmbedLayoutProps {
@@ -36,5 +60,5 @@ export interface EmbedLayoutProps {
 }
 
 export function EmbedLayout(props: EmbedLayoutProps) {
-  return <EmbedSession {...props} />;
+  return props.channel === "text" ? <TextEmbedSession {...props} /> : <VoiceEmbedSession {...props} />;
 }

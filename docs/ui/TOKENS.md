@@ -21,8 +21,21 @@ the `@theme inline` bridge generates.
 | `--duration-fast` / `-base` / `-slow` | `duration-(--duration-fast)` (Tailwind has no duration namespace) |
 | `--ease-entrance` | `ease-entrance` |
 | `--layout-topbar`, `--layout-panel-inset`, `--layout-bottombar` | `h-topbar`, `p-panel-inset`, `h-bottombar` (spacing namespace) |
+| `--type-*` (spec section 3) | `text-tab` 11, `text-nav` 11.5, `text-caption` 12, `text-stat-label` 12.5, `text-label` 13, `text-control` 13.5, `text-body` 14, `text-title` 15, `text-dialog` 17, `text-page` 22, `text-stat` 24, `text-display` 26 |
 
-Tabular figures use Tailwind's built-in `tabular-nums`.
+Tabular figures use Tailwind's built-in `tabular-nums`. Merge classes with `cn` from `@/lib/utils`: it
+is configured with this type scale, `shadow-raised|overlay|modal|focus` and `rounded-dialog|pill`, so a
+`text-label` is not mistaken for a colour.
+
+## Component CSS in `globals.css` (UI-2)
+
+- `[data-slot=status-dot][data-pulse]`: the live dot, opacity 1 to .35 over 1.6 s.
+- `[data-slot=skeleton]`: `--muted` with a `--muted-strong` sweep every 1.4 s.
+- `[data-slot=spinner]`: 14 px, 2 px ring, accent top edge, 0.8 s.
+- All three stop under `prefers-reduced-motion`, with the state meter.
+- `input[type=checkbox|radio] { accent-color: var(--brand) }`.
+- Toast offsets: `--toast-offset` 24 px, `--toast-offset-mobile` 16 px and `--toast-offset-mobile-bottom`,
+  which lifts above the phone tab bar when the shell renders `[data-slot="bottom-tab-bar"]`.
 
 ## Additions to the spec
 
@@ -56,12 +69,9 @@ tint. Once UI-2 moves those to `--destructive-text` on card, and the verificatio
 guard pair, both tokens can return to the spec's 64% and 59%. The near-black foreground reads 5.25:1 on
 64%.
 
-**Icon rule.** The spec's literal rule is `.lucide { width:16px; height:16px; stroke-width:1.75px;
-flex:none }`. The shipped rule keeps the stroke width and `flex: none` for every icon, but it leaves
-the default size off icons drawn by the `Icon` wrapper (`data-slot="icon"`). That wrapper still sizes
-through width and height attributes, and CSS would otherwise override them. UI-2 collapses this to the
-literal rule when `shared/icon.tsx` moves to `size-*` classes. `tests/design-tokens.test.ts` asserts
-the current split form, so UI-2 updates it at the same time.
+**Icon rule.** `globals.css` carries the spec's literal rule, `.lucide { width:16px; height:16px;
+stroke-width:1.75px; flex:none }`. The `Icon` wrapper sizes through `size-*` utilities, which beat the
+base-layer rule; no icon sets its own stroke width.
 
 ## Legacy names
 

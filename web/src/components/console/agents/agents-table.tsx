@@ -4,35 +4,17 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArchiveRestoreIcon, BotIcon, CopyIcon, ExternalLinkIcon, MoreHorizontalIcon, TrashIcon } from "lucide-react";
+import { ArchiveRestoreIcon, BotIcon, CopyIcon, ExternalLinkIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { EmptyState, Icon, RelativeTime, ResponsiveTable, StatusChip, VendorMark } from "@/components/shared";
+import { SimpleSelect } from "@/components/ui/select";
+import { EmptyState, Icon, LifecycleBadge, NoMatches, RelativeTime, ResponsiveTable, RowMenu, VendorMark } from "@/components/shared";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
+import { SearchField } from "@/components/shared/search-field";
+import { SegmentedControl } from "@/components/shared/segmented-control";
+import { LoadingRegion } from "@/components/shared/loading-state";
 import {
   useAgents,
   useDeleteAgent,
@@ -41,13 +23,15 @@ import {
   useRestoreAgent,
   useUpdateAgent,
 } from "@/components/console/lib/api-hooks";
-import { errorMessage, ErrorBanner } from "@/components/console/shared/error-banner";
-import { useWriteAccess } from "@/components/console/lib/roles";
+import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
+import { useCan } from "@/components/console/shared/permission";
 import { NewAgentButton } from "@/components/console/agents/create/new-agent-button";
 import type { AgentOut, ConnectionOut, ProviderSpec } from "@/contracts/lkap-contracts";
 import { connectionTypeLabel } from "@/components/console/agents/editor/use-connection";
 import { useConnections } from "@/hooks/useConnections";
-import { LoadingRegion } from "@/components/shared/loading-state";
+
+import { Highlight, matchesAllWords, queryWords, readStoredFilters, writeStoredFilters } from "./list-search";
 
 const PIPELINE_MODE_LABEL: Record<string, string> = {
   cascaded: "Cascaded",
@@ -57,25 +41,47 @@ const PIPELINE_MODE_LABEL: Record<string, string> = {
 
 /**
  * "All", "Live" and "Draft" list the active agents only; "Archived" lists the archived ones
- * (V6-30, F-5: an archived agent used to show under "All" with a Live chip).
+ * (V6-30, F-5: an archived agent used to show under "All" with a Live chip). The URL keeps
+ * `""` for All; the segmented control needs a real value, so it uses `"all"`.
  */
 const STATUS_FILTERS = [
-  { value: "", label: "All" },
+  { value: "all", label: "All" },
   { value: "live", label: "Live" },
   { value: "draft", label: "Draft" },
   { value: "archived", label: "Archived" },
 ] as const;
 
 type StatusFilter = (typeof STATUS_FILTERS)[number]["value"];
+const STATUS_VALUES = new Set<string>(STATUS_FILTERS.map((filter) => filter.value));
+
+/** Search appears once the list has this many agents, or while a query is active (spec section 9). */
+const SEARCH_THRESHOLD = 6;
+
+/** Per-person filter memory (spec section 9): status and pack, validated on read. */
+export const AGENT_FILTERS_STORAGE_KEY = "lkap.console.agents.filters.v1";
+
+interface StoredAgentFilters {
+  status: string;
+  pack: string;
+}
+
+function parseStoredFilters(raw: unknown): StoredAgentFilters | null {
+  if (!raw || typeof raw !== "object") return null;
+  const { status, pack } = raw as Record<string, unknown>;
+  return {
+    status: typeof status === "string" && STATUS_VALUES.has(status) && status !== "all" ? status : "",
+    pack: typeof pack === "string" && pack.length <= 200 ? pack : "",
+  };
+}
 
 function isArchived(agent: AgentOut): boolean {
   return Boolean(agent.archived_at);
 }
 
-/** Archived wins over Live: an archived agent never shows the Live chip. */
-function AgentStatusChip({ agent }: { agent: AgentOut }) {
-  if (isArchived(agent)) return <StatusChip tone="neutral">Archived</StatusChip>;
-  return <StatusChip tone={agent.published ? "live" : "neutral"}>{agent.published ? "Live" : "Draft"}</StatusChip>;
+/** Archived wins over Live: an archived agent never shows the Live pill. Tones come from the shared map. */
+function AgentStatusBadge({ agent }: { agent: AgentOut }) {
+  if (isArchived(agent)) return <LifecycleBadge state="archived" />;
+  return <LifecycleBadge state={agent.published ? "live" : "draft"} />;
 }
 
 /**
@@ -122,7 +128,8 @@ function vendorLookup(providers: ProviderSpec[] | undefined): Map<string, string
  * Reads a query-string param and writes it back on change so the list's
  * search/filters are shareable and restored by the back button
  * (docs/UI_UX_SPEC.md §3.5). Filtering itself always reacts to the local
- * value, not to a round trip through the router.
+ * value, not to a round trip through the router. `restore` sets the local
+ * value only (remembered filters), leaving the URL alone.
  */
 function useQueryParamState(key: string) {
   const router = useRouter();
@@ -142,7 +149,44 @@ function useQueryParamState(key: string) {
     [key, pathname, router, searchParams],
   );
 
-  return [value, update] as const;
+  return [value, update, setValue] as const;
+}
+
+/** Mirrors the list's layout: the toolbar, then a table header and rows (spec section 8.1). */
+function AgentsTableSkeleton() {
+  return (
+    <LoadingRegion label="Loading agents" className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Skeleton className="h-[34px] w-64 max-w-full rounded" />
+        <Skeleton className="h-[34px] w-72 max-w-full rounded" />
+      </div>
+      <div className="hidden flex-col md:flex">
+        <div className="flex h-9 items-center gap-6 border-b border-border px-2">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-3 w-12" />
+          <Skeleton className="h-3 w-16" />
+        </div>
+        {[0, 1, 2, 3].map((row) => (
+          <div key={row} className="flex h-14 items-center gap-6 border-b border-border px-2">
+            <div className="flex w-56 flex-col gap-1.5">
+              <Skeleton className="h-3.5 w-40" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+            <Skeleton className="h-3.5 w-32" />
+            <Skeleton className="h-3.5 w-16" />
+            <Skeleton className="h-5 w-20 rounded-pill" />
+            <Skeleton className="ml-auto h-5 w-14 rounded-pill" />
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-col gap-2 md:hidden">
+        {[0, 1, 2].map((card) => (
+          <Skeleton key={card} className="h-28 w-full rounded-lg" />
+        ))}
+      </div>
+    </LoadingRegion>
+  );
 }
 
 export function AgentsTable() {
@@ -150,10 +194,13 @@ export function AgentsTable() {
   const providersQuery = useProviders();
   const packsQuery = usePacks();
   const deleteAgent = useDeleteAgent();
+  const searchParams = useSearchParams();
 
   const [q, setQ] = useQueryParamState("q");
-  const [status, setStatus] = useQueryParamState("status");
-  const [pack, setPack] = useQueryParamState("pack");
+  const [statusParam, setStatusParam, restoreStatus] = useQueryParamState("status");
+  const [pack, setPackParam, restorePack] = useQueryParamState("pack");
+  // An unknown `?status=` reads as All.
+  const status: StatusFilter = STATUS_VALUES.has(statusParam) ? (statusParam as StatusFilter) : "all";
 
   const connectionsQuery = useConnections();
   const vendors = React.useMemo(() => vendorLookup(providersQuery.data?.providers), [providersQuery.data]);
@@ -173,34 +220,64 @@ export function AgentsTable() {
     return Array.from(ids).sort();
   }, [agents]);
 
-  const archivedCount = React.useMemo(() => agents.filter(isArchived).length, [agents]);
+  // Remembered filters: applied once the agents arrive, only when the URL names none.
+  const restored = React.useRef(false);
+  React.useLayoutEffect(() => {
+    if (restored.current || !data) return;
+    restored.current = true;
+    if (searchParams?.has("status") || searchParams?.has("pack")) return;
+    const saved = readStoredFilters(AGENT_FILTERS_STORAGE_KEY, parseStoredFilters);
+    if (!saved) return;
+    if (saved.status) restoreStatus(saved.status);
+    if (saved.pack && data.items.some((agent) => agent.pack_id === saved.pack)) restorePack(saved.pack);
+  }, [data, restorePack, restoreStatus, searchParams]);
 
-  const filtered = React.useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return agents
-      .filter((agent) => {
-        if ((status === "archived") !== isArchived(agent)) return false;
-        if (status === "live" && !agent.published) return false;
-        if (status === "draft" && agent.published) return false;
-        if (pack && agent.pack_id !== pack) return false;
-        if (needle.length === 0) return true;
-        return agent.name.toLowerCase().includes(needle) || agent.slug.toLowerCase().includes(needle);
-      })
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-  }, [agents, pack, q, status]);
+  const setStatus = (next: StatusFilter) => {
+    const value = next === "all" ? "" : next;
+    setStatusParam(value);
+    writeStoredFilters(AGENT_FILTERS_STORAGE_KEY, { status: value, pack });
+  };
+  const setPack = (next: string) => {
+    setPackParam(next);
+    writeStoredFilters(AGENT_FILTERS_STORAGE_KEY, { status: status === "all" ? "" : status, pack: next });
+  };
+  const clearFilters = () => {
+    setQ("");
+    setStatusParam("");
+    setPackParam("");
+    writeStoredFilters(AGENT_FILTERS_STORAGE_KEY, { status: "", pack: "" });
+  };
 
-  if (isLoading) {
-    return (
-      <LoadingRegion label="Loading agents" className="flex flex-col gap-2">
-        {[0, 1, 2].map((i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </LoadingRegion>
-    );
-  }
+  const counts = React.useMemo(() => {
+    const active = agents.filter((agent) => !isArchived(agent));
+    return {
+      all: active.length,
+      live: active.filter((agent) => agent.published).length,
+      draft: active.filter((agent) => !agent.published).length,
+      archived: agents.length - active.length,
+    } satisfies Record<StatusFilter, number>;
+  }, [agents]);
+
+  const words = React.useMemo(() => queryWords(q), [q]);
+
+  const filtered = React.useMemo(
+    () =>
+      agents
+        .filter((agent) => {
+          if ((status === "archived") !== isArchived(agent)) return false;
+          if (status === "live" && !agent.published) return false;
+          if (status === "draft" && agent.published) return false;
+          if (pack && agent.pack_id !== pack) return false;
+          return matchesAllWords(words, [agent.name, agent.slug]);
+        })
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()),
+    [agents, pack, status, words],
+  );
+
+  if (isLoading) return <AgentsTableSkeleton />;
 
   if (isError) {
-    return <ErrorBanner message={`Couldn't load agents — ${errorMessage(error)}`} onRetry={() => refetch()} />;
+    return <ErrorBanner error={error} context={{ action: "load agents" }} onRetry={() => refetch()} />;
   }
 
   if (agents.length === 0) {
@@ -221,10 +298,14 @@ export function AgentsTable() {
       cell: (agent) => (
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-medium text-foreground">{agent.name}</span>
+            <span className="font-medium text-foreground">
+              <Highlight text={agent.name} words={words} />
+            </span>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-            <span className="font-mono">/{agent.slug}</span>
+          <div className="flex items-center gap-1.5 text-caption text-text-tertiary">
+            <span className="font-mono">
+              /<Highlight text={agent.slug} words={words} />
+            </span>
             <span aria-hidden="true">·</span>
             <span>{packLabels.get(agent.pack_id) ?? agent.pack_id}</span>
           </div>
@@ -263,7 +344,7 @@ export function AgentsTable() {
     {
       id: "status",
       header: "Status",
-      cell: (agent) => <AgentStatusChip agent={agent} />,
+      cell: (agent) => <AgentStatusBadge agent={agent} />,
     },
     {
       id: "updated",
@@ -276,54 +357,42 @@ export function AgentsTable() {
       align: "end",
       interactive: true,
       cell: (agent) =>
-        isArchived(agent) ? (
-          <RestoreAgentButton agent={agent} />
-        ) : (
-          <AgentRowMenu agent={agent} deleteAgent={deleteAgent} />
-        ),
+        isArchived(agent) ? <RestoreAgentButton agent={agent} /> : <AgentRowMenu agent={agent} deleteAgent={deleteAgent} />,
     },
   ];
 
-  const onlyArchived = status !== "archived" && archivedCount > 0 && archivedCount === agents.length;
+  const onlyArchived = status !== "archived" && counts.archived > 0 && counts.archived === agents.length;
+  const showSearch = agents.length >= SEARCH_THRESHOLD || q !== "";
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Input
-          value={q}
-          onChange={(event) => setQ(event.target.value)}
-          placeholder="Search by name or slug"
-          className="w-full sm:w-64"
-          aria-label="Search agents"
+        {showSearch ? (
+          <SearchField
+            value={q}
+            onValueChange={setQ}
+            placeholder="Search by name or slug"
+            aria-label="Search agents"
+            wrapperClassName="w-full sm:w-64"
+          />
+        ) : null}
+        <SegmentedControl<StatusFilter>
+          label="Filter by status"
+          value={status}
+          onValueChange={setStatus}
+          options={STATUS_FILTERS.map((filter) => ({ ...filter, count: counts[filter.value] }))}
         />
-        <div className="flex items-center gap-1" role="group" aria-label="Filter by status">
-          {STATUS_FILTERS.map((filter) => (
-            <Button
-              key={filter.value || "all"}
-              type="button"
-              size="sm"
-              variant={status === filter.value ? "secondary" : "ghost"}
-              aria-pressed={status === filter.value}
-              onClick={() => setStatus(filter.value as StatusFilter)}
-            >
-              {filter.label}
-            </Button>
-          ))}
-        </div>
         {packOptions.length > 1 ? (
-          <Select value={pack || "__all__"} onValueChange={(next) => setPack(next === "__all__" ? "" : next)}>
-            <SelectTrigger className="w-44" aria-label="Filter by pack">
-              <SelectValue placeholder="All packs" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All packs</SelectItem>
-              {packOptions.map((id) => (
-                <SelectItem key={id} value={id}>
-                  {packLabels.get(id) ?? id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SimpleSelect
+            value={pack}
+            onValueChange={setPack}
+            aria-label="Filter by pack"
+            className="w-full sm:w-44"
+            options={[
+              { value: "", label: "All packs" },
+              ...packOptions.map((id) => ({ value: id, label: packLabels.get(id) ?? id })),
+            ]}
+          />
         ) : null}
       </div>
 
@@ -336,6 +405,7 @@ export function AgentsTable() {
         renderCard={(agent) => (
           <AgentCard
             agent={agent}
+            words={words}
             vendors={vendors}
             packLabels={packLabels}
             connectionLabel={connectionLabel(agent)}
@@ -348,34 +418,14 @@ export function AgentsTable() {
               icon={BotIcon}
               title="No active agents"
               description="Every agent here is archived. Open Archived to see them or restore one."
-              compact
               action={
-                <Button type="button" variant="ghost" size="sm" onClick={() => setStatus("archived")}>
+                <Button type="button" variant="secondary" size="sm" onClick={() => setStatus("archived")}>
                   Show archived
                 </Button>
               }
             />
           ) : (
-            <EmptyState
-              icon={BotIcon}
-              title="No agents match"
-              description="Try a different search term or clear the filters."
-              compact
-              action={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setQ("");
-                    setStatus("");
-                    setPack("");
-                  }}
-                >
-                  Clear filters
-                </Button>
-              }
-            />
+            <NoMatches items="agents" query={q} onClear={clearFilters} />
           )
         }
       />
@@ -385,12 +435,14 @@ export function AgentsTable() {
 
 function AgentCard({
   agent,
+  words,
   vendors,
   packLabels,
   connectionLabel,
   deleteAgent,
 }: {
   agent: AgentOut;
+  words: readonly string[];
   vendors: Map<string, string>;
   packLabels: Map<string, string>;
   connectionLabel: string;
@@ -401,15 +453,19 @@ function AgentCard({
     <div className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-medium text-foreground">{agent.name}</p>
-          <p className="truncate font-mono text-xs text-text-secondary">/{agent.slug}</p>
+          <p className="truncate font-medium text-foreground">
+            <Highlight text={agent.name} words={words} />
+          </p>
+          <p className="truncate font-mono text-caption text-text-tertiary">
+            /<Highlight text={agent.slug} words={words} />
+          </p>
         </div>
-        <AgentStatusChip agent={agent} />
+        <AgentStatusBadge agent={agent} />
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-secondary">
         <span>{packLabels.get(agent.pack_id) ?? agent.pack_id}</span>
         <span aria-hidden="true">·</span>
-        <span>{connectionLabel}</span>
+        <span className="min-w-0 break-words">{connectionLabel}</span>
         <span aria-hidden="true">·</span>
         <span>{PIPELINE_MODE_LABEL[agent.config.pipeline.mode ?? "cascaded"] ?? "Cascaded"}</span>
         {ids.length > 0 ? (
@@ -421,12 +477,8 @@ function AgentCard({
         ) : null}
       </div>
       <div className="flex items-center justify-between gap-2 pt-1">
-        <RelativeTime iso={agent.updated_at} className="text-xs text-text-secondary" />
-        {isArchived(agent) ? (
-          <RestoreAgentButton agent={agent} />
-        ) : (
-          <AgentRowMenu agent={agent} deleteAgent={deleteAgent} />
-        )}
+        <RelativeTime iso={agent.updated_at} className="text-caption text-text-tertiary" />
+        {isArchived(agent) ? <RestoreAgentButton agent={agent} /> : <AgentRowMenu agent={agent} deleteAgent={deleteAgent} />}
       </div>
     </div>
   );
@@ -435,56 +487,44 @@ function AgentCard({
 /**
  * An archived agent's one action (V6-30): Restore, confirmed in a dialog. It clears
  * `archived_at` (`POST /agents/{id}/unarchive`); a published agent's public link then answers
- * again, which the dialog says.
+ * again, which the dialog says. Hidden for people who can't write (decision D12).
  */
 function RestoreAgentButton({ agent }: { agent: AgentOut }) {
   const restore = useRestoreAgent();
-  const { canWrite } = useWriteAccess();
+  const { can } = useCan();
   const [open, setOpen] = React.useState(false);
-
-  async function confirmRestore() {
-    try {
-      await restore.mutateAsync(agent.id);
-      toast.success(`${agent.name} restored.`);
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setOpen(false);
-    }
-  }
+  if (!can) return null;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
       <Button
         type="button"
-        variant="outline"
+        variant="secondary"
         size="sm"
-        disabled={!canWrite}
         aria-label={`Restore ${agent.name}`}
         onClick={() => setOpen(true)}
       >
         <Icon as={ArchiveRestoreIcon} size="sm" />
         Restore
       </Button>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Restore &quot;{agent.name}&quot;?</DialogTitle>
-          <DialogDescription>
-            {agent.published
-              ? `It moves back to your agents. It is still published, so /s/${agent.slug} answers calls again.`
-              : "It moves back to your agents as a draft."}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-          <Button type="button" disabled={restore.isPending} onClick={() => void confirmRestore()}>
-            {restore.isPending ? "Working…" : "Restore"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        destructive={false}
+        title={`Restore "${agent.name}"?`}
+        description={
+          agent.published
+            ? `It moves back to your agents. It is still published, so /s/${agent.slug} answers calls again.`
+            : "It moves back to your agents as a draft."
+        }
+        confirmLabel="Restore"
+        busyLabel="Restoring…"
+        onConfirm={async () => {
+          await restore.mutateAsync(agent.id);
+          toast.success(`${agent.name} restored.`);
+        }}
+      />
+    </>
   );
 }
 
@@ -497,8 +537,9 @@ type RowConfirmAction = "toggle-publish" | "delete" | null;
  * while it is still a descendant of the menu makes Radix's dismissable layer
  * treat the focus move as an outside interaction and close the menu, which
  * unmounts the dialog with it before the confirm button can ever be clicked.
- * Instead, an outer `Dialog` is controlled by local state and rendered as a
- * *sibling* of the `DropdownMenu`, so closing the menu never touches it.
+ * Instead, the controlled `ConfirmDialog`s are *siblings* of the menu, so
+ * closing the menu never touches them. Publish and Delete are hidden for
+ * people who can't write (decision D12).
  */
 function AgentRowMenu({
   agent,
@@ -509,30 +550,10 @@ function AgentRowMenu({
 }) {
   const updateAgent = useUpdateAgent(agent.id);
   const [confirmAction, setConfirmAction] = React.useState<RowConfirmAction>(null);
-  const { canWrite } = useWriteAccess();
-
-  async function togglePublished() {
-    const next = !agent.published;
-    try {
-      await updateAgent.mutateAsync({ published: next });
-      toast.success(next ? `${agent.name} published.` : `${agent.name} unpublished.`);
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setConfirmAction(null);
-    }
-  }
-
-  async function confirmDelete() {
-    try {
-      await deleteAgent.mutateAsync(agent.id);
-      toast.success(`${agent.name} deleted.`);
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setConfirmAction(null);
-    }
-  }
+  const { can } = useCan();
+  const closeConfirm = (open: boolean) => {
+    if (!open) setConfirmAction(null);
+  };
 
   async function copyPublicLink() {
     const url = `${window.location.origin}/s/${agent.slug}`;
@@ -540,102 +561,68 @@ function AgentRowMenu({
       await navigator.clipboard.writeText(url);
       toast.success("Public link copied.");
     } catch {
-      toast.error("Couldn't copy the link.");
+      toast.error("Couldn't copy the link. Copy it from the address bar of the public page instead.");
     }
   }
 
   return (
-    <Dialog open={confirmAction !== null} onOpenChange={(open) => !open && setConfirmAction(null)}>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${agent.name}`}>
-            <Icon as={MoreHorizontalIcon} size="md" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem asChild>
-            <Link href={`/console/agents/${agent.id}`}>Open</Link>
+    <>
+      <RowMenu
+        label={`Actions for ${agent.name}`}
+        destructive={can ? { label: "Delete", icon: Trash2Icon, onSelect: () => setConfirmAction("delete") } : undefined}
+      >
+        <DropdownMenuItem asChild>
+          <Link href={`/console/agents/${agent.id}`}>Open</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <a href={`/s/${agent.slug}?mode=test`} target="_blank" rel="noopener noreferrer">
+            Test call <Icon as={ExternalLinkIcon} size="sm" className="ml-auto" />
+          </a>
+        </DropdownMenuItem>
+        {agent.published ? (
+          <DropdownMenuItem onSelect={() => void copyPublicLink()}>
+            Copy public link <Icon as={CopyIcon} size="sm" className="ml-auto" />
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <a href={`/s/${agent.slug}?mode=test`} target="_blank" rel="noopener noreferrer">
-              Test call <Icon as={ExternalLinkIcon} size="sm" className="ml-auto" />
-            </a>
-          </DropdownMenuItem>
-          {agent.published ? (
-            <DropdownMenuItem onSelect={() => void copyPublicLink()}>
-              Copy public link <Icon as={CopyIcon} size="sm" className="ml-auto" />
+        ) : null}
+        {can ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => setConfirmAction("toggle-publish")}>
+              {agent.published ? "Unpublish" : "Publish"}
             </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={!canWrite} onSelect={() => setConfirmAction("toggle-publish")}>
-            {agent.published ? "Unpublish" : "Publish"}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            variant="destructive"
-            disabled={!canWrite}
-            onSelect={() => setConfirmAction("delete")}
-          >
-            Delete <Icon as={TrashIcon} size="sm" className="ml-auto" />
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <DialogContent>
-        {confirmAction === "delete" ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>Delete &quot;{agent.name}&quot;?</DialogTitle>
-              <DialogDescription>
-                Agents that have sessions can&apos;t be deleted — sessions are kept for the audit trail. Unpublish
-                it instead.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setConfirmAction(null)}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                className="bg-destructive-solid text-destructive-foreground hover:bg-destructive-solid/90 dark:bg-destructive-solid dark:hover:bg-destructive-solid/90"
-                disabled={deleteAgent.isPending}
-                onClick={() => void confirmDelete()}
-              >
-                {deleteAgent.isPending ? "Working…" : "Delete"}
-              </Button>
-            </DialogFooter>
-          </>
-        ) : confirmAction === "toggle-publish" ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>
-                {agent.published ? `Unpublish "${agent.name}"?` : `Publish "${agent.name}"?`}
-              </DialogTitle>
-              <DialogDescription>
-                {agent.published
-                  ? "The public link stops answering immediately."
-                  : `Publishing makes /s/${agent.slug} answer calls from anyone with the link.`}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setConfirmAction(null)}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant={agent.published ? "destructive" : "default"}
-                className={
-                  agent.published ? "bg-destructive-solid text-destructive-foreground hover:bg-destructive-solid/90 dark:bg-destructive-solid dark:hover:bg-destructive-solid/90" : undefined
-                }
-                disabled={updateAgent.isPending}
-                onClick={() => void togglePublished()}
-              >
-                {updateAgent.isPending ? "Working…" : agent.published ? "Unpublish" : "Publish"}
-              </Button>
-            </DialogFooter>
           </>
         ) : null}
-      </DialogContent>
-    </Dialog>
+      </RowMenu>
+
+      <ConfirmDialog
+        open={confirmAction === "delete"}
+        onOpenChange={closeConfirm}
+        title={`Delete "${agent.name}"?`}
+        description="Agents that have sessions can't be deleted — sessions are kept for the audit trail. Unpublish it instead."
+        confirmLabel="Delete"
+        busyLabel="Deleting…"
+        onConfirm={async () => {
+          await deleteAgent.mutateAsync(agent.id);
+          toast.success(`${agent.name} deleted.`);
+        }}
+      />
+      <ConfirmDialog
+        open={confirmAction === "toggle-publish"}
+        onOpenChange={closeConfirm}
+        destructive={agent.published}
+        title={agent.published ? `Unpublish "${agent.name}"?` : `Publish "${agent.name}"?`}
+        description={
+          agent.published
+            ? "The public link stops answering immediately."
+            : `Publishing makes /s/${agent.slug} answer calls from anyone with the link.`
+        }
+        confirmLabel={agent.published ? "Unpublish" : "Publish"}
+        onConfirm={async () => {
+          const next = !agent.published;
+          await updateAgent.mutateAsync({ published: next });
+          toast.success(next ? `${agent.name} published.` : `${agent.name} unpublished.`);
+        }}
+      />
+    </>
   );
 }

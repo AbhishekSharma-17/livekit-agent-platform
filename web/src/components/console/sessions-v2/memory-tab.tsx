@@ -94,7 +94,7 @@ function memoryUnavailableFrom(err: unknown): boolean {
 
 export function MemoryTab({ session }: SessionTabProps) {
   const queryClient = useQueryClient();
-  const { canWrite: canForget } = useWriteAccess("admin");
+  const { canWrite: canForget, isLoading: roleLoading } = useWriteAccess("admin");
 
   const memoryQuery = useQuery({
     queryKey: ["sessions", session.id, "memory"] as const,
@@ -192,7 +192,7 @@ export function MemoryTab({ session }: SessionTabProps) {
 
       {memory.subject_id && !forgotten ? (
         <div>
-          {canForget ? (
+          {roleLoading ? null : canForget ? (
             <ConfirmDialog
               trigger={
                 <Button type="button" variant="danger-outline" size="sm">

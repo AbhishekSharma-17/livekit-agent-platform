@@ -447,40 +447,43 @@ function ByDayChart({ buckets }: { buckets: AnalyticsBucket[] }) {
         {/* Y axis: tabular labels beside the hairlines. */}
         <div aria-hidden="true" className="flex h-40 flex-col justify-between text-right text-caption text-text-tertiary tabular-nums">
           {ticks.map((tick, index) => (
-            <span key={index} className="-translate-y-1/2 leading-none first:translate-y-0 last:translate-y-0">
+            <span key={index} className="leading-none">
               {formatUsd(tick) ?? "$0"}
             </span>
           ))}
         </div>
-        <div className="relative min-w-0 flex-1">
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex flex-col justify-between">
-            {ticks.map((_, index) => (
-              <div key={index} className="h-px w-full bg-border" />
-            ))}
-          </div>
-          <div role="img" aria-label="Bar chart of actual and estimated cost per day" className="relative flex h-40 items-end gap-2">
-            {buckets.map((bucket) => {
-              const actual = Number(bucket.cost_usd ?? 0);
-              const estimated = Number(bucket.estimated_usd ?? 0);
-              const actualPct = Math.max(actual > 0 ? 2 : 0, Math.round((actual / max) * 100));
-              const estimatedPct = Math.max(estimated > 0 ? 2 : 0, Math.round((estimated / max) * 100));
-              return (
-                <div
-                  key={bucket.key}
-                  className="group relative flex h-full min-w-0 flex-1 items-end justify-center gap-0.5"
-                  title={`${formatDay(bucket.key)}: ${formatUsd(bucket.cost_usd) ?? "no price"} actual, ${formatUsd(bucket.estimated_usd) ?? "no estimate"} estimated`}
-                >
+        <div className="min-w-0 flex-1">
+          {/* The hairlines share the bars' 160 px box, so they line up with the axis labels. */}
+          <div className="relative h-40">
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex flex-col justify-between">
+              {ticks.map((_, index) => (
+                <div key={index} className="h-px w-full bg-border" />
+              ))}
+            </div>
+            <div role="img" aria-label="Bar chart of actual and estimated cost per day" className="relative flex h-40 items-end gap-2">
+              {buckets.map((bucket) => {
+                const actual = Number(bucket.cost_usd ?? 0);
+                const estimated = Number(bucket.estimated_usd ?? 0);
+                const actualPct = Math.max(actual > 0 ? 2 : 0, Math.round((actual / max) * 100));
+                const estimatedPct = Math.max(estimated > 0 ? 2 : 0, Math.round((estimated / max) * 100));
+                return (
                   <div
-                    className="w-full rounded-t-sm bg-chart-2 transition-opacity duration-(--duration-fast) group-hover:opacity-80"
-                    style={{ height: `${actualPct}%` }}
-                  />
-                  <div
-                    className="w-full rounded-t-sm border-2 border-b-0 border-chart-2 bg-card transition-opacity duration-(--duration-fast) group-hover:opacity-80"
-                    style={{ height: `${estimatedPct}%` }}
-                  />
-                </div>
-              );
-            })}
+                    key={bucket.key}
+                    className="group relative flex h-full min-w-0 flex-1 items-end justify-center gap-0.5"
+                    title={`${formatDay(bucket.key)}: ${formatUsd(bucket.cost_usd) ?? "no price"} actual, ${formatUsd(bucket.estimated_usd) ?? "no estimate"} estimated`}
+                  >
+                    <div
+                      className="w-full rounded-t-sm bg-chart-2 transition-opacity duration-(--duration-fast) group-hover:opacity-80"
+                      style={{ height: `${actualPct}%` }}
+                    />
+                    <div
+                      className="w-full rounded-t-sm border-2 border-b-0 border-chart-2 bg-card transition-opacity duration-(--duration-fast) group-hover:opacity-80"
+                      style={{ height: `${estimatedPct}%` }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
           <div className="mt-1.5 flex gap-1 text-caption text-text-tertiary tabular-nums">
             <span className="flex-1 truncate text-left">{formatDay(buckets[0]?.key ?? "")}</span>

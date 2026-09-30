@@ -286,7 +286,7 @@ export function AgentsTable() {
         icon={BotIcon}
         title="No agents yet"
         description="An agent is a voice or video assistant with its own providers, instructions and tools."
-        action={<NewAgentButton />}
+        action={<NewAgentButton variant="secondary" />}
       />
     );
   }

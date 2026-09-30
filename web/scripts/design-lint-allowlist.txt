@@ -1,12 +1,13 @@
 # Design lint allowlist (scripts/design-lint.mjs, docs/ui/DESIGN-SYSTEM.md section 11).
 #
-#   exempt <rule|*> <path-prefix>   permanent: leave-alone code (docs/ui/AUDIT.md section 8)
-#   allow  <rule> <count> <path>    ratchet: today's violations, per rule and file
+#   exempt <rule|*> <path-prefix> <reason>        permanent: leave-alone code (docs/ui/AUDIT.md section 8)
+#   allow  <rule> <count> <path>  # keep: <why>   a deliberate exception, pinned to today's count
 #
-# The ratchet only goes down. A file may not exceed its count, and a file that
-# improves must lower its line (`pnpm lint:design --shrink` rewrites the counts;
-# it never raises one or adds a file). Each screen package takes its own files
-# to zero. One entry per line keeps parallel packages from colliding.
+# Every screen package took its own files to zero; what is left is on purpose,
+# and every line says why (tests/design-lint.test.ts holds that). The counts
+# only go down: a file may not exceed its count, and a file that improves must
+# lower its line (`pnpm lint:design --shrink`). Add nothing here without a
+# product decision behind it.
 
 # Leave-alone code
 exempt * src/panels/                     caller-facing panel content (panels owner)
@@ -14,22 +15,6 @@ exempt * src/components/agents-ui/       vendored LiveKit Agents UI
 exempt * src/contracts/                  generated contract types
 exempt colour-literal src/lib/browser-colors.ts   theme-color / manifest literals, test-pinned to the tokens
 
-# UI-3 app shell (0: cleared)
-
-# UI-2 primitives and styleguide (113 in 27 files)
+# Deliberate exceptions
 allow colour-literal   1  src/components/shared/vendor-mark.tsx   # keep: per-vendor computed tint (AUDIT C6)
-
-# S1 agents (0: was 45 in 23 files; cleared by the S1 screen package)
-
-# S2 connect (0 in 0 files)
-
-# S3 telephony (0: cleared)
-
-# S4 build library (cleared: 21 in 13 files taken to zero)
-
-# S5 observe (0: cleared)
-
-# S6 settings (0 in 0 files)
-
-# S7 caller-facing (1 in 1 file: was 6 in 2; the letterbox stays by decision)
-allow palette-class    1  src/components/session/stage-view.tsx   # keep: bg-black video letterbox (AUDIT S7)
+allow palette-class    1  src/components/session/stage-view.tsx   # keep: bg-black video letterbox (AUDIT S7, D3)

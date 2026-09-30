@@ -44,6 +44,17 @@ describe("scripts/design-lint.mjs on the codebase", () => {
   it("keeps the allowlist free of parse errors and unknown rules", () => {
     expect((parseAllowlist(allowlistText) as { errors: string[] }).errors).toEqual([]);
   });
+
+  it("allows only deliberate, commented exceptions", () => {
+    const entries = allowlistText.split("\n").filter((line) => /^\s*(allow|exempt)\s/.test(line));
+    for (const line of entries) {
+      if (/^\s*allow\s/.test(line)) expect(line, line).toMatch(/#\s*keep:\s*\S/);
+      // exempt <rule> <prefix> <reason…>: the reason is required.
+      else expect(line.replace(/#.*$/, "").trim().split(/\s+/).length, line).toBeGreaterThan(3);
+    }
+    const allow = (parseAllowlist(allowlistText) as { allow: Map<string, unknown> }).allow;
+    expect(allow.size).toBeLessThanOrEqual(2);
+  });
 });
 
 describe("design-lint rules", () => {

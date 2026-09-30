@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { useKbSource } from "@/components/console/lib/api-hooks";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
@@ -23,8 +23,8 @@ export function KbSourceCard({ kbId, externalRef }: { kbId: string; externalRef?
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <h2 className="text-sm font-semibold text-foreground">Source</h2>
-        <p className="text-[0.8125rem] text-muted-foreground">
+        <h2 className="text-body font-semibold text-foreground">Source</h2>
+        <p className="text-label text-text-secondary">
           Documents stay in Ragie{externalRef ? ` — partition ${externalRef}` : ""}. Nothing is uploaded here.
         </p>
       </div>
@@ -35,18 +35,18 @@ export function KbSourceCard({ kbId, externalRef }: { kbId: string; externalRef?
       ) : (
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <StatusChip tone={data.ok ? "success" : "danger"} size="sm">
+            <StatusPill tone={data.ok ? "success" : "danger"} size="sm">
               {data.ok ? "Connected" : "Problem"}
-            </StatusChip>
-            {data.message ? <span className="text-[0.8125rem] text-pretty text-muted-foreground">{data.message}</span> : null}
+            </StatusPill>
+            {data.message ? <span className="text-label text-pretty text-text-secondary">{data.message}</span> : null}
           </div>
-          <p className="text-sm text-foreground">
+          <p className="text-body text-foreground">
             {data.document_count === null || data.document_count === undefined
               ? "Document count unavailable."
               : pluralize(data.document_count, "document", "documents")}
           </p>
           {data.last_synced_at ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-caption text-text-secondary">
               Last synced <RelativeTime iso={data.last_synced_at} />
             </p>
           ) : null}

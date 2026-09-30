@@ -17,7 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { Field } from "@/components/shared/field";
 import { useCreateCredential, useEnableApps, useTestAppsKey, useUpdateCredential } from "@/components/console/lib/api-hooks";
 import { appsErrorMessage } from "@/components/console/tools/apps/use-composio";
@@ -155,10 +155,10 @@ export function EnableComposioDialog({
         <DialogBody>
           {saved ? (
             <div className="flex flex-col gap-2">
-              <StatusChip tone="success" dot size="sm">
+              <StatusPill tone="success" size="sm">
                 {mode === "enable" ? "Composio enabled" : "Key rotated"}
-              </StatusChip>
-              <p className="text-[0.8125rem] text-muted-foreground">Stored securely; you won&apos;t see it again.</p>
+              </StatusPill>
+              <p className="text-label text-text-secondary">Stored securely; you won&apos;t see it again.</p>
             </div>
           ) : (
             <>
@@ -185,7 +185,7 @@ export function EnableComposioDialog({
                 <div>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
                     disabled={apiKey.trim().length === 0 || test.kind === "testing"}
                     onClick={() => void runTest()}
@@ -195,11 +195,11 @@ export function EnableComposioDialog({
                 </div>
                 <div role="status" aria-live="polite">
                   {test.kind === "testing" ? (
-                    <span className="text-[0.8125rem] text-muted-foreground">Testing…</span>
+                    <span className="text-label text-text-secondary">Testing…</span>
                   ) : test.kind === "done" ? (
-                    <StatusChip tone={test.result.ok ? "success" : "danger"} dot size="sm">
+                    <StatusPill tone={test.result.ok ? "success" : "danger"} size="sm">
                       {test.result.ok ? testSummary(test.result) : test.result.message || "Test failed"}
-                    </StatusChip>
+                    </StatusPill>
                   ) : null}
                 </div>
               </div>
@@ -207,7 +207,7 @@ export function EnableComposioDialog({
               {!passed ? (
                 <div className="flex items-center gap-2">
                   <Checkbox id="enable-composio-override" checked={override} onCheckedChange={(v) => setOverride(v === true)} />
-                  <Label htmlFor="enable-composio-override" className="text-[0.8125rem] font-normal text-muted-foreground">
+                  <Label htmlFor="enable-composio-override" className="text-label font-normal text-text-secondary">
                     Save this key anyway, without a passing test
                   </Label>
                 </div>
@@ -221,7 +221,7 @@ export function EnableComposioDialog({
             <Button type="submit">Done</Button>
           ) : (
             <>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={!canSave || saving}>

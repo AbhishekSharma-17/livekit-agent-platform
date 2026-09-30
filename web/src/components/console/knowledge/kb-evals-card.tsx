@@ -7,7 +7,7 @@ import { Loader2Icon, PencilIcon, PlayIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Icon } from "@/components/shared/icon";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { KbEvalDialog } from "@/components/console/knowledge/kb-eval-dialog";
@@ -36,41 +36,41 @@ function formatDate(iso: string): string {
 }
 
 function ItemStatusChip({ status }: { status: KbEvalItemResult["status"] }) {
-  if (status === "found") return <StatusChip tone="success">Found</StatusChip>;
-  if (status === "skipped") return <StatusChip tone="neutral">Skipped</StatusChip>;
-  return <StatusChip tone="danger">Missed</StatusChip>;
+  if (status === "found") return <StatusPill tone="success">Found</StatusPill>;
+  if (status === "skipped") return <StatusPill tone="neutral">Skipped</StatusPill>;
+  return <StatusPill tone="danger">Missed</StatusPill>;
 }
 
 function ResultSummary({ run, result }: { run: KbEvalRunOut; result: KbEvalResult }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-caption text-text-secondary">
           Last run {formatDate(result.finished_at)} · {result.mode === "hybrid" ? "Hybrid" : "Vector only"}
           {run.options.rerank === "local" ? " + re-ranked" : ""} · top {result.k}
         </p>
       </div>
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div>
-          <dt className="text-xs text-muted-foreground">Recall@1</dt>
+          <dt className="text-caption text-text-secondary">Recall@1</dt>
           <dd className="text-lg font-semibold tabular-nums text-foreground">{pct(result.recall_at_1)}</dd>
         </div>
         <div>
-          <dt className="text-xs text-muted-foreground">Recall@{result.k}</dt>
+          <dt className="text-caption text-text-secondary">Recall@{result.k}</dt>
           <dd className="text-lg font-semibold tabular-nums text-foreground">{pct(result.recall_at_k)}</dd>
         </div>
         <div>
-          <dt className="text-xs text-muted-foreground">MRR</dt>
+          <dt className="text-caption text-text-secondary">MRR</dt>
           <dd className="text-lg font-semibold tabular-nums text-foreground">
             {result.mrr === null ? "—" : result.mrr.toFixed(2)}
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-muted-foreground">Found</dt>
+          <dt className="text-caption text-text-secondary">Found</dt>
           <dd className="text-lg font-semibold tabular-nums text-foreground">
             {result.found} / {result.scored}
             {result.skipped > 0 ? (
-              <span className="ml-1 text-xs font-normal text-muted-foreground">
+              <span className="ml-1 text-caption font-normal text-text-secondary">
                 ({pluralize(result.skipped, "skipped", "skipped")})
               </span>
             ) : null}
@@ -79,19 +79,19 @@ function ResultSummary({ run, result }: { run: KbEvalRunOut; result: KbEvalResul
       </dl>
       {result.items && result.items.length > 0 ? (
         <details className="group/details">
-          <summary className="cursor-pointer text-[0.8125rem] font-medium text-muted-foreground hover:text-foreground">
+          <summary className="cursor-pointer text-label font-medium text-text-secondary hover:text-foreground">
             Show every question
           </summary>
           <ul className="mt-2 flex flex-col gap-1.5">
             {result.items.map((item) => (
               <li
                 key={item.eval_id}
-                className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm"
+                className="flex items-center justify-between gap-3 rounded border border-border px-3 py-2 text-body"
               >
                 <span className="min-w-0 flex-1 truncate">{item.question}</span>
                 <span className="flex shrink-0 items-center gap-2">
                   {item.status === "found" && item.rank ? (
-                    <span className="text-xs tabular-nums text-muted-foreground">rank {item.rank}</span>
+                    <span className="text-caption tabular-nums text-text-secondary">rank {item.rank}</span>
                   ) : null}
                   <ItemStatusChip status={item.status} />
                 </span>
@@ -138,13 +138,13 @@ export function KbEvalsCard({ kbId }: { kbId: string }) {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Evaluate</h2>
-          <p className="text-[0.8125rem] text-muted-foreground">
+          <h2 className="text-body font-semibold text-foreground">Evaluate</h2>
+          <p className="text-label text-text-secondary">
             {total === 0 ? "No questions yet." : pluralize(total, "golden question", "golden questions")}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
+          <Button type="button" variant="secondary" size="sm" onClick={() => setDialogOpen(true)}>
             <Icon as={PencilIcon} size="sm" /> Edit questions
           </Button>
           <Button type="button" size="sm" disabled={total === 0 || evaluate.isPending || running} onClick={() => void handleRun()}>
@@ -176,9 +176,9 @@ export function KbEvalsCard({ kbId }: { kbId: string }) {
           compact
         />
       ) : running ? (
-        <p className="text-sm text-muted-foreground">Running the evaluation set…</p>
+        <p className="text-body text-text-secondary">Running the evaluation set…</p>
       ) : (
-        <p className="text-sm text-muted-foreground">Run the evaluation set to see recall and MRR.</p>
+        <p className="text-body text-text-secondary">Run the evaluation set to see recall and MRR.</p>
       )}
 
       <KbEvalDialog kbId={kbId} open={dialogOpen} onOpenChange={setDialogOpen} evals={evalsQuery.data?.items ?? []} />

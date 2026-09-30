@@ -54,7 +54,7 @@ export function InsertValueMenu({
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
-          variant="outline"
+          variant="secondary"
           size="sm"
           className="shrink-0 gap-1"
           disabled={Boolean(disabledReason)}
@@ -70,8 +70,8 @@ export function InsertValueMenu({
           {(CTX_PLACEHOLDERS as readonly CtxPlaceholder[]).map((name) => (
             <DropdownMenuItem key={name} onSelect={() => onInsert(`{{ ctx.${name} }}`)}>
               <div className="flex min-w-0 flex-col">
-                <span className="truncate text-sm">{CTX_LABELS[name]}</span>
-                <span className="truncate font-mono text-[0.6875rem] text-muted-foreground">{`{{ ctx.${name} }}`}</span>
+                <span className="truncate text-body">{CTX_LABELS[name]}</span>
+                <span className="truncate font-mono text-caption text-text-secondary">{`{{ ctx.${name} }}`}</span>
               </div>
             </DropdownMenuItem>
           ))}
@@ -80,11 +80,11 @@ export function InsertValueMenu({
         <DropdownMenuLabel>Variable</DropdownMenuLabel>
         <DropdownMenuGroup>
           {variableNames.length === 0 ? (
-            <p className="px-2 py-1.5 text-[0.8125rem] text-muted-foreground">No flow variables yet.</p>
+            <p className="px-2 py-1.5 text-label text-text-secondary">No flow variables yet.</p>
           ) : null}
           {variableNames.map((name) => (
             <DropdownMenuItem key={name} onSelect={() => onInsert(`{{ var.${name} }}`)}>
-              <span className="truncate font-mono text-xs">{`{{ var.${name} }}`}</span>
+              <span className="truncate font-mono text-caption">{`{{ var.${name} }}`}</span>
             </DropdownMenuItem>
           ))}
         </DropdownMenuGroup>
@@ -97,7 +97,7 @@ export function InsertValueMenu({
               onChange={(e) => setCustomName(e.target.value)}
               placeholder="variable_name"
               aria-label="Variable name"
-              className="h-7 font-mono text-xs"
+              className="h-7 font-mono text-caption"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && customValid) {
                   e.preventDefault();

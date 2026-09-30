@@ -8,7 +8,7 @@ import { Loader2Icon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/shared/icon";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { DescriptionList } from "@/components/shared/description-list";
 import { PageHeader } from "@/components/console/shared/page-header";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
@@ -65,7 +65,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
               <Icon as={Loader2Icon} size="sm" className="animate-spin" /> Importing…
             </span>
           ) : dataset.status === "failed" ? (
-            <span className="text-danger-text">{dataset.error || "The import failed."}</span>
+            <span className="text-destructive-text">{dataset.error || "The import failed."}</span>
           ) : (
             `${pluralize(dataset.row_count, "row", "rows")} · matches on ${dataset.key_columns.map((c) => c.name).join(", ")}`
           )
@@ -73,7 +73,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
         actions={
           <ConfirmDialog
             trigger={
-              <Button type="button" variant="outline" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
+              <Button type="button" variant="secondary" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
                 <Icon as={Trash2Icon} size="sm" /> Delete
               </Button>
             }
@@ -94,9 +94,9 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
             detail: (
               <div className="flex flex-wrap gap-1.5">
                 {dataset.key_columns.map((column) => (
-                  <StatusChip key={column.name} tone="neutral" size="sm">
+                  <StatusPill key={column.name} tone="neutral" size="sm">
                     {column.name} · {column.type}
-                  </StatusChip>
+                  </StatusPill>
                 ))}
               </div>
             ),
@@ -107,7 +107,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
 
       <div className="flex flex-col gap-8">
         <div className="flex flex-col gap-2">
-          <h2 className="text-sm font-semibold text-foreground">Rows</h2>
+          <h2 className="text-body font-semibold text-foreground">Rows</h2>
           <DatasetRowsPreview datasetId={dataset.id} ready={ready} />
         </div>
         {ready ? <DatasetLookupTest dataset={dataset} /> : null}

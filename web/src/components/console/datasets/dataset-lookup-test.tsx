@@ -55,24 +55,24 @@ export function DatasetLookupTest({ dataset }: { dataset: DatasetOut }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold text-foreground">Test a lookup</h2>
+      <h2 className="text-body font-semibold text-foreground">Test a lookup</h2>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-3">
           {keyColumns.map((column) => (
             <div key={column.name} className="flex flex-col gap-1">
-              <label htmlFor={`lookup-${column.name}`} className="text-xs font-medium text-muted-foreground">
+              <label htmlFor={`lookup-${column.name}`} className="text-caption font-medium text-text-secondary">
                 {column.name}
               </label>
               <Input
                 id={`lookup-${column.name}`}
-                className="w-40 font-mono text-sm"
+                className="w-40 font-mono text-body"
                 value={values[column.name] ?? ""}
                 onChange={(e) => setValues((v) => ({ ...v, [column.name]: e.target.value }))}
               />
             </div>
           ))}
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground">Match</span>
+            <span className="text-caption font-medium text-text-secondary">Match</span>
             <Select value={match} onValueChange={(v) => setMatch(v as "exact" | "prefix")}>
               <SelectTrigger className="w-36" aria-label="Match">
                 <SelectValue />
@@ -89,13 +89,13 @@ export function DatasetLookupTest({ dataset }: { dataset: DatasetOut }) {
         </div>
       </form>
 
-      {message ? <p className="text-[0.8125rem] text-danger-text">{message}</p> : null}
+      {message ? <p className="text-label text-destructive-text">{message}</p> : null}
 
       {result ? (
         result.rows.length === 0 ? (
           <EmptyState compact icon={SearchIcon} title="No matches" description="Try a different value or match type." />
         ) : (
-          <div className="overflow-x-auto rounded-md border border-border">
+          <div className="overflow-x-auto rounded border border-border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -110,7 +110,7 @@ export function DatasetLookupTest({ dataset }: { dataset: DatasetOut }) {
                 {result.rows.map((row, index) => (
                   <TableRow key={index}>
                     {Object.keys(result.rows[0]).map((key) => (
-                      <TableCell key={key} className="max-w-64 truncate font-mono text-xs">
+                      <TableCell key={key} className="max-w-64 truncate font-mono text-caption">
                         {row[key] ?? ""}
                       </TableCell>
                     ))}
@@ -119,7 +119,7 @@ export function DatasetLookupTest({ dataset }: { dataset: DatasetOut }) {
               </TableBody>
             </Table>
             {result.truncated ? (
-              <p className="p-2 text-[0.8125rem] text-muted-foreground">More rows matched than shown here.</p>
+              <p className="p-2 text-label text-text-secondary">More rows matched than shown here.</p>
             ) : null}
           </div>
         )

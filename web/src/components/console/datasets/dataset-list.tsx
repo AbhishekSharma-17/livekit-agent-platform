@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { AlertCircleIcon, Loader2Icon, Table2Icon, Trash2Icon } from "lucide-react";
+import { CircleAlertIcon, Loader2Icon, Table2Icon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/shared/icon";
@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/console/shared/page-header";
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { SkeletonRows } from "@/components/shared/loading-state";
@@ -25,15 +25,15 @@ function DatasetStatusChip({ dataset }: { dataset: DatasetOut }) {
   if (dataset.status === "pending") {
     const pct = typeof dataset.progress === "number" ? Math.round(Math.max(0, Math.min(1, dataset.progress)) * 100) : null;
     return (
-      <StatusChip tone="info">
+      <StatusPill tone="info">
         <Icon as={Loader2Icon} size="sm" className="animate-spin" /> Importing{pct !== null ? ` ${pct}%` : "…"}
-      </StatusChip>
+      </StatusPill>
     );
   }
   if (dataset.status === "failed") {
-    return <StatusChip tone="danger">Failed</StatusChip>;
+    return <StatusPill tone="danger">Failed</StatusPill>;
   }
-  return <StatusChip tone="success">Ready</StatusChip>;
+  return <StatusPill tone="success">Ready</StatusPill>;
 }
 
 /**
@@ -86,7 +86,7 @@ export function DatasetList() {
         <div className="min-w-0">
           <div className="truncate font-medium text-foreground">{dataset.name}</div>
           {dataset.status === "failed" && dataset.error ? (
-            <div className="truncate text-xs text-danger-text">{dataset.error}</div>
+            <div className="truncate text-caption text-destructive-text">{dataset.error}</div>
           ) : null}
         </div>
       ),
@@ -95,7 +95,7 @@ export function DatasetList() {
       id: "keys",
       header: "Matches on",
       cell: (dataset) => (
-        <span className="text-muted-foreground">{dataset.key_columns.map((column) => column.name).join(", ") || "—"}</span>
+        <span className="text-text-secondary">{dataset.key_columns.map((column) => column.name).join(", ") || "—"}</span>
       ),
     },
     {
@@ -154,13 +154,13 @@ export function DatasetList() {
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="truncate font-medium text-foreground">{dataset.name}</div>
-                <div className="truncate text-xs text-muted-foreground">
+                <div className="truncate text-caption text-text-secondary">
                   Matches on {dataset.key_columns.map((column) => column.name).join(", ") || "—"}
                 </div>
               </div>
               <DatasetStatusChip dataset={dataset} />
             </div>
-            <div className="text-xs text-muted-foreground">{pluralize(dataset.row_count, "row", "rows")}</div>
+            <div className="text-caption text-text-secondary">{pluralize(dataset.row_count, "row", "rows")}</div>
           </div>
         )}
         empty={
@@ -173,8 +173,8 @@ export function DatasetList() {
         }
       />
       {datasets.some((d) => d.status === "failed") ? (
-        <p className="mt-2 flex items-center gap-1.5 text-[0.8125rem] text-muted-foreground">
-          <Icon as={AlertCircleIcon} size="sm" /> A failed import can be deleted and uploaded again.
+        <p className="mt-2 flex items-center gap-1.5 text-label text-text-secondary">
+          <Icon as={CircleAlertIcon} size="sm" /> A failed import can be deleted and uploaded again.
         </p>
       ) : null}
     </div>

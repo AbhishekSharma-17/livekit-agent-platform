@@ -53,20 +53,20 @@ export function RequiresVarsField({
   return (
     <div data-slot="field" className="flex flex-col gap-1.5">
       <Label htmlFor={htmlFor}>Needs these values first</Label>
-      <p id={ids.hint} className="text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">
+      <p id={ids.hint} className="text-label leading-[1.125rem] text-pretty text-text-secondary">
         The tool asks for these before it runs, instead of calling out with them missing.
       </p>
       {values.length > 0 ? (
         <ul className="flex flex-wrap gap-1.5">
           {values.map((name) => (
-            <li key={name} className="flex items-center gap-1 rounded-full border border-border bg-muted/50 py-0.5 pr-1 pl-2.5 text-xs">
+            <li key={name} className="flex items-center gap-1 rounded-pill border border-border bg-muted/50 py-0.5 pr-1 pl-2.5 text-caption">
               <span className="font-mono">{name}</span>
               <span className="sr-only"> — {variableLabel(name)}</span>
               <button
                 type="button"
                 onClick={() => remove(name)}
                 aria-label={`Remove ${name}`}
-                className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="rounded-pill p-0.5 text-text-secondary hover:bg-muted hover:text-foreground"
               >
                 <XIcon className="size-3" aria-hidden="true" />
               </button>
@@ -81,7 +81,7 @@ export function RequiresVarsField({
           onChange={(e) => setDraftName(e.target.value)}
           placeholder="policy_no"
           aria-describedby={ids.hint}
-          className="font-mono text-sm"
+          className="font-mono text-body"
           disabled={atCap}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -92,7 +92,7 @@ export function RequiresVarsField({
         />
         <Button
           type="button"
-          variant="outline"
+          variant="secondary"
           onClick={() => add(draftName)}
           disabled={atCap || draftName.trim() === ""}
           aria-label="Add a required variable"
@@ -107,21 +107,21 @@ export function RequiresVarsField({
               key={name}
               type="button"
               onClick={() => add(name)}
-              className="rounded-full border border-dashed border-border px-2.5 py-0.5 font-mono text-xs text-muted-foreground hover:border-foreground hover:text-foreground"
+              className="rounded-pill border border-dashed border-border px-2.5 py-0.5 font-mono text-caption text-text-secondary hover:border-foreground hover:text-foreground"
             >
               + {name}
             </button>
           ))}
         </div>
       ) : null}
-      {atCap ? <p className="text-[0.8125rem] text-warning-text">At most {MAX_REQUIRES_VARS} required variables.</p> : null}
+      {atCap ? <p className="text-label text-warning-text">At most {MAX_REQUIRES_VARS} required variables.</p> : null}
       {draftName.trim() !== "" && !VARIABLE_NAME_PATTERN.test(draftName.trim()) ? (
-        <p className="text-[0.8125rem] text-danger-text">A variable name is lower case letters, digits and _.</p>
+        <p className="text-label text-destructive-text">A variable name is lower case letters, digits and _.</p>
       ) : null}
       {issues.length > 0 ? (
         <ul id={ids.error} className="flex flex-col gap-0.5">
           {issues.map((issue) => (
-            <li key={issue} className="text-[0.8125rem] text-danger-text">
+            <li key={issue} className="text-label text-destructive-text">
               {issue}
             </li>
           ))}

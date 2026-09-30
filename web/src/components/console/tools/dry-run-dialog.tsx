@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/shared/field";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -63,16 +63,16 @@ export function DryRunDialog({ toolId, trigger }: { toolId: string; trigger: Rea
           <Field label="Arguments (JSON)" htmlFor={argsId}>
             <Textarea
               id={argsId}
-              className="min-h-24 font-mono text-xs"
+              className="min-h-24 font-mono text-caption"
               value={argsJson}
               onChange={(e) => setArgsJson(e.target.value)}
             />
           </Field>
           {result ? (
-            <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs">
+            <div className="rounded-lg border border-border bg-muted/40 p-3 text-caption">
               <div className="mb-1.5 flex items-center gap-2">
-                <StatusChip tone={result.ok ? "success" : "danger"}>{result.ok ? "OK" : "Failed"}</StatusChip>
-                <span className="text-muted-foreground">
+                <StatusPill tone={result.ok ? "success" : "danger"}>{result.ok ? "OK" : "Failed"}</StatusPill>
+                <span className="text-text-secondary">
                   {result.status_code ?? "—"} · {result.duration_ms}ms
                 </span>
               </div>
@@ -82,7 +82,7 @@ export function DryRunDialog({ toolId, trigger }: { toolId: string; trigger: Rea
         </DialogBody>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+          <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
             Close
           </Button>
           <Button type="button" onClick={handleRun} disabled={dryRun.isPending}>

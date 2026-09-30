@@ -190,12 +190,12 @@ export function ExecutionFields({
 
   return (
     <>
-      <p className="text-[0.8125rem] text-muted-foreground">
+      <p className="text-label text-text-secondary">
         How this tool behaves while it runs. &quot;Blocking&quot; waits for the result before the agent
         replies; the other modes let the agent keep talking.
       </p>
       {!isRead ? (
-        <p className="text-[0.8125rem] text-muted-foreground">
+        <p className="text-label text-text-secondary">
           This tool changes something; the agent asks before running it twice.
         </p>
       ) : null}
@@ -291,7 +291,7 @@ export function ExecutionFields({
             <Textarea
               id={`${uid}-execution-fillers`}
               rows={3}
-              className="text-sm"
+              className="text-body"
               value={draft.fillersText}
               onChange={(e) => set("fillersText", e.target.value)}
               placeholder={"Still checking.\nAlmost there."}

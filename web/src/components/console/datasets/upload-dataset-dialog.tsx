@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { PlusIcon, UploadCloudIcon } from "lucide-react";
+import { PlusIcon, UploadIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/shared/field";
@@ -186,10 +186,10 @@ export function UploadDatasetDialog() {
                 }}
                 className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border px-6 py-6 text-center hover:bg-muted/30"
               >
-                <Icon as={UploadCloudIcon} size="lg" className="text-muted-foreground" />
-                <p className="text-sm text-foreground">{file ? file.name : "Choose a .csv, .tsv or .json file"}</p>
+                <Icon as={UploadIcon} size="lg" className="text-text-secondary" />
+                <p className="text-body text-foreground">{file ? file.name : "Choose a .csv, .tsv or .json file"}</p>
               </div>
-              {fileError ? <p className="text-[0.8125rem] text-danger-text">{fileError}</p> : null}
+              {fileError ? <p className="text-label text-destructive-text">{fileError}</p> : null}
             </div>
 
             <Field label="Name" htmlFor={`${uid}-name`} required>
@@ -202,24 +202,24 @@ export function UploadDatasetDialog() {
             </Field>
 
             {sniffing ? (
-              <p className="text-[0.8125rem] text-muted-foreground">Reading the file&rsquo;s columns…</p>
+              <p className="text-label text-text-secondary">Reading the file&rsquo;s columns…</p>
             ) : columns.length > 0 ? (
               <div className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-foreground">Columns</span>
-                <p className="text-[0.8125rem] text-muted-foreground">
+                <span className="text-body font-medium text-foreground">Columns</span>
+                <p className="text-label text-text-secondary">
                   Pick which columns a lookup must match on, and how each is compared.
                 </p>
-                <div className="flex flex-col gap-1 rounded-md border border-border p-2">
+                <div className="flex flex-col gap-1 rounded border border-border p-2">
                   {columns.map((column) => (
                     <div key={column.name} className="flex flex-wrap items-center gap-3 py-1">
-                      <label className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+                      <label className="flex min-w-0 flex-1 items-center gap-2 text-body">
                         <input
                           type="checkbox"
                           className="size-4 shrink-0"
                           checked={column.matchOn}
                           onChange={(e) => toggleMatchOn(column.name, e.target.checked)}
                         />
-                        <span className="truncate font-mono text-[0.8125rem]">{column.name}</span>
+                        <span className="truncate font-mono text-label">{column.name}</span>
                       </label>
                       {column.matchOn ? (
                         <Select value={column.type} onValueChange={(next) => setType(column.name, next as DatasetKeyType)}>
@@ -243,7 +243,7 @@ export function UploadDatasetDialog() {
           </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={upload.isPending || !file || sniffing}>

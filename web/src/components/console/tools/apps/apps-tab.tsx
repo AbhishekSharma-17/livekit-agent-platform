@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
 import { LoadingRegion } from "@/components/shared/loading-state";
 import { RelativeTime } from "@/components/shared/relative-time";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useDisableApps, useEnableApps, useToolProviderCategories, useToolProviderToolkits } from "@/components/console/lib/api-hooks";
@@ -158,22 +158,22 @@ function AppsHeader({
     <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <StatusChip tone={chip.tone} dot>
+          <StatusPill tone={chip.tone}>
             {chip.label}
-          </StatusChip>
+          </StatusPill>
           {status.last_test_at ? (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-caption text-text-secondary">
               Last tested <RelativeTime iso={status.last_test_at} />
             </span>
           ) : null}
-          <span className="text-xs text-muted-foreground">
+          <span className="text-caption text-text-secondary">
             {status.connections} connected · {status.paused_tools} paused
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             disabled={!canWrite || validating}
             title={canWrite ? undefined : writeReason}
@@ -185,7 +185,7 @@ function AppsHeader({
             mode="rotate"
             credentialId={status.credential_id ?? undefined}
             trigger={
-              <Button type="button" variant="outline" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
+              <Button type="button" variant="secondary" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
                 Rotate
               </Button>
             }
@@ -204,7 +204,7 @@ function AppsHeader({
           />
         </div>
       </div>
-      <Link href="/console/keys" className="w-fit text-[0.8125rem] font-medium text-foreground underline underline-offset-2">
+      <Link href="/console/keys" className="w-fit text-label font-medium text-foreground underline underline-offset-2">
         Also in Keys
       </Link>
     </div>

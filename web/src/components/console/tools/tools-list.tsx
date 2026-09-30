@@ -7,7 +7,7 @@ import { PencilIcon, PlayIcon, PlusIcon, Trash2Icon, WrenchIcon } from "lucide-r
 
 import { RelativeTime } from "@/components/shared/relative-time";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { Button } from "@/components/ui/button";
 import { useAgents, useDeleteTool, useProviders, useToolProviderConnections, useTools } from "@/components/console/lib/api-hooks";
@@ -107,7 +107,7 @@ export function ToolsList() {
             trigger={
               <Button
                 type="button"
-                variant="outline"
+                variant="secondary"
                 disabled={!canWrite}
                 title={canWrite ? undefined : writeReason}
               >
@@ -122,7 +122,7 @@ export function ToolsList() {
             trigger={
               <Button
                 type="button"
-                variant="outline"
+                variant="secondary"
                 disabled={!canWrite}
                 title={canWrite ? undefined : writeReason}
               >
@@ -136,7 +136,7 @@ export function ToolsList() {
             trigger={
               <Button
                 type="button"
-                variant="outline"
+                variant="secondary"
                 disabled={!canWrite}
                 title={canWrite ? undefined : writeReason}
               >
@@ -194,8 +194,8 @@ export function ToolsList() {
       header: "Name",
       cell: (tool) => (
         <div className="min-w-0">
-          <div className="truncate font-mono text-sm text-foreground">{tool.name}</div>
-          <div className="truncate text-xs text-muted-foreground">{requestSummary(tool)}</div>
+          <div className="truncate font-mono text-body text-foreground">{tool.name}</div>
+          <div className="truncate text-caption text-text-secondary">{requestSummary(tool)}</div>
         </div>
       ),
     },
@@ -204,12 +204,12 @@ export function ToolsList() {
       header: "Kind",
       cell: (tool) =>
         isProviderTool(tool) ? (
-          <StatusChip tone="info" size="sm">
+          <StatusPill tone="info" size="sm">
             <VendorMark vendor={appNameFor(tool, connectionsById) ?? "App"} size="sm" />
             App
-          </StatusChip>
+          </StatusPill>
         ) : (
-          <span className="text-muted-foreground">{kindLabel(tool)}</span>
+          <span className="text-text-secondary">{kindLabel(tool)}</span>
         ),
     },
     {
@@ -218,18 +218,18 @@ export function ToolsList() {
       cell: (tool) => {
         const scope = scopeOf(tool);
         return scope.href ? (
-          <Link href={scope.href} className="text-brand-text hover:underline">
+          <Link href={scope.href} className="text-brand hover:underline">
             {scope.label}
           </Link>
         ) : (
-          <span className="text-muted-foreground">{scope.label}</span>
+          <span className="text-text-secondary">{scope.label}</span>
         );
       },
     },
     {
       id: "status",
       header: "Status",
-      cell: (tool) => (tool.enabled ? <StatusChip tone="success">Enabled</StatusChip> : <StatusChip tone="neutral">Disabled</StatusChip>),
+      cell: (tool) => (tool.enabled ? <StatusPill tone="success">Enabled</StatusPill> : <StatusPill tone="neutral">Disabled</StatusPill>),
     },
     {
       id: "updated",
@@ -259,17 +259,17 @@ export function ToolsList() {
             <div className="flex flex-col gap-1">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="truncate font-mono text-sm text-foreground">{tool.name}</div>
-                  <div className="truncate text-xs text-muted-foreground">{requestSummary(tool)}</div>
+                  <div className="truncate font-mono text-body text-foreground">{tool.name}</div>
+                  <div className="truncate text-caption text-text-secondary">{requestSummary(tool)}</div>
                 </div>
                 <ToolActions tool={tool} secretBagSpec={secretBagSpec} onRefetch={() => void toolsQuery.refetch()} />
               </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2 text-caption text-text-secondary">
                 <span>{kindLabel(tool)}</span>
                 <span aria-hidden="true">·</span>
                 <span>{scope.label}</span>
                 <span aria-hidden="true">·</span>
-                {tool.enabled ? <StatusChip tone="success">Enabled</StatusChip> : <StatusChip tone="neutral">Disabled</StatusChip>}
+                {tool.enabled ? <StatusPill tone="success">Enabled</StatusPill> : <StatusPill tone="neutral">Disabled</StatusPill>}
               </div>
             </div>
           );
@@ -328,7 +328,7 @@ function ToolActions({
   // §6): the agent's own Connected apps card creates, updates and removes
   // this row as the mode changes, so no edit or delete control is offered here.
   if (originOf(tool)) {
-    return <p className="text-right text-xs text-muted-foreground">Managed from the Connected apps card</p>;
+    return <p className="text-right text-caption text-text-secondary">Managed from the Connected apps card</p>;
   }
 
   return (

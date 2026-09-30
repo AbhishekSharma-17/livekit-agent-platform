@@ -39,7 +39,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
     <>
       {segments.map((segment, index) =>
         segment.match ? (
-          <mark key={index} className="rounded-xs bg-warning-soft text-warning-text">
+          <mark key={index} className="rounded-sm bg-warning-subtle text-warning-text">
             {segment.value}
           </mark>
         ) : (
@@ -167,8 +167,8 @@ export function KbSearchPanel({ kbId }: { kbId: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold text-foreground">Test search</h2>
-      <p className="text-[0.8125rem] text-muted-foreground">
+      <h2 className="text-body font-semibold text-foreground">Test search</h2>
+      <p className="text-label text-text-secondary">
         Runs one question four ways at once, so you can see which setting finds the right passage.
       </p>
       <form onSubmit={handleSearch} className="flex gap-2">
@@ -203,12 +203,12 @@ export function KbSearchPanel({ kbId }: { kbId: string }) {
                   className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-card p-3"
                 >
                   <div>
-                    <h3 className="text-sm font-semibold text-foreground">{column.label}</h3>
-                    <p className="text-[0.6875rem] text-muted-foreground">{column.hint}</p>
+                    <h3 className="text-body font-semibold text-foreground">{column.label}</h3>
+                    <p className="text-caption text-text-secondary">{column.hint}</p>
                   </div>
-                  {warning ? <p className="text-[0.6875rem] text-warning-text">{warning}</p> : null}
+                  {warning ? <p className="text-caption text-warning-text">{warning}</p> : null}
                   {hits.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No matches.</p>
+                    <p className="text-caption text-text-secondary">No matches.</p>
                   ) : (
                     <ul className="flex flex-col gap-2">
                       {hits.map((hit, index) => {
@@ -218,17 +218,17 @@ export function KbSearchPanel({ kbId }: { kbId: string }) {
                           <li
                             key={hit.chunk_id}
                             className={cn(
-                              "rounded-md border p-2 text-xs",
-                              index === 0 ? "border-primary/50 bg-primary/5" : "border-border",
+                              "rounded border p-2 text-caption",
+                              index === 0 ? "border-brand-border bg-brand-subtle" : "border-border",
                             )}
                           >
                             <div className="mb-1 flex items-center justify-between gap-2">
                               <span className="min-w-0 truncate font-medium text-foreground">{hit.filename}</span>
-                              <span className="shrink-0 tabular-nums text-muted-foreground">{scorePct}%</span>
+                              <span className="shrink-0 tabular-nums text-text-secondary">{scorePct}%</span>
                             </div>
-                            {locator ? <p className="mb-1 text-muted-foreground">{locator}</p> : null}
+                            {locator ? <p className="mb-1 text-text-secondary">{locator}</p> : null}
                             {index === 0 ? (
-                              <span className="mb-1 inline-block rounded-xs bg-primary/10 px-1.5 py-0.5 text-[0.625rem] font-medium text-brand-text">
+                              <span className="mb-1 inline-block rounded-sm bg-brand-subtle px-1.5 py-0.5 text-caption font-medium text-brand">
                                 Top match
                               </span>
                             ) : null}

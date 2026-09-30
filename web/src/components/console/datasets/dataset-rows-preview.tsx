@@ -22,7 +22,7 @@ export function DatasetRowsPreview({ datasetId, ready }: { datasetId: string; re
   const { data, isLoading, isError, error, refetch } = useDatasetRows(datasetId, offset, PAGE_SIZE, { enabled: ready });
 
   if (!ready) {
-    return <p className="text-sm text-muted-foreground">Rows show up here once the import finishes.</p>;
+    return <p className="text-body text-text-secondary">Rows show up here once the import finishes.</p>;
   }
 
   if (isLoading) {
@@ -43,7 +43,7 @@ export function DatasetRowsPreview({ datasetId, ready }: { datasetId: string; re
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-x-auto rounded-md border border-border">
+      <div className="overflow-x-auto rounded border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -58,7 +58,7 @@ export function DatasetRowsPreview({ datasetId, ready }: { datasetId: string; re
             {rows.map((row, index) => (
               <TableRow key={offset + index}>
                 {columns.map((column) => (
-                  <TableCell key={column.name} className="max-w-64 truncate font-mono text-xs">
+                  <TableCell key={column.name} className="max-w-64 truncate font-mono text-caption">
                     {row[column.name] ?? ""}
                   </TableCell>
                 ))}
@@ -67,17 +67,17 @@ export function DatasetRowsPreview({ datasetId, ready }: { datasetId: string; re
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-between text-[0.8125rem] text-muted-foreground">
+      <div className="flex items-center justify-between text-label text-text-secondary">
         <span>
           {offset + 1}–{Math.min(offset + rows.length, total)} of {total}
         </span>
         <div className="flex gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>
+          <Button type="button" variant="secondary" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>
             Previous
           </Button>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             disabled={offset + rows.length >= total}
             onClick={() => setOffset(offset + PAGE_SIZE)}

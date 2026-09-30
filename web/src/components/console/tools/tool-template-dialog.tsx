@@ -19,7 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Field } from "@/components/shared/field";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
 import { useInstantiateToolTemplate, useTools, useToolTemplates } from "@/components/console/lib/api-hooks";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
@@ -193,13 +193,13 @@ export function ToolTemplateDialog({ agentId, secretBagSpec, businessTimezone, o
               <>
                 <div className="flex flex-col gap-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-semibold text-foreground">{activeGroup.group_label}</h3>
+                    <h3 className="text-body font-semibold text-foreground">{activeGroup.group_label}</h3>
                     {activeGroup.docs_url ? (
                       <a
                         href={activeGroup.docs_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-0.5 rounded-xs text-xs font-medium text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                        className="inline-flex items-center gap-0.5 rounded-sm text-caption font-medium text-text-secondary underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         Docs
                         <ExternalLinkIcon className="size-3" aria-hidden="true" />
@@ -207,7 +207,7 @@ export function ToolTemplateDialog({ agentId, secretBagSpec, businessTimezone, o
                     ) : null}
                   </div>
                   {businessTimezone ? (
-                    <p className="text-[0.8125rem] text-muted-foreground">
+                    <p className="text-label text-text-secondary">
                       These tools ask for the caller&apos;s own time zone (the agent reads it from the time note at the
                       start of the call). Your business runs on <span className="font-mono">{businessTimezone}</span>.
                     </p>
@@ -219,7 +219,7 @@ export function ToolTemplateDialog({ agentId, secretBagSpec, businessTimezone, o
                     const already = existingNames.has(template.definition.name);
                     const id = `tool-template-${template.id}`;
                     return (
-                      <li key={template.id} className="flex items-start gap-2.5 rounded-md border border-border p-2.5">
+                      <li key={template.id} className="flex items-start gap-2.5 rounded border border-border p-2.5">
                         <Checkbox
                           id={id}
                           className="mt-0.5"
@@ -229,23 +229,23 @@ export function ToolTemplateDialog({ agentId, secretBagSpec, businessTimezone, o
                         />
                         <label htmlFor={id} className="flex min-w-0 flex-1 flex-col gap-0.5">
                           <span className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-sm font-medium text-foreground">{template.label}</span>
+                            <span className="text-body font-medium text-foreground">{template.label}</span>
                             {template.risk === "write" ? (
-                              <StatusChip tone="warning" size="sm">
+                              <StatusPill tone="warning" size="sm">
                                 Changes things
-                              </StatusChip>
+                              </StatusPill>
                             ) : (
-                              <StatusChip tone="neutral" size="sm">
+                              <StatusPill tone="neutral" size="sm">
                                 Read only
-                              </StatusChip>
+                              </StatusPill>
                             )}
                             {already ? (
-                              <StatusChip tone="success" size="sm">
+                              <StatusPill tone="success" size="sm">
                                 Already added
-                              </StatusChip>
+                              </StatusPill>
                             ) : null}
                           </span>
-                          <span className="text-[0.8125rem] text-pretty text-muted-foreground">{template.summary}</span>
+                          <span className="text-label text-pretty text-text-secondary">{template.summary}</span>
                         </label>
                       </li>
                     );
@@ -254,7 +254,7 @@ export function ToolTemplateDialog({ agentId, secretBagSpec, businessTimezone, o
 
                 {defaultSpecs.size > 0 ? (
                   <div className="flex flex-col gap-3 border-t border-border pt-4">
-                    <h4 className="text-xs font-semibold tracking-wide text-muted-foreground">Fixed values</h4>
+                    <h4 className="text-caption font-semibold tracking-wide text-text-secondary">Fixed values</h4>
                     {Array.from(defaultSpecs.values()).map((spec) => (
                       <Field key={spec.name} label={spec.label} htmlFor={`tool-template-default-${spec.name}`} hint={spec.help ?? undefined} required={spec.required}>
                         <Input
@@ -277,19 +277,19 @@ export function ToolTemplateDialog({ agentId, secretBagSpec, businessTimezone, o
                       required
                     />
                     {secretNames.length > 0 ? (
-                      <p className="mt-1.5 text-xs text-muted-foreground">
+                      <p className="mt-1.5 text-caption text-text-secondary">
                         The key must hold: <span className="font-mono">{secretNames.join(", ")}</span>.
                       </p>
                     ) : null}
                   </div>
                 ) : null}
 
-                {formError ? <p className="text-[0.8125rem] text-danger-text">{formError}</p> : null}
+                {formError ? <p className="text-label text-destructive-text">{formError}</p> : null}
               </>
             )}
           </DialogBody>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button

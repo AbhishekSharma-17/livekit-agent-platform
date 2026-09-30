@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { AlertCircleIcon, Loader2Icon, RotateCcwIcon, Trash2Icon, UploadCloudIcon, XIcon } from "lucide-react";
+import { CircleAlertIcon, Loader2Icon, RefreshCwIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -12,7 +12,7 @@ import { isFileOverUploadCap, kbUploadCapErrorMessage } from "@/components/conso
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { Icon } from "@/components/shared/icon";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { formatBytes } from "@/lib/format";
@@ -118,7 +118,7 @@ export function KbDocuments({ kbId }: { kbId: string }) {
         <div className="min-w-0">
           <div className="truncate font-medium text-foreground">{doc.filename}</div>
           {doc.status === "failed" && doc.error ? (
-            <div className="text-xs text-danger-text">{doc.error}</div>
+            <div className="text-caption text-destructive-text">{doc.error}</div>
           ) : null}
         </div>
       ),
@@ -131,7 +131,7 @@ export function KbDocuments({ kbId }: { kbId: string }) {
     {
       id: "type",
       header: "Type",
-      cell: (doc) => <span className="text-muted-foreground">{fileTypeLabel(doc)}</span>,
+      cell: (doc) => <span className="text-text-secondary">{fileTypeLabel(doc)}</span>,
     },
     {
       id: "chunks",
@@ -141,7 +141,7 @@ export function KbDocuments({ kbId }: { kbId: string }) {
     {
       id: "size",
       header: "Size",
-      cell: (doc) => <span className="text-muted-foreground">{formatBytes(doc.bytes)}</span>,
+      cell: (doc) => <span className="text-text-secondary">{formatBytes(doc.bytes)}</span>,
     },
     {
       id: "actions",
@@ -153,13 +153,13 @@ export function KbDocuments({ kbId }: { kbId: string }) {
           {doc.status === "failed" ? (
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
               disabled={!canWrite}
               title={canWrite ? undefined : writeReason}
               onClick={() => openFilePicker(doc.id)}
             >
-              <Icon as={RotateCcwIcon} size="sm" /> Try again
+              <Icon as={RefreshCwIcon} size="sm" /> Try again
             </Button>
           ) : null}
           <Button
@@ -187,7 +187,7 @@ export function KbDocuments({ kbId }: { kbId: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold text-foreground">Documents</h2>
+      <h2 className="text-body font-semibold text-foreground">Documents</h2>
 
       <input
         ref={fileInputRef}
@@ -233,15 +233,15 @@ export function KbDocuments({ kbId }: { kbId: string }) {
         className={cn(
           "flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border px-6 py-8 text-center transition-colors",
           canWrite ? "cursor-pointer" : "cursor-not-allowed opacity-50",
-          isDragging ? "border-primary bg-muted/50" : canWrite ? "hover:bg-muted/30" : "",
+          isDragging ? "border-brand bg-muted/50" : canWrite ? "hover:bg-muted/30" : "",
         )}
       >
-        <Icon as={UploadCloudIcon} size="lg" className="text-muted-foreground" />
-        <p className="text-sm text-foreground">
-          Drop <span className="font-mono text-xs">.md</span>, <span className="font-mono text-xs">.txt</span> or{" "}
-          <span className="font-mono text-xs">.pdf</span> files here, or browse
+        <Icon as={UploadIcon} size="lg" className="text-text-secondary" />
+        <p className="text-body text-foreground">
+          Drop <span className="font-mono text-caption">.md</span>, <span className="font-mono text-caption">.txt</span> or{" "}
+          <span className="font-mono text-caption">.pdf</span> files here, or browse
         </p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-caption text-text-secondary">
           {canWrite ? "Up to 25 MB per file." : writeReason}
         </p>
       </div>
@@ -252,18 +252,18 @@ export function KbDocuments({ kbId }: { kbId: string }) {
             <li
               key={item.id}
               className={cn(
-                "flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
-                item.status === "error" ? "border-danger-text/20 bg-danger-soft" : "border-border bg-muted/30",
+                "flex items-center gap-2 rounded border px-3 py-2 text-body",
+                item.status === "error" ? "border-destructive-border bg-destructive-subtle" : "border-border bg-muted/30",
               )}
             >
               {item.status === "uploading" ? (
-                <Icon as={Loader2Icon} size="sm" className="animate-spin text-muted-foreground" />
+                <Icon as={Loader2Icon} size="sm" className="animate-spin text-text-secondary" />
               ) : (
-                <Icon as={AlertCircleIcon} size="sm" className="text-danger-text" />
+                <Icon as={CircleAlertIcon} size="sm" className="text-destructive-text" />
               )}
               <div className="min-w-0 flex-1">
                 <div className="truncate">{item.name}</div>
-                {item.message ? <div className="text-xs text-danger-text">{item.message}</div> : null}
+                {item.message ? <div className="text-caption text-destructive-text">{item.message}</div> : null}
               </div>
               {item.status === "error" ? (
                 <Button
@@ -297,18 +297,18 @@ export function KbDocuments({ kbId }: { kbId: string }) {
                 <div className="min-w-0">
                   <div className="truncate font-medium text-foreground">{doc.filename}</div>
                   {doc.status === "failed" && doc.error ? (
-                    <div className="text-xs text-danger-text">{doc.error}</div>
+                    <div className="text-caption text-destructive-text">{doc.error}</div>
                   ) : null}
                 </div>
                 <DocumentStatusChip status={doc.status} progress={doc.progress} />
               </div>
-              <div className="text-xs text-muted-foreground">
+              <div className="text-caption text-text-secondary">
                 {fileTypeLabel(doc)} · {doc.chunk_count} chunks · {formatBytes(doc.bytes)}
               </div>
               <div className="flex items-center gap-2">
                 {doc.status === "failed" ? (
-                  <Button type="button" variant="outline" size="sm" onClick={() => openFilePicker(doc.id)}>
-                    <Icon as={RotateCcwIcon} size="sm" /> Try again
+                  <Button type="button" variant="secondary" size="sm" onClick={() => openFilePicker(doc.id)}>
+                    <Icon as={RefreshCwIcon} size="sm" /> Try again
                   </Button>
                 ) : null}
                 <Button
@@ -330,7 +330,7 @@ export function KbDocuments({ kbId }: { kbId: string }) {
           )}
           empty={
             <EmptyState
-              icon={UploadCloudIcon}
+              icon={UploadIcon}
               title="No documents yet"
               description="Upload .md, .txt or .pdf files to make them searchable."
               compact
@@ -353,15 +353,15 @@ function DocumentStatusChip({
     const pct = typeof progress === "number" ? Math.round(Math.max(0, Math.min(1, progress)) * 100) : null;
     return (
       <div className="flex items-center gap-2">
-        <StatusChip tone="info">
+        <StatusPill tone="info">
           <Icon as={Loader2Icon} size="sm" className="animate-spin" /> Indexing{pct !== null ? ` ${pct}%` : "…"}
-        </StatusChip>
+        </StatusPill>
         {pct !== null ? <Progress value={pct} className="w-16" aria-hidden="true" /> : null}
       </div>
     );
   }
   if (status === "failed") {
-    return <StatusChip tone="danger">Failed</StatusChip>;
+    return <StatusPill tone="danger">Failed</StatusPill>;
   }
-  return <StatusChip tone="success">Ready</StatusChip>;
+  return <StatusPill tone="success">Ready</StatusPill>;
 }

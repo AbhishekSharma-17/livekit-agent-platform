@@ -6,7 +6,7 @@ import { PackageIcon } from "lucide-react";
 import { Section, SectionRow } from "@/components/shared/section";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { Icon } from "@/components/shared/icon";
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
@@ -64,17 +64,17 @@ function KitCard({ kit, agent }: { kit: ToolKit; agent: AgentOut }) {
     <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold text-foreground">{kit.name}</h3>
-          <p className="text-[0.8125rem] text-pretty text-muted-foreground">{kit.summary}</p>
+          <h3 className="truncate text-body font-semibold text-foreground">{kit.name}</h3>
+          <p className="text-label text-pretty text-text-secondary">{kit.summary}</p>
         </div>
-        <Icon as={PackageIcon} className="shrink-0 text-muted-foreground" />
+        <Icon as={PackageIcon} className="shrink-0 text-text-secondary" />
       </div>
       {needs.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {needs.map((need) => (
-            <StatusChip key={need} tone="neutral" size="sm">
+            <StatusPill key={need} tone="neutral" size="sm">
               {need}
-            </StatusChip>
+            </StatusPill>
           ))}
         </div>
       ) : null}
@@ -82,7 +82,7 @@ function KitCard({ kit, agent }: { kit: ToolKit; agent: AgentOut }) {
         kit={kit}
         agent={agent}
         trigger={
-          <Button type="button" variant="outline" size="sm" className="mt-auto w-fit">
+          <Button type="button" variant="secondary" size="sm" className="mt-auto w-fit">
             Add to this agent
           </Button>
         }

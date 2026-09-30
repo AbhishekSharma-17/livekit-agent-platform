@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { ConnectAppDialog } from "@/components/console/tools/apps/connect-app-dialog";
 import { ConnectionRow } from "@/components/console/tools/apps/connection-row";
@@ -63,19 +63,19 @@ export function AppCard({ toolkit }: { toolkit: ToolkitOut }) {
         <AppLogo toolkit={toolkit} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="truncate text-sm font-medium text-foreground">{toolkit.name}</span>
+            <span className="truncate text-body font-medium text-foreground">{toolkit.name}</span>
             {toolkit.connected ? (
-              <StatusChip tone="success" size="sm">
+              <StatusPill tone="success" size="sm">
                 {accounts.length > 1 ? pluralize(accounts.length, "account", "accounts") : "Connected"}
-              </StatusChip>
+              </StatusPill>
             ) : null}
           </div>
-          {toolkit.description ? <p className="line-clamp-2 text-xs text-pretty text-muted-foreground">{toolkit.description}</p> : null}
+          {toolkit.description ? <p className="line-clamp-2 text-caption text-pretty text-text-secondary">{toolkit.description}</p> : null}
           <div className="flex flex-wrap gap-1">
             {(toolkit.categories ?? []).slice(0, 3).map((category) => (
-              <StatusChip key={category} tone="neutral" size="sm">
+              <StatusPill key={category} tone="neutral" size="sm">
                 {category}
-              </StatusChip>
+              </StatusPill>
             ))}
           </div>
         </div>
@@ -84,7 +84,7 @@ export function AppCard({ toolkit }: { toolkit: ToolkitOut }) {
       {toolkit.connected && toolkit.connection_id ? (
         <div className="flex flex-col items-start gap-2">
           {accounts.length > 1 ? (
-            <Button type="button" variant="outline" size="sm" onClick={() => setAccountsOpen(true)}>
+            <Button type="button" variant="secondary" size="sm" onClick={() => setAccountsOpen(true)}>
               Manage {pluralize(accounts.length, "account", "accounts")}
             </Button>
           ) : (
@@ -105,7 +105,7 @@ export function AppCard({ toolkit }: { toolkit: ToolkitOut }) {
         <ConnectAppDialog
           toolkit={toolkit}
           trigger={
-            <Button type="button" variant="outline" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason} className="self-start">
+            <Button type="button" variant="secondary" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason} className="self-start">
               Connect
             </Button>
           }

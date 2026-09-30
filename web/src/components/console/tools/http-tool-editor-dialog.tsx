@@ -302,12 +302,12 @@ export function HttpToolEditorDialog({
 
           <DialogBody className="gap-6">
             <section className="flex flex-col gap-4">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Basics</h3>
+              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Basics</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Name" htmlFor={`${uid}-name`} required error={errors.name}>
                   <Input
                     id={`${uid}-name`}
-                    className="font-mono text-sm"
+                    className="font-mono text-body"
                     value={draft.name}
                     onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
                     placeholder="lookup_weather"
@@ -338,7 +338,7 @@ export function HttpToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Request</h3>
+              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Request</h3>
               <Field label="Method" htmlFor={`${uid}-method`}>
                 <Select value={draft.method} onValueChange={(v) => setDraft((d) => ({ ...d, method: v as HttpMethod }))}>
                   <SelectTrigger id={`${uid}-method`} className="w-full sm:w-48">
@@ -354,14 +354,14 @@ export function HttpToolEditorDialog({
                 </Select>
               </Field>
               <div data-slot="field" className="flex flex-col gap-1.5">
-                <label htmlFor={`${uid}-url`} className="text-sm leading-5 font-medium text-foreground">
+                <label htmlFor={`${uid}-url`} className="text-body leading-5 font-medium text-foreground">
                   URL template
                 </label>
                 <div className="flex items-start gap-2">
                   <Input
                     id={`${uid}-url`}
                     ref={urlField.ref}
-                    className="font-mono text-sm"
+                    className="font-mono text-body"
                     value={draft.url}
                     aria-describedby={errors.url ? `${uid}-url-error` : undefined}
                     aria-invalid={Boolean(errors.url)}
@@ -385,7 +385,7 @@ export function HttpToolEditorDialog({
                   />
                 </div>
                 {errors.url ? (
-                  <p id={`${uid}-url-error`} className="text-[0.8125rem] leading-[1.125rem] text-danger-text">
+                  <p id={`${uid}-url-error`} className="text-label leading-[1.125rem] text-destructive-text">
                     {errors.url}
                   </p>
                 ) : null}
@@ -393,16 +393,16 @@ export function HttpToolEditorDialog({
               <Field label="Parameters (JSON Schema)" htmlFor={`${uid}-parameters`} error={errors.parametersJson}>
                 <Textarea
                   id={`${uid}-parameters`}
-                  className="min-h-32 font-mono text-xs"
+                  className="min-h-32 font-mono text-caption"
                   value={draft.parametersJson}
                   onChange={(e) => setDraft((d) => ({ ...d, parametersJson: e.target.value }))}
                 />
               </Field>
               <div data-slot="field" className="flex flex-col gap-1.5">
-                <label htmlFor={`${uid}-body-template`} className="text-sm leading-5 font-medium text-foreground">
+                <label htmlFor={`${uid}-body-template`} className="text-body leading-5 font-medium text-foreground">
                   Body template
                 </label>
-                <p id={`${uid}-body-template-hint`} className="text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">
+                <p id={`${uid}-body-template-hint`} className="text-label leading-[1.125rem] text-pretty text-text-secondary">
                   <span className="font-medium">Optional</span> · JSON with {"{{ arg }}"} placeholders. Default: JSON of all
                   arguments.
                 </p>
@@ -410,7 +410,7 @@ export function HttpToolEditorDialog({
                   <Textarea
                     id={`${uid}-body-template`}
                     ref={bodyField.ref}
-                    className="min-h-20 font-mono text-xs"
+                    className="min-h-20 font-mono text-caption"
                     value={draft.body_template}
                     aria-describedby={`${uid}-body-template-hint${errors.body_template ? ` ${uid}-body-template-error` : ""}`}
                     aria-invalid={Boolean(errors.body_template)}
@@ -422,7 +422,7 @@ export function HttpToolEditorDialog({
                   <InsertValueMenu variableNames={agentContext.variableNames} onInsert={bodyField.insert} />
                 </div>
                 {errors.body_template ? (
-                  <p id={`${uid}-body-template-error`} className="text-[0.8125rem] leading-[1.125rem] text-danger-text">
+                  <p id={`${uid}-body-template-error`} className="text-label leading-[1.125rem] text-destructive-text">
                     {errors.body_template}
                   </p>
                 ) : null}
@@ -430,7 +430,7 @@ export function HttpToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Auth</h3>
+              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Auth</h3>
               <Field
                 label="Headers"
                 htmlFor={`${uid}-headers`}
@@ -439,7 +439,7 @@ export function HttpToolEditorDialog({
               >
                 <Textarea
                   id={`${uid}-headers`}
-                  className="min-h-20 font-mono text-xs"
+                  className="min-h-20 font-mono text-caption"
                   value={draft.headersJson}
                   onChange={(e) => setDraft((d) => ({ ...d, headersJson: e.target.value }))}
                 />
@@ -460,7 +460,7 @@ export function HttpToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Response</h3>
+              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Response</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field
                   label="Result JSON pointer"
@@ -470,7 +470,7 @@ export function HttpToolEditorDialog({
                 >
                   <Input
                     id={`${uid}-result-path`}
-                    className="font-mono text-sm"
+                    className="font-mono text-body"
                     value={draft.result_path}
                     onChange={(e) => setDraft((d) => ({ ...d, result_path: e.target.value }))}
                     placeholder="/data/summary"
@@ -509,7 +509,7 @@ export function HttpToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-5 border-t border-border pt-5">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Session and variables</h3>
+              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Session and variables</h3>
               <RequiresVarsField
                 uid={uid}
                 values={draft.requires_vars}
@@ -530,14 +530,14 @@ export function HttpToolEditorDialog({
                 tableBlocks={agentContext.tableBlocks}
               />
               {!agentId ? (
-                <p className="text-[0.8125rem] text-muted-foreground">
+                <p className="text-label text-text-secondary">
                   Attach this tool to an agent to pick from its panel blocks and flow variables.
                 </p>
               ) : null}
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Execution</h3>
+              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Execution</h3>
               <ExecutionFields
                 uid={uid}
                 draft={draft.execution}
@@ -547,7 +547,7 @@ export function HttpToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Safety</h3>
+              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Safety</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field
                   label="Allowed hosts"
@@ -579,7 +579,7 @@ export function HttpToolEditorDialog({
           </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={pending || executionConflict}>

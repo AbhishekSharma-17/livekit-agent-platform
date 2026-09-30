@@ -248,13 +248,13 @@ export function KbEvalDialog({
               );
             })}
 
-            <Button type="button" variant="outline" onClick={() => setRows((current) => [...current, emptyDraft()])}>
+            <Button type="button" variant="secondary" onClick={() => setRows((current) => [...current, emptyDraft()])}>
               <Icon as={PlusIcon} size="sm" /> Add question
             </Button>
           </div>
         </DialogBody>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button type="button" onClick={() => void handleSave()} disabled={putEvals.isPending || rows.length === 0}>

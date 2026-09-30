@@ -25,7 +25,7 @@ import { useWriteAccess } from "@/components/console/lib/roles";
 import { Icon } from "@/components/shared/icon";
 import { pluralize } from "@/lib/format";
 import { RelativeTime } from "@/components/shared/relative-time";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import type { KbOut } from "@/contracts/lkap-contracts";
 import { LoadingRegion } from "@/components/shared/loading-state";
@@ -64,13 +64,13 @@ export function KbList() {
           <div className="flex items-center gap-1.5">
             <span className="font-medium text-foreground">{kb.name}</span>
             {kb.kind === "external" ? (
-              <StatusChip tone="info" size="sm">
+              <StatusPill tone="info" size="sm">
                 Managed search
-              </StatusChip>
+              </StatusPill>
             ) : null}
           </div>
           {kb.description ? (
-            <div className="truncate text-xs text-muted-foreground">{kb.description}</div>
+            <div className="truncate text-caption text-text-secondary">{kb.description}</div>
           ) : null}
         </div>
       ),
@@ -84,16 +84,16 @@ export function KbList() {
       id: "chunks",
       header: "Chunks",
       // No local vectors for a managed search (Ragie) knowledge base — nothing to count.
-      cell: (kb) => (kb.kind === "external" ? <span className="text-muted-foreground">—</span> : <span className="tabular-nums">{kb.chunk_count}</span>),
+      cell: (kb) => (kb.kind === "external" ? <span className="text-text-secondary">—</span> : <span className="tabular-nums">{kb.chunk_count}</span>),
     },
     {
       id: "embedder",
       header: "Embedder",
       cell: (kb) =>
         kb.kind === "external" ? (
-          <span className="text-muted-foreground">—</span>
+          <span className="text-text-secondary">—</span>
         ) : (
-          <span className="text-muted-foreground">{embedderLabel(kb.embedder_id)}</span>
+          <span className="text-text-secondary">{embedderLabel(kb.embedder_id)}</span>
         ),
     },
     {
@@ -124,16 +124,16 @@ export function KbList() {
               <div className="flex items-center gap-1.5">
                 <span className="font-medium text-foreground">{kb.name}</span>
                 {kb.kind === "external" ? (
-                  <StatusChip tone="info" size="sm">
+                  <StatusPill tone="info" size="sm">
                     Managed search
-                  </StatusChip>
+                  </StatusPill>
                 ) : null}
               </div>
-              {kb.description ? <div className="text-xs text-muted-foreground">{kb.description}</div> : null}
+              {kb.description ? <div className="text-caption text-text-secondary">{kb.description}</div> : null}
             </div>
             <KbRowActions kb={kb} />
           </div>
-          <div className="text-xs text-muted-foreground">
+          <div className="text-caption text-text-secondary">
             {kb.kind === "external"
               ? pluralize(kb.document_count, "document", "documents")
               : `${pluralize(kb.document_count, "document", "documents")} · ${pluralize(kb.chunk_count, "chunk", "chunks")} · ${embedderLabel(kb.embedder_id)}`}
@@ -201,7 +201,7 @@ function KbRowActions({ kb }: { kb: KbOut }) {
             <DialogDescription>This permanently deletes the knowledge base and its documents.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setConfirmOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
             <Button

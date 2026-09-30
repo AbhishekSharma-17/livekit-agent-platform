@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Field } from "@/components/shared/field";
 import { RelativeTime } from "@/components/shared/relative-time";
-import { StatusChip, type StatusTone } from "@/components/shared/status-chip";
+import { StatusPill, type StatusTone } from "@/components/shared/status-chip";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import {
   useDisconnectApp,
@@ -89,7 +89,7 @@ export function ConnectionRow({
 
   const connection = connectionQuery.data;
   if (!connection) {
-    return <p className="text-[0.8125rem] text-muted-foreground">Loading connection…</p>;
+    return <p className="text-label text-text-secondary">Loading connection…</p>;
   }
 
   const needsReconnect = connection.needs_reconnect || connection.status !== "active";
@@ -140,20 +140,20 @@ export function ConnectionRow({
       : `Agents lose access to ${toolkit.name} until it's reconnected.`;
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+    <div className="flex flex-col gap-2 rounded border border-border p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium text-foreground">{label}</span>
+          <span className="text-body font-medium text-foreground">{label}</span>
           {connection.is_default ? (
-            <StatusChip tone="neutral" size="sm">
+            <StatusPill tone="neutral" size="sm">
               Default
-            </StatusChip>
+            </StatusPill>
           ) : null}
-          <StatusChip tone={STATUS_TONE[status]} dot size="sm">
+          <StatusPill tone={STATUS_TONE[status]} size="sm">
             {STATUS_LABEL[status]}
-          </StatusChip>
+          </StatusPill>
           {connection.last_checked_at ? (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-caption text-text-secondary">
               Checked <RelativeTime iso={connection.last_checked_at} />
             </span>
           ) : null}
@@ -184,7 +184,7 @@ export function ConnectionRow({
           {needsReconnect ? (
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
               disabled={!canWrite || reconnectMutation.isPending}
               title={canWrite ? undefined : writeReason}
@@ -193,7 +193,7 @@ export function ConnectionRow({
               Reconnect
             </Button>
           ) : null}
-          <Button type="button" variant="outline" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason} onClick={() => setActionsOpen(true)}>
+          <Button type="button" variant="secondary" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason} onClick={() => setActionsOpen(true)}>
             Actions
           </Button>
           <ConfirmDialog
@@ -211,7 +211,7 @@ export function ConnectionRow({
       </div>
 
       {status === "initiated" && redirectUrl ? (
-        <a href={redirectUrl} target="_blank" rel="noreferrer noopener" className="text-[0.8125rem] font-medium text-foreground underline underline-offset-2">
+        <a href={redirectUrl} target="_blank" rel="noreferrer noopener" className="text-label font-medium text-foreground underline underline-offset-2">
           Open sign-in page again
         </a>
       ) : null}
@@ -290,7 +290,7 @@ function ReconnectKeyDialog({
           </DialogHeader>
           <DialogBody>
             {loading ? (
-              <p className="text-[0.8125rem] text-muted-foreground">Loading…</p>
+              <p className="text-label text-text-secondary">Loading…</p>
             ) : (
               fields.map((field) => (
                 <Field key={field.name} label={field.label} htmlFor={`reconnect-field-${field.name}`} required={field.required}>
@@ -306,7 +306,7 @@ function ReconnectKeyDialog({
             )}
           </DialogBody>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={pending}>

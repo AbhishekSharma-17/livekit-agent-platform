@@ -230,12 +230,12 @@ export function DatasetToolEditorDialog({
 
           <DialogBody className="gap-6">
             <section className="flex flex-col gap-4">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Basics</h3>
+              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Basics</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Name" htmlFor={`${uid}-name`} required error={errors.name}>
                   <Input
                     id={`${uid}-name`}
-                    className="font-mono text-sm"
+                    className="font-mono text-body"
                     value={draft.name}
                     onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
                     placeholder="lookup_policy"
@@ -263,7 +263,7 @@ export function DatasetToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Lookup table</h3>
+              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Lookup table</h3>
               <Field label="Table" htmlFor={`${uid}-dataset`} required error={errors.dataset}>
                 <Select value={draft.datasetId || undefined} onValueChange={chooseDataset}>
                   <SelectTrigger id={`${uid}-dataset`} className="w-full">
@@ -281,7 +281,7 @@ export function DatasetToolEditorDialog({
                   </SelectContent>
                 </Select>
                 {readyDatasets.length === 0 ? (
-                  <p className="mt-1 text-[0.8125rem] text-muted-foreground">
+                  <p className="mt-1 text-label text-text-secondary">
                     No lookup tables ready yet — add one under Lookup tables.
                   </p>
                 ) : null}
@@ -345,7 +345,7 @@ export function DatasetToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-5 border-t border-border pt-5">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Session and variables</h3>
+              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Session and variables</h3>
               <RequiresVarsField
                 uid={uid}
                 values={draft.requiresVars}
@@ -367,9 +367,9 @@ export function DatasetToolEditorDialog({
                 onChange={(pinnedArguments) => setDraft((d) => ({ ...d, pinnedArguments }))}
                 variableNames={agentContext.variableNames}
               />
-              {errors.pinnedArguments ? <p className="text-[0.8125rem] text-danger-text">{errors.pinnedArguments}</p> : null}
+              {errors.pinnedArguments ? <p className="text-label text-destructive-text">{errors.pinnedArguments}</p> : null}
               {!agentId ? (
-                <p className="text-[0.8125rem] text-muted-foreground">
+                <p className="text-label text-text-secondary">
                   Attach this tool to an agent to pick from its panel blocks and flow variables.
                 </p>
               ) : null}
@@ -377,7 +377,7 @@ export function DatasetToolEditorDialog({
           </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={pending}>
@@ -408,28 +408,28 @@ function ColumnChecklist({
   const id = React.useId();
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium text-foreground" id={`${id}-label`}>
+      <span className="text-body font-medium text-foreground" id={`${id}-label`}>
         {label}
       </span>
-      {hint ? <p className="text-[0.8125rem] text-muted-foreground">{hint}</p> : null}
+      {hint ? <p className="text-label text-text-secondary">{hint}</p> : null}
       {options.length === 0 ? (
-        <p className="text-[0.8125rem] text-muted-foreground">This table has no columns yet.</p>
+        <p className="text-label text-text-secondary">This table has no columns yet.</p>
       ) : (
         <div role="group" aria-labelledby={`${id}-label`} className="flex flex-wrap gap-x-4 gap-y-1.5">
           {options.map((option) => (
-            <label key={option.value} className="flex items-center gap-1.5 text-sm">
+            <label key={option.value} className="flex items-center gap-1.5 text-body">
               <input
                 type="checkbox"
                 className="size-4"
                 checked={value.includes(option.value)}
                 onChange={(e) => onToggle(option.value, e.target.checked)}
               />
-              <span className="font-mono text-[0.8125rem]">{option.label}</span>
+              <span className="font-mono text-label">{option.label}</span>
             </label>
           ))}
         </div>
       )}
-      {error ? <p className="text-[0.8125rem] text-danger-text">{error}</p> : null}
+      {error ? <p className="text-label text-destructive-text">{error}</p> : null}
     </div>
   );
 }

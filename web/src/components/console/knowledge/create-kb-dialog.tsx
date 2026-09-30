@@ -58,15 +58,15 @@ function ChoiceCard({
     <Label
       htmlFor={id}
       className={cn(
-        "flex cursor-pointer flex-col gap-1.5 rounded-md border border-border p-3 text-sm font-normal",
-        selected && "border-primary bg-muted/50",
+        "flex cursor-pointer flex-col gap-1.5 rounded border border-border p-3 text-body font-normal",
+        selected && "border-brand bg-muted/50",
       )}
     >
       <span className="flex items-center justify-between gap-2">
         <span className="font-medium text-foreground">{title}</span>
         <RadioGroupItem id={id} value={value} />
       </span>
-      <span className="text-xs text-muted-foreground">{hint}</span>
+      <span className="text-caption text-text-secondary">{hint}</span>
       {children}
     </Label>
   );
@@ -202,7 +202,7 @@ export function CreateKbDialog() {
             </Field>
 
             <div className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium" id={`${uid}-storage-label`}>
+              <span className="text-body font-medium" id={`${uid}-storage-label`}>
                 Where is this knowledge stored?
               </span>
               <RadioGroup
@@ -284,7 +284,7 @@ export function CreateKbDialog() {
               // Both "platform" and "connection" still embed the uploaded documents — only "managed_search"
               // (Ragie holds and searches its own) has no embedder to choose.
               <div className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium">Embedder</span>
+                <span className="text-body font-medium">Embedder</span>
                 <RadioGroup
                   value={embedderId}
                   onValueChange={setEmbedderId}
@@ -311,7 +311,7 @@ export function CreateKbDialog() {
             )}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={createKb.isPending}>
@@ -351,13 +351,13 @@ function ConnectionPicker({
   const labelId = `${idPrefix}-label`;
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium" id={labelId}>
+      <span className="text-body font-medium" id={labelId}>
         {label}
       </span>
       {loading ? (
-        <p className="text-xs text-muted-foreground">Loading connections…</p>
+        <p className="text-caption text-text-secondary">Loading connections…</p>
       ) : connections.length === 0 ? (
-        <p className="text-xs text-muted-foreground" role="status">
+        <p className="text-caption text-text-secondary" role="status">
           {emptyMessage}{" "}
           <Link
             href="/console/settings?tab=knowledge-connections"

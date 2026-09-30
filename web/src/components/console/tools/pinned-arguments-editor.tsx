@@ -101,8 +101,8 @@ export function PinnedArgumentsEditor({
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <h3 className="text-sm font-medium text-foreground">{title}</h3>
-        <p className="text-[0.8125rem] text-pretty text-muted-foreground">{description}</p>
+        <h3 className="text-body font-medium text-foreground">{title}</h3>
+        <p className="text-label text-pretty text-text-secondary">{description}</p>
       </div>
       {entries.length > 0 ? (
         <Table>
@@ -130,7 +130,7 @@ export function PinnedArgumentsEditor({
           </TableBody>
         </Table>
       ) : (
-        <p className="text-[0.8125rem] text-muted-foreground">{emptyLabel}</p>
+        <p className="text-label text-text-secondary">{emptyLabel}</p>
       )}
       <div className="flex gap-2">
         <Input
@@ -138,7 +138,7 @@ export function PinnedArgumentsEditor({
           onChange={(e) => setDraftName(e.target.value)}
           placeholder="argument_name"
           aria-label="New fixed argument name"
-          className="w-48 font-mono text-sm"
+          className="w-48 font-mono text-body"
           disabled={atCap}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -149,7 +149,7 @@ export function PinnedArgumentsEditor({
         />
         <Button
           type="button"
-          variant="outline"
+          variant="secondary"
           size="sm"
           className="gap-1.5"
           onClick={addRow}
@@ -160,11 +160,11 @@ export function PinnedArgumentsEditor({
           Add
         </Button>
       </div>
-      {atCap ? <p className="text-[0.8125rem] text-warning-text">At most {MAX_PINNED_ARGUMENTS} fixed values.</p> : null}
+      {atCap ? <p className="text-label text-warning-text">At most {MAX_PINNED_ARGUMENTS} fixed values.</p> : null}
       {issues.length > 0 ? (
         <ul className="flex flex-col gap-0.5">
           {issues.map((issue) => (
-            <li key={issue} className="text-[0.8125rem] text-danger-text">
+            <li key={issue} className="text-label text-destructive-text">
               {issue}
             </li>
           ))}
@@ -204,7 +204,7 @@ function PinnedRow({
           onBlur={(e) => onRename(e.target.value.trim())}
           aria-label={`Fixed argument name (${name})`}
           aria-invalid={nameInvalid}
-          className="w-36 font-mono text-xs"
+          className="w-36 font-mono text-caption"
         />
       </TableCell>
       <TableCell>
@@ -231,7 +231,7 @@ function PinnedRow({
               onClick={field.trackCaret}
               onKeyUp={field.trackCaret}
               aria-label={`${name} — value`}
-              className="w-40 font-mono text-xs"
+              className="w-40 font-mono text-caption"
             />
             <InsertValueMenu variableNames={variableNames} onInsert={field.insert} label="Insert" />
           </div>
@@ -246,7 +246,7 @@ function PinnedRow({
         ) : type === "boolean" ? (
           <Switch checked={value === true} onCheckedChange={(checked) => onValueChange(checked)} aria-label={`${name} — value`} />
         ) : (
-          <span className="text-xs text-muted-foreground">Empty</span>
+          <span className="text-caption text-text-secondary">Empty</span>
         )}
       </TableCell>
       <TableCell>

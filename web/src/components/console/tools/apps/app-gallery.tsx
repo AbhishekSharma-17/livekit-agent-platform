@@ -117,7 +117,7 @@ export function AppGallery() {
         />
         <div className="flex items-center gap-2">
           <Switch id="apps-gallery-connected-only" checked={connectedOnly} onCheckedChange={setConnectedOnly} aria-label="Connected only" />
-          <Label htmlFor="apps-gallery-connected-only" className="text-sm font-normal">
+          <Label htmlFor="apps-gallery-connected-only" className="text-body font-normal">
             Connected only
           </Label>
         </div>
@@ -154,7 +154,7 @@ export function AppGallery() {
         <div>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             disabled={toolkitsQuery.isFetchingNextPage}
             onMouseEnter={prefetchNext}
             onFocus={prefetchNext}
@@ -178,8 +178,8 @@ function AppCardSkeleton() {
           <Skeleton className="h-4 w-2/3" />
           <Skeleton className="h-3 w-full" />
           <div className="flex gap-1">
-            <Skeleton className="h-5 w-16 rounded-full" />
-            <Skeleton className="h-5 w-20 rounded-full" />
+            <Skeleton className="h-5 w-16 rounded-pill" />
+            <Skeleton className="h-5 w-20 rounded-pill" />
           </div>
         </div>
       </div>

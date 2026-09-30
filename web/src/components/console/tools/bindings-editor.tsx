@@ -140,8 +140,8 @@ export function BindingsEditor({
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <h3 className="text-sm font-medium text-foreground">Put the result on the panel</h3>
-        <p className="text-[0.8125rem] text-pretty text-muted-foreground">
+        <h3 className="text-body font-medium text-foreground">Put the result on the panel</h3>
+        <p className="text-label text-pretty text-text-secondary">
           After a successful call, copy part of the result onto the panel or into a variable — before the model
           replies, with no extra turn.
         </p>
@@ -166,10 +166,10 @@ export function BindingsEditor({
                     placeholder="/policy/holder"
                     aria-label={`Binding ${index + 1} — which part of the result`}
                     aria-invalid={bindingPathIssue(row.path) !== null}
-                    className="w-40 font-mono text-xs"
+                    className="w-40 font-mono text-caption"
                   />
                   {bindingPathIssue(row.path) ? (
-                    <p className="mt-1 text-[0.6875rem] text-danger-text">Leave it blank for the whole result, or start with &apos;/&apos;.</p>
+                    <p className="mt-1 text-caption text-destructive-text">Leave it blank for the whole result, or start with &apos;/&apos;.</p>
                   ) : null}
                 </TableCell>
                 <TableCell>
@@ -209,15 +209,15 @@ export function BindingsEditor({
           </TableBody>
         </Table>
       ) : (
-        <p className="text-[0.8125rem] text-muted-foreground">No bindings yet.</p>
+        <p className="text-label text-text-secondary">No bindings yet.</p>
       )}
-      <Button type="button" variant="outline" size="sm" className="w-fit gap-1.5" onClick={addRow} disabled={atCap}>
+      <Button type="button" variant="secondary" size="sm" className="w-fit gap-1.5" onClick={addRow} disabled={atCap}>
         <PlusIcon className="size-3.5" aria-hidden="true" />
         Add a binding
       </Button>
-      {atCap ? <p className="text-[0.8125rem] text-warning-text">At most {MAX_BINDINGS} bindings per tool.</p> : null}
+      {atCap ? <p className="text-label text-warning-text">At most {MAX_BINDINGS} bindings per tool.</p> : null}
       {rows.some(rowIncomplete) ? (
-        <p id={`${uid}-bindings-error`} className="text-[0.8125rem] text-danger-text">
+        <p id={`${uid}-bindings-error`} className="text-label text-destructive-text">
           Finish choosing where each binding goes before saving.
         </p>
       ) : null}
@@ -263,7 +263,7 @@ function BindingWhere({
             onChange={(e) => onChange({ blockId: e.target.value })}
             placeholder="card"
             aria-label={`Binding ${rowIndex + 1} — card`}
-            className="w-28 font-mono text-xs"
+            className="w-28 font-mono text-caption"
           />
         )}
         <Input
@@ -272,7 +272,7 @@ function BindingWhere({
           placeholder="field key"
           list={block && block.fieldKeys.length > 0 ? `${uid}-binding-${rowIndex}-details-keys` : undefined}
           aria-label={`Binding ${rowIndex + 1} — field key`}
-          className="w-28 font-mono text-xs"
+          className="w-28 font-mono text-caption"
         />
         {block && block.fieldKeys.length > 0 ? (
           <datalist id={`${uid}-binding-${rowIndex}-details-keys`}>
@@ -304,7 +304,7 @@ function BindingWhere({
         onChange={(e) => onChange({ blockId: e.target.value })}
         placeholder="table"
         aria-label={`Binding ${rowIndex + 1} — table`}
-        className="w-32 font-mono text-xs"
+        className="w-32 font-mono text-caption"
       />
     );
   }
@@ -315,7 +315,7 @@ function BindingWhere({
         onChange={(e) => onChange({ key: e.target.value })}
         placeholder="item id"
         aria-label={`Binding ${rowIndex + 1} — checklist item id`}
-        className="w-32 font-mono text-xs"
+        className="w-32 font-mono text-caption"
       />
     );
   }
@@ -328,11 +328,11 @@ function BindingWhere({
           onChange={(e) => onChange({ key: e.target.value })}
           placeholder="variable_name"
           aria-label={`Binding ${rowIndex + 1} — variable name`}
-          className="w-32 font-mono text-xs"
+          className="w-32 font-mono text-caption"
         />
-        {invalid ? <span className="text-[0.6875rem] text-danger-text">Lower case, digits, _.</span> : null}
+        {invalid ? <span className="text-caption text-destructive-text">Lower case, digits, _.</span> : null}
       </div>
     );
   }
-  return <span className="text-xs text-muted-foreground">—</span>;
+  return <span className="text-caption text-text-secondary">—</span>;
 }

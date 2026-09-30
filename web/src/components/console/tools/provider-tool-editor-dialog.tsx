@@ -9,7 +9,7 @@ import { Field } from "@/components/shared/field";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { StatusChip, type StatusTone } from "@/components/shared/status-chip";
+import { StatusPill, type StatusTone } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import {
   Collapsible,
@@ -304,17 +304,17 @@ export function ProviderToolEditorDialog({
                 <div className="flex min-w-0 items-center gap-2">
                   <VendorMark vendor={appName} />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">{appName}</p>
-                    <p className="truncate text-xs text-muted-foreground">{actionName}</p>
+                    <p className="truncate text-body font-medium text-foreground">{appName}</p>
+                    <p className="truncate text-caption text-text-secondary">{actionName}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <StatusChip tone={STATUS_TONE[status]} dot size="sm">
+                  <StatusPill tone={STATUS_TONE[status]} size="sm">
                     {STATUS_LABEL[status]}
-                  </StatusChip>
+                  </StatusPill>
                   <Link
                     href="/console/tools?tab=apps"
-                    className={`text-xs underline underline-offset-2 ${needsReconnect ? "text-warning-text" : "text-muted-foreground"}`}
+                    className={`text-caption underline underline-offset-2 ${needsReconnect ? "text-warning-text" : "text-text-secondary"}`}
                   >
                     Tools → Apps
                   </Link>
@@ -322,11 +322,11 @@ export function ProviderToolEditorDialog({
               </div>
               <Collapsible>
                 <CollapsibleTrigger asChild>
-                  <Button type="button" variant="ghost" size="sm" className="w-fit text-xs text-muted-foreground">
+                  <Button type="button" variant="ghost" size="sm" className="w-fit text-caption text-text-secondary">
                     Details
                   </Button>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="flex flex-col gap-1 pt-1 text-xs text-muted-foreground">
+                <CollapsibleContent className="flex flex-col gap-1 pt-1 text-caption text-text-secondary">
                   <p>
                     Action id: <span className="font-mono">{definition.tool_slug}</span>
                   </p>
@@ -340,12 +340,12 @@ export function ProviderToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Basics</h3>
+              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Basics</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Name" htmlFor={`${uid}-name`} required error={errors.name}>
                   <Input
                     id={`${uid}-name`}
-                    className="font-mono text-sm"
+                    className="font-mono text-body"
                     value={draft.name}
                     onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
                   />
@@ -367,10 +367,10 @@ export function ProviderToolEditorDialog({
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Parameters</h3>
+                <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Parameters</h3>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   disabled={refreshSchema.isPending}
                   onClick={() => void handleRefresh(false)}
@@ -379,26 +379,26 @@ export function ProviderToolEditorDialog({
                 </Button>
               </div>
               {fields.length === 0 ? (
-                <p className="text-[0.8125rem] text-muted-foreground">This action takes no arguments.</p>
+                <p className="text-label text-text-secondary">This action takes no arguments.</p>
               ) : (
-                <ul className="flex flex-col gap-1 rounded-md border border-border p-2.5">
+                <ul className="flex flex-col gap-1 rounded border border-border p-2.5">
                   {fields.map((field) => (
-                    <li key={field.name} className="flex flex-wrap items-baseline gap-x-2 text-[0.8125rem]">
+                    <li key={field.name} className="flex flex-wrap items-baseline gap-x-2 text-label">
                       <span className="font-mono text-foreground">{field.name}</span>
-                      <span className="text-xs text-muted-foreground">{field.type}</span>
+                      <span className="text-caption text-text-secondary">{field.type}</span>
                       {field.required ? (
-                        <StatusChip tone="neutral" size="sm">
+                        <StatusPill tone="neutral" size="sm">
                           Required
-                        </StatusChip>
+                        </StatusPill>
                       ) : null}
-                      {field.description ? <span className="text-xs text-muted-foreground">— {field.description}</span> : null}
+                      {field.description ? <span className="text-caption text-text-secondary">— {field.description}</span> : null}
                     </li>
                   ))}
                 </ul>
               )}
               {refreshResult ? (
                 refreshResult.changed ? (
-                  <div className="flex flex-col gap-2 rounded-md border border-border bg-warning-soft p-2.5 text-[0.8125rem]">
+                  <div className="flex flex-col gap-2 rounded border border-border bg-warning-subtle p-2.5 text-label">
                     <p className="font-medium text-warning-text">The app changed this action since it was added.</p>
                     {refreshResult.added.length > 0 ? <p>Added: {refreshResult.added.join(", ")}</p> : null}
                     {refreshResult.removed.length > 0 ? <p>Removed: {refreshResult.removed.join(", ")}</p> : null}
@@ -425,17 +425,17 @@ export function ProviderToolEditorDialog({
                         Apply
                       </Button>
                     ) : (
-                      <p className="text-muted-foreground">Applied.</p>
+                      <p className="text-text-secondary">Applied.</p>
                     )}
                   </div>
                 ) : (
-                  <p className="text-[0.8125rem] text-muted-foreground">No changes since this action was added.</p>
+                  <p className="text-label text-text-secondary">No changes since this action was added.</p>
                 )
               ) : null}
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Response</h3>
+              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Response</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <RunsField
                   uid={uid}
@@ -466,7 +466,7 @@ export function ProviderToolEditorDialog({
                 >
                   <Input
                     id={`${uid}-result-path`}
-                    className="font-mono text-sm"
+                    className="font-mono text-body"
                     value={draft.result_path}
                     onChange={(e) => setDraft((d) => ({ ...d, result_path: e.target.value }))}
                     placeholder="/data/summary"
@@ -494,7 +494,7 @@ export function ProviderToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Execution</h3>
+              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Execution</h3>
               <ExecutionFields
                 uid={uid}
                 draft={draft.execution}
@@ -504,7 +504,7 @@ export function ProviderToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-5 border-t border-border pt-5">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">Session and variables</h3>
+              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Session and variables</h3>
               <RequiresVarsField
                 uid={uid}
                 values={draft.requires_vars}
@@ -531,7 +531,7 @@ export function ProviderToolEditorDialog({
                 variableNames={agentContext.variableNames}
               />
               {!tool.agent_id ? (
-                <p className="text-[0.8125rem] text-muted-foreground">
+                <p className="text-label text-text-secondary">
                   Attach this action to an agent to pick from its panel blocks and flow variables.
                 </p>
               ) : null}
@@ -539,7 +539,7 @@ export function ProviderToolEditorDialog({
           </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={pending || executionConflict}>

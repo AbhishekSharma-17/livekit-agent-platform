@@ -5,70 +5,150 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Design tokens — docs/UI_UX_SPEC.md §2.2 / §2.7 (WP-0 owns this file).
- * Contrast is verified by `pnpm check:contrast` (scripts/check-contrast.mjs);
- * if a pair fails, adjust the token's lightness, never the target.
+ * Design tokens: docs/ui/DESIGN-SYSTEM.md section 2 (UI-1 owns this file).
+ *
+ * The only place colour, elevation, radius, duration and layout values live.
+ * Every spec token is defined three times:
+ *   1. its light value, in `:root`;
+ *   2. its dark value, in `.dark`;
+ *   3. a Tailwind bridge entry in `@theme inline`.
+ * Theme-invariant tokens (radius, duration, easing, layout) and every var()
+ * alias live in the shared `:root, .dark` block, so an alias re-resolves inside
+ * any `.dark` subtree instead of inheriting the light value from `<html>`.
+ *
+ * Deviations from the spec's literal values (contrast fixes, lightness only)
+ * are listed in docs/ui/TOKENS.md. `pnpm check:contrast` verifies the pairs;
+ * `pnpm lint:design` keeps colours and shadows out of components; the
+ * tests in tests/design-tokens.test.ts check that no token is missing.
  */
 
 @theme inline {
-  /* shadcn + agents-ui mappings */
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  /* type */
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-mono);
   --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
+  --font-hand: var(--font-hand);
+  --font-hand-label: var(--font-hand-label);
 
-  /* brand + semantic tones */
+  /* neutrals and text (spec 2.1) */
+  --color-background: var(--background);
+  --color-card: var(--card);
+  --color-popover: var(--popover);
+  --color-muted: var(--muted);
+  --color-muted-strong: var(--muted-strong);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-foreground: var(--foreground);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-disabled: var(--text-disabled);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-overlay: var(--overlay);
+  --color-scrim: var(--scrim);
+
+  /* accent (spec 2.2) */
   --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-active: var(--brand-active);
   --color-brand-foreground: var(--brand-foreground);
+  --color-brand-subtle: var(--brand-subtle);
+  --color-brand-border: var(--brand-border);
+  --color-ring: var(--ring);
+
+  /* status scales (spec 2.3) */
+  --color-success-solid: var(--success-solid);
+  --color-success-text: var(--success-text);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-border: var(--success-border);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning-solid: var(--warning-solid);
+  --color-warning-text: var(--warning-text);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-border: var(--warning-border);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info-solid: var(--info-solid);
+  --color-info-text: var(--info-text);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-border: var(--info-border);
+  --color-info-foreground: var(--info-foreground);
+  --color-destructive-solid: var(--destructive-solid);
+  --color-destructive-text: var(--destructive-text);
+  --color-destructive-subtle: var(--destructive-subtle);
+  --color-destructive-border: var(--destructive-border);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-hover: var(--destructive-hover);
+
+  /* charts (spec 2.4) */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
+
+  /* elevation and focus (spec 2.4): shadow-raised, shadow-overlay, shadow-modal, shadow-focus */
+  --shadow-raised: var(--elevation-raised);
+  --shadow-overlay: var(--elevation-overlay);
+  --shadow-modal: var(--elevation-modal);
+  --shadow-focus: var(--focus-shadow);
+
+  /* radius (spec 2.4): rounded-sm, rounded, rounded-lg, rounded-dialog, rounded-pill */
+  --radius-sm: var(--radius-sm);
+  --radius: var(--radius);
+  --radius-lg: var(--radius-lg);
+  --radius-dialog: var(--radius-dialog);
+  --radius-pill: var(--radius-pill);
+
+  /* motion (spec 2.4). Tailwind has no duration namespace: use duration-(--duration-fast). */
+  --duration-fast: var(--duration-fast);
+  --duration-base: var(--duration-base);
+  --duration-slow: var(--duration-slow);
+  --ease-entrance: var(--ease-entrance);
+
+  /* layout (spec 2.4): h-topbar, p-panel-inset, h-bottombar */
+  --spacing-topbar: var(--layout-topbar);
+  --spacing-panel-inset: var(--layout-panel-inset);
+  --spacing-bottombar: var(--layout-bottombar);
+
+  /* legacy names (aliases of the spec tokens; screen packages migrate off them) */
+  --color-card-foreground: var(--card-foreground);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
   --color-brand-text: var(--brand-text);
   --color-brand-soft: var(--brand-soft);
   --color-brand-line: var(--brand-line);
-  --color-info: var(--info);
-  --color-info-soft: var(--info-soft);
-  --color-info-text: var(--info-text);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
-  --color-success-text: var(--success-text);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
-  --color-warning-text: var(--warning-text);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-danger-text: var(--danger-text);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
   --color-stage: var(--stage);
   --color-stage-foreground: var(--stage-foreground);
-
-  /* radius, elevation, easing, hand fonts */
   --radius-xs: var(--radius-xs);
-  --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
-  --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
   --radius-2xl: var(--radius-2xl);
   --shadow-sm: var(--shadow-sm);
@@ -77,160 +157,231 @@
   --ease-out: var(--ease-out);
   --ease-in-out: var(--ease-in-out);
   --ease-drawer: var(--ease-drawer);
-  --font-hand: var(--font-hand);
-  --font-hand-label: var(--font-hand-label);
 }
 
+/* Light theme: literal values. */
 :root {
-  /* surfaces */
-  --background: oklch(0.985 0.003 250);
-  --foreground: oklch(0.17 0.012 250);
-  --card: oklch(0.995 0.002 250);
-  --card-foreground: var(--foreground);
-  --popover: oklch(0.995 0.002 250);
-  --popover-foreground: var(--foreground);
-  --muted: oklch(0.955 0.005 250);
-  --muted-foreground: oklch(0.47 0.015 250);
-  --accent: oklch(0.95 0.006 250); /* shadcn "accent" = subtle hover surface; keep the name for agents-ui */
-  --accent-foreground: var(--foreground);
-  --secondary: oklch(0.94 0.006 250);
-  --secondary-foreground: oklch(0.25 0.015 250);
-  --primary: oklch(0.2 0.015 250); /* neutral ink; primary buttons are NOT green */
-  --primary-foreground: oklch(0.985 0.003 250);
-  --border: oklch(0.85 0.008 250); /* spec 0.90 → 0.85: 1.5:1 decorative floor */
-  --input: oklch(0.64 0.01 250); /* spec 0.85 → 0.64: 3:1 field edge (WCAG 1.4.11) */
-  --ring: var(--brand);
-  --destructive: oklch(0.55 0.2 27);
-  --destructive-foreground: oklch(0.99 0.01 27);
+  /* neutrals and text */
+  --background: oklch(98.6% 0.002 250);
+  --card: oklch(100% 0 0);
+  --popover: oklch(100% 0 0);
+  --muted: oklch(96.6% 0.004 250);
+  --muted-strong: oklch(93.8% 0.006 250);
+  --border: oklch(92.4% 0.005 250);
+  --border-strong: oklch(60% 0.012 255);
+  --input: oklch(64% 0.012 255); /* spec 66% -> 64%: 3:1 on background and muted */
+  --foreground: oklch(20.5% 0.015 260);
+  --text-secondary: oklch(45% 0.016 260);
+  --text-tertiary: oklch(52% 0.014 260); /* spec 53.5% -> 52%: 4.5:1 on sidebar-hover and muted-strong */
+  --text-disabled: oklch(72% 0.01 260);
+  --sidebar: oklch(96.8% 0.004 250);
+  --sidebar-hover: oklch(93.6% 0.006 250);
+  --sidebar-active: oklch(100% 0 0);
+  --overlay: oklch(18% 0.015 260 / 0.42);
+  --scrim: oklch(98.6% 0.002 250 / 0.92);
 
-  /* brand = signal green; the only accent */
-  --brand: oklch(0.54 0.14 152); /* spec 0.55 → 0.54: brand-foreground ≥ 4.5:1 */
-  --brand-foreground: oklch(0.99 0.01 152);
-  --brand-text: oklch(0.42 0.12 152);
-  --brand-soft: oklch(0.94 0.04 152);
-  --brand-line: oklch(0.78 0.1 152);
+  /* accent: deep teal */
+  --brand: oklch(47% 0.075 190);
+  --brand-hover: oklch(42% 0.07 190);
+  --brand-active: oklch(38% 0.062 190);
+  --brand-foreground: oklch(100% 0 0);
+  --brand-subtle: oklch(96% 0.02 190);
+  --brand-border: oklch(86% 0.05 190);
+  --ring: oklch(56% 0.09 190);
 
-  /* semantic tones (solid / soft / text) */
-  --info: oklch(0.55 0.12 250);
-  --info-soft: oklch(0.94 0.03 250);
-  --info-text: oklch(0.42 0.11 250);
-  --success: var(--brand);
-  --success-soft: var(--brand-soft);
-  --success-text: var(--brand-text);
-  --warning: oklch(0.72 0.15 75);
-  --warning-soft: oklch(0.96 0.06 85);
-  --warning-text: oklch(0.48 0.12 70);
-  --danger: oklch(0.58 0.2 27);
-  --danger-soft: oklch(0.95 0.03 27);
-  --danger-text: oklch(0.47 0.18 27);
+  /* status scales */
+  --success-solid: oklch(52% 0.14 150);
+  --success-text: oklch(43% 0.11 150);
+  --success-subtle: oklch(96.2% 0.028 150);
+  --success-border: oklch(86% 0.07 150);
+  --success-foreground: oklch(100% 0 0);
+  --warning-solid: oklch(64.5% 0.14 70); /* spec 66% -> 64.5%: 3:1 as a dot on warning-subtle */
+  --warning-text: oklch(46% 0.1 65);
+  --warning-subtle: oklch(96.8% 0.033 85);
+  --warning-border: oklch(87% 0.08 80);
+  --warning-foreground: oklch(20% 0.03 70);
+  --info-solid: oklch(54% 0.14 250);
+  --info-text: oklch(46% 0.13 255);
+  --info-subtle: oklch(96.2% 0.018 250);
+  --info-border: oklch(86% 0.055 250);
+  --info-foreground: oklch(100% 0 0);
+  --destructive-solid: oklch(52% 0.19 27);
+  --destructive-text: oklch(48% 0.18 27);
+  --destructive-subtle: oklch(96.4% 0.016 25);
+  --destructive-border: oklch(86% 0.07 25);
+  --destructive-foreground: oklch(100% 0 0);
+  --destructive-hover: oklch(47% 0.18 27);
 
-  /* sidebar (shadcn sidebar component reads these) */
-  --sidebar: oklch(0.97 0.004 250);
-  --sidebar-foreground: var(--foreground);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: oklch(0.93 0.006 250);
-  --sidebar-accent-foreground: var(--foreground);
-  --sidebar-border: oklch(0.905 0.008 250);
-  --sidebar-ring: var(--brand);
+  /* charts: slate, blue, amber, teal, violet, green, orange, grey */
+  --chart-1: oklch(55% 0.03 255);
+  --chart-2: oklch(55% 0.15 255);
+  --chart-3: oklch(64% 0.14 70);
+  --chart-4: oklch(56% 0.09 190);
+  --chart-5: oklch(55% 0.17 295);
+  --chart-6: oklch(56% 0.13 150);
+  --chart-7: oklch(62% 0.16 45);
+  --chart-8: oklch(60% 0.005 260);
 
-  /* session-only surfaces (defined in both themes; used under [data-surface=session]) */
-  --stage: oklch(0.93 0.006 250);
-  --stage-foreground: var(--foreground);
+  /* elevation */
+  --elevation-raised: 0 1px 2px oklch(20% 0.015 260 / 0.05);
+  --elevation-overlay:
+    0 12px 32px -8px oklch(20% 0.015 260 / 0.16), 0 2px 6px oklch(20% 0.015 260 / 0.06);
+  --elevation-modal:
+    0 28px 64px -16px oklch(20% 0.015 260 / 0.28), 0 4px 12px oklch(20% 0.015 260 / 0.08);
 
-  /* elevation: shadows tinted with the surface hue */
-  --shadow-color: oklch(0.2 0.02 250);
-  --shadow-sm: 0 1px 2px color-mix(in oklch, var(--shadow-color) 6%, transparent);
-  --shadow-md:
-    0 4px 12px -2px color-mix(in oklch, var(--shadow-color) 10%, transparent),
-    0 1px 2px color-mix(in oklch, var(--shadow-color) 6%, transparent);
-  --shadow-lg:
-    0 12px 32px -8px color-mix(in oklch, var(--shadow-color) 18%, transparent),
-    0 2px 6px color-mix(in oklch, var(--shadow-color) 8%, transparent);
-
-  /* radius scale (explicit; do not derive from one base) */
-  --radius-xs: 4px; /* chips, kbd */
-  --radius-sm: 6px; /* inputs, buttons, menu items */
-  --radius-md: 8px; /* rows, tiles */
-  --radius-lg: 12px; /* cards, sections */
-  --radius-xl: 16px; /* dialogs, sheets, session columns */
-  --radius-2xl: 20px; /* pre-call / end-of-call card */
-  --radius: var(--radius-sm); /* shadcn base; keep for vendored components */
-
-  /* motion */
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  --dur-1: 120ms; /* press feedback, tooltips */
-  --dur-2: 180ms; /* hover, chips, menus */
-  --dur-3: 240ms; /* dialogs, popovers, section switches */
-  --dur-4: 320ms; /* sheets/drawers only */
+  /* session-only survivors (not spec tokens; the dark call stage) */
+  --stage: oklch(93% 0.006 250);
+  --shadow-color: oklch(20% 0.015 260); /* legacy: dialog backdrop until UI-2 moves it to --overlay */
 }
 
+/* Dark theme: literal values. Surfaces get lighter as they come forward. */
 .dark {
-  --background: oklch(0.17 0.012 250);
-  --foreground: oklch(0.96 0.005 250);
-  --card: oklch(0.21 0.012 250);
-  --card-foreground: var(--foreground);
-  --popover: oklch(0.23 0.012 250);
-  --popover-foreground: var(--foreground);
-  --muted: oklch(0.26 0.012 250);
-  --muted-foreground: oklch(0.72 0.012 250);
-  --accent: oklch(0.27 0.012 250);
-  --accent-foreground: var(--foreground);
-  --secondary: oklch(0.28 0.012 250);
-  --secondary-foreground: var(--foreground);
-  --primary: oklch(0.94 0.005 250);
-  --primary-foreground: oklch(0.2 0.012 250);
-  --border: oklch(1 0 0 / 16%); /* spec 10% → 16%: 1.5:1 decorative floor */
-  --input: oklch(1 0 0 / 35%); /* spec 16% → 35%: 3:1 over background and card */
-  --ring: var(--brand);
-  /* 0.66 → 0.72 (V2-19C): the destructive button's text on its own
-     `destructive/20` tint over --card was 4.07:1; now 4.85:1 (4.6:1 on popover). */
-  --destructive: oklch(0.72 0.19 25);
-  --destructive-foreground: oklch(0.15 0.03 25);
+  /* neutrals and text */
+  --background: oklch(17.5% 0.008 260);
+  --card: oklch(20.5% 0.009 260);
+  --popover: oklch(23% 0.01 260);
+  --muted: oklch(24.5% 0.01 260);
+  --muted-strong: oklch(28% 0.011 260);
+  --border: oklch(28.5% 0.01 260);
+  --border-strong: oklch(56% 0.012 260);
+  --input: oklch(53% 0.012 260); /* spec 52% -> 53%: 3:1 on muted */
+  --foreground: oklch(96% 0.004 260);
+  --text-secondary: oklch(75% 0.01 260);
+  --text-tertiary: oklch(65% 0.01 260);
+  --text-disabled: oklch(46% 0.01 260);
+  --sidebar: oklch(14.5% 0.008 260);
+  --sidebar-hover: oklch(21% 0.01 260);
+  --sidebar-active: oklch(24.5% 0.011 260);
+  --overlay: oklch(4% 0 0 / 0.66);
+  --scrim: oklch(17.5% 0.008 260 / 0.95);
 
-  --brand: oklch(0.74 0.15 152);
-  --brand-foreground: oklch(0.18 0.03 152);
-  --brand-text: oklch(0.8 0.14 152);
-  --brand-soft: oklch(0.74 0.15 152 / 14%);
-  --brand-line: oklch(0.74 0.15 152 / 40%);
+  /* accent */
+  --brand: oklch(76% 0.1 188);
+  --brand-hover: oklch(71% 0.1 188);
+  --brand-active: oklch(66% 0.1 188);
+  --brand-foreground: oklch(19% 0.03 195);
+  --brand-subtle: oklch(27% 0.04 195);
+  --brand-border: oklch(42% 0.07 195);
+  --ring: oklch(72% 0.1 190);
 
-  --info: oklch(0.72 0.11 250);
-  --info-soft: oklch(0.72 0.11 250 / 14%);
-  --info-text: oklch(0.8 0.1 250);
-  --success: var(--brand);
-  --success-soft: var(--brand-soft);
-  --success-text: var(--brand-text);
-  --warning: oklch(0.8 0.14 80);
-  --warning-soft: oklch(0.8 0.14 80 / 14%);
-  --warning-text: oklch(0.85 0.13 85);
-  --danger: oklch(0.7 0.17 25);
-  --danger-soft: oklch(0.7 0.17 25 / 14%);
-  --danger-text: oklch(0.8 0.14 25);
+  /* status scales: light solids take near-black text in dark mode (white fails) */
+  --success-solid: oklch(74% 0.15 150);
+  --success-text: oklch(79% 0.13 150);
+  --success-subtle: oklch(25.5% 0.04 150);
+  --success-border: oklch(39% 0.08 150);
+  --success-foreground: oklch(19% 0.03 150);
+  --warning-solid: oklch(80% 0.15 80);
+  --warning-text: oklch(83% 0.13 80);
+  --warning-subtle: oklch(26.5% 0.045 80);
+  --warning-border: oklch(41% 0.08 80);
+  --warning-foreground: oklch(20% 0.03 80);
+  --info-solid: oklch(72% 0.12 250);
+  --info-text: oklch(79% 0.1 250);
+  --info-subtle: oklch(25.5% 0.04 250);
+  --info-border: oklch(39% 0.08 250);
+  --info-foreground: oklch(19% 0.03 250);
+  --destructive-solid: oklch(70% 0.18 27); /* spec 64% -> 70%: legacy text-destructive on its /20 tint */
+  --destructive-text: oklch(77% 0.12 25);
+  --destructive-subtle: oklch(25.5% 0.045 25);
+  --destructive-border: oklch(41% 0.1 25);
+  --destructive-foreground: oklch(17% 0.03 27);
+  --destructive-hover: oklch(65% 0.18 27); /* spec 59% -> 65%: follows the solid, 5 points darker */
 
-  --sidebar: oklch(0.19 0.012 250);
-  --sidebar-foreground: var(--foreground);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: oklch(0.25 0.012 250);
-  --sidebar-accent-foreground: var(--foreground);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: var(--brand);
+  /* charts: lightened for dark surfaces */
+  --chart-1: oklch(72% 0.03 255);
+  --chart-2: oklch(70% 0.13 255);
+  --chart-3: oklch(80% 0.14 75);
+  --chart-4: oklch(76% 0.1 188);
+  --chart-5: oklch(72% 0.14 295);
+  --chart-6: oklch(74% 0.14 150);
+  --chart-7: oklch(74% 0.14 50);
+  --chart-8: oklch(66% 0.005 260);
 
-  --stage: oklch(0.13 0.012 250);
-  --stage-foreground: var(--foreground);
+  /* elevation: black shadows; borders do most of the separating */
+  --elevation-raised: 0 1px 2px oklch(0% 0 0 / 0.3);
+  --elevation-overlay: 0 12px 32px -8px oklch(0% 0 0 / 0.6), 0 2px 6px oklch(0% 0 0 / 0.3);
+  --elevation-modal: 0 28px 64px -16px oklch(0% 0 0 / 0.75), 0 4px 12px oklch(0% 0 0 / 0.4);
 
-  --shadow-color: oklch(0.05 0.01 250);
-  --shadow-sm: 0 1px 2px color-mix(in oklch, var(--shadow-color) 40%, transparent);
-  --shadow-md:
-    0 4px 14px -2px color-mix(in oklch, var(--shadow-color) 50%, transparent),
-    0 1px 2px color-mix(in oklch, var(--shadow-color) 40%, transparent);
-  --shadow-lg:
-    0 16px 40px -8px color-mix(in oklch, var(--shadow-color) 65%, transparent),
-    0 2px 6px color-mix(in oklch, var(--shadow-color) 40%, transparent);
+  /* session-only survivors */
+  --stage: oklch(13% 0.012 250);
+  --shadow-color: oklch(5% 0.01 250);
 
   color-scheme: dark;
+}
+
+/* Both themes: theme-invariant values and every alias (re-resolved per theme). */
+:root,
+.dark {
+  /* type (spec 3) */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* radius */
+  --radius-sm: 6px; /* small buttons, tags, menu items */
+  --radius: 8px; /* buttons, inputs */
+  --radius-lg: 12px; /* cards, popovers, the main panel */
+  --radius-dialog: 14px;
+  --radius-pill: 999px; /* badges, switches, chips */
+
+  /* motion */
+  --duration-fast: 100ms; /* hover colours */
+  --duration-base: 150ms; /* popovers, switches */
+  --duration-slow: 220ms; /* dialogs, toasts */
+  --ease-entrance: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* focus: inputs and open triggers; everything else gets the global :focus-visible outline */
+  --focus-shadow: 0 0 0 1px var(--brand), 0 0 0 4px var(--brand-subtle);
+
+  /* layout */
+  --layout-topbar: 56px;
+  --layout-panel-inset: 8px;
+  --layout-bottombar: 60px;
+
+  /* legacy aliases (docs/ui/AUDIT.md section 4); retired by the verification package */
+  --card-foreground: var(--foreground);
+  --popover-foreground: var(--foreground);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--muted); /* shadcn "accent" = hover fill */
+  --accent-foreground: var(--foreground);
+  --secondary: var(--muted-strong);
+  --secondary-foreground: var(--foreground);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-foreground);
+  --destructive: var(--destructive-solid);
+  --brand-text: var(--brand);
+  --brand-soft: var(--brand-subtle);
+  --brand-line: var(--brand-border);
+  --success: var(--success-solid);
+  --success-soft: var(--success-subtle);
+  --warning: var(--warning-solid);
+  --warning-soft: var(--warning-subtle);
+  --info: var(--info-solid);
+  --info-soft: var(--info-subtle);
+  --danger: var(--destructive-solid);
+  --danger-soft: var(--destructive-subtle);
+  --danger-text: var(--destructive-text);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: var(--brand-foreground);
+  --sidebar-accent: var(--sidebar-hover);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --stage-foreground: var(--foreground);
+  --shadow-sm: var(--elevation-raised);
+  --shadow-md: var(--elevation-overlay);
+  --shadow-lg: var(--elevation-overlay);
+  --radius-xs: var(--radius-sm);
+  --radius-md: var(--radius);
+  --radius-xl: var(--radius-dialog);
+  --radius-2xl: 20px; /* session-only: pre-call and end-of-call card */
+  --dur-1: var(--duration-fast);
+  --dur-2: var(--duration-base);
+  --dur-3: var(--duration-slow);
+  --dur-4: var(--duration-slow);
+  --ease-out: var(--ease-entrance);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); /* state meter */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1); /* session bottom sheet */
 }
 
 @layer base {
@@ -240,18 +391,37 @@
   html {
     @apply font-sans;
   }
+  /* Body type (spec 3): 14 px / 1.5, -.003em, antialiased, Inter cv11 + ss01. */
   body {
     @apply bg-background text-foreground;
+    font-size: 14px;
+    line-height: 1.5;
+    letter-spacing: -0.003em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01";
   }
-  /* Session surface: dark, fixed (§2.2). Tokens come from the `.dark` wrapper. */
+  /* Session surface: dark, fixed. Tokens come from the `.dark` wrapper. */
   [data-surface="session"] {
     color-scheme: dark;
   }
-  /* Focus: 2 px brand ring, 2 px offset (§2.4). Components that draw their
-     own `focus-visible:ring-*` override this with `outline-none`. */
+  /* Focus (spec 2.4): 2 px ring outline, 2 px offset. Inputs and open
+     triggers use --focus-shadow instead and set `outline-none`. */
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
+  }
+  /* Icons (spec 5): one stroke width, 16 px by default; override size by
+     context with size-* utilities, never the stroke. The Icon wrapper
+     (data-slot=icon) still sizes through width/height attributes, so the
+     default size skips it until UI-2 moves it to classes. */
+  .lucide {
+    stroke-width: 1.75px;
+    flex: none;
+  }
+  .lucide:not([data-slot="icon"]) {
+    width: 16px;
+    height: 16px;
   }
   h1,
   h2,
@@ -264,18 +434,47 @@
   }
 }
 
-/* Reduced motion: drop transforms, keep colour/opacity (§2.5). */
+/* Phones (decision D11): text inputs render at 16 px so iOS does not zoom
+   on focus. Unlayered on purpose, so it wins over text-sm utilities. */
+@media (max-width: 640px) {
+  input:not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="range"],
+      [type="color"],
+      [type="file"],
+      [type="button"],
+      [type="submit"],
+      [type="reset"],
+      [type="image"],
+      [type="hidden"]
+    ),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* Reduced motion (spec 5): every animation and transition collapses to 1 ms
+   and runs once; the state meter's keyframes stop entirely. */
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
   .motion-safe-transform,
   [data-slot="state-meter"] [data-bar] {
     animation: none !important;
-    transition-property: color, background-color, border-color, opacity !important;
   }
 }
 
 /*
- * State meter — the signature primitive (§2.1). CSS-only; GPU-only
- * properties (transform, opacity). Markup: components/shared/state-meter.tsx.
+ * State meter: the signature primitive. CSS-only; GPU-only properties
+ * (transform, opacity). Markup: components/shared/state-meter.tsx.
  *   [data-slot=state-meter][data-state][data-size] > [data-bar] (style --i, --rest)
  */
 @layer components {
@@ -283,7 +482,7 @@
     --meter-bar-w: 3px;
     --meter-gap: 2px;
     --meter-h: 12px;
-    --meter-color: var(--muted-foreground);
+    --meter-color: var(--text-tertiary);
     display: inline-flex;
     flex-shrink: 0;
     align-items: center;
@@ -309,19 +508,19 @@
     display: block;
     width: var(--meter-bar-w);
     height: 100%;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--meter-color);
     transform: scaleY(var(--rest, 0.3));
     transform-origin: center;
     transition:
-      transform var(--dur-2) var(--ease-out),
-      background-color var(--dur-2) ease,
-      opacity var(--dur-2) ease;
+      transform var(--duration-base) var(--ease-entrance),
+      background-color var(--duration-base) ease,
+      opacity var(--duration-base) ease;
     will-change: transform;
   }
   [data-slot="state-meter"][data-state="idle"],
   [data-slot="state-meter"][data-state="ended"] {
-    --meter-color: color-mix(in oklch, var(--muted-foreground) 70%, transparent);
+    --meter-color: color-mix(in oklch, var(--text-tertiary) 70%, transparent);
   }
   [data-slot="state-meter"][data-state="idle"] [data-bar],
   [data-slot="state-meter"][data-state="ended"] [data-bar],
@@ -335,7 +534,7 @@
     --meter-color: var(--brand);
   }
   [data-slot="state-meter"][data-state="failed"] {
-    --meter-color: var(--danger);
+    --meter-color: var(--destructive-solid);
   }
   /* connecting: slow sequential pulse */
   [data-slot="state-meter"][data-state="connecting"] [data-bar] {

@@ -167,5 +167,5 @@ Package-level product questions raised along the way (kept here so none is lost)
 - **F1** Migrate about 50 legacy alias uses outside `ui/`, `agents-ui/` and `panels/`, then add a lint rule.
 - **F2** Move Test model off `GatedButton`, then delete the shim.
 - **F3** Check the settings-tabs hydration warning under `next start`.
-- **F4** Re-run `render-check.spec.ts` once a server serves the merged code.
+- **F4** Done 2026-10-01: re-run against the dev server serving the merged code — 40 routes × 2 themes × 3 widths reached, 0 horizontal overflow, 0 console errors on the final pass (a first pass hit dev-server connection resets on 6 routes, which passed on re-run; the intermittent settings-tabs hydration warning (F3) appeared once).
 - **F5** For the panels owner: axe `scrollable-region-focusable` on `src/panels/blocks/chart.tsx:74`, the chart block's scroll region (filled state).

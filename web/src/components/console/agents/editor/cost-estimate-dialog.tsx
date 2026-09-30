@@ -81,7 +81,7 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
           <DialogBody className="flex flex-col gap-6">
             <section aria-label="Estimated cost" className="flex flex-col gap-1 rounded-lg border border-border bg-muted/30 p-4">
               {isLoading && !estimate ? (
-                <p className="text-sm text-muted-foreground">Estimating…</p>
+                <p className="text-sm text-text-secondary">Estimating…</p>
               ) : perMinute ? (
                 <>
                   <p className="text-lg font-semibold text-foreground">
@@ -92,20 +92,20 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
                     )}
                   </p>
                   {perSession ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-text-secondary">
                       ≈ {formatUsd(perSession.mid) ?? "—"} for a {estimate?.session_minutes ?? "—"}-minute call · estimate
                     </p>
                   ) : null}
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground">Nothing here is priced yet — add a price below to see a figure.</p>
+                <p className="text-sm text-text-secondary">Nothing here is priced yet — add a price below to see a figure.</p>
               )}
             </section>
 
             <section aria-label="Assumptions" className="flex flex-col gap-3">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-foreground">Assumptions</h3>
-                <label className="flex items-center gap-2 text-[0.8125rem] text-muted-foreground">
+                <label className="flex items-center gap-2 text-label text-text-secondary">
                   <Switch
                     checked={settings.workspaceAverages}
                     disabled={!canUseAverages}
@@ -115,18 +115,18 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
                 </label>
               </div>
               {!canUseAverages ? (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-text-secondary">
                   Needs 10 ended sessions with usage — this workspace has {sessionsSampled}.
                 </p>
               ) : settings.workspaceAverages ? (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-text-secondary">
                   Using this workspace&apos;s own averages from its last 30 days of sessions.
                 </p>
               ) : null}
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="cost-estimate-channel" className="text-xs font-medium text-muted-foreground">
+                  <Label htmlFor="cost-estimate-channel" className="text-xs font-medium text-text-secondary">
                     Call type
                   </Label>
                   <Select value={settings.channel} onValueChange={(value) => setSettings({ channel: value as typeof settings.channel })}>
@@ -160,7 +160,7 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
                   <BreakdownRow key={`${line.slot}-${index}`} line={line} />
                 ))}
                 {(estimate?.lines ?? []).length === 0 ? (
-                  <li className="p-4 text-sm text-muted-foreground">Nothing to break down yet.</li>
+                  <li className="p-4 text-sm text-text-secondary">Nothing to break down yet.</li>
                 ) : null}
               </ul>
             </section>
@@ -170,8 +170,8 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
                 <h3 className="text-sm font-semibold text-foreground">Not included (no published price)</h3>
                 <ul className="flex flex-col gap-1.5">
                   {unpricedLines.map((line, index) => (
-                    <li key={`${line.slot}-${index}`} className="flex items-center justify-between gap-2 text-[0.8125rem]">
-                      <span className="text-muted-foreground">
+                    <li key={`${line.slot}-${index}`} className="flex items-center justify-between gap-2 text-label">
+                      <span className="text-text-secondary">
                         {line.label} — {line.provider_id}
                         {line.model ? ` ${line.model}` : ""}
                       </span>
@@ -179,7 +179,7 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
                         <button
                           type="button"
                           onClick={() => openPricesFor(line)}
-                          className="shrink-0 rounded-xs font-medium text-brand-text underline underline-offset-2 outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-ring"
+                          className="shrink-0 rounded-sm font-medium text-brand underline underline-offset-2 outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           Set a price
                         </button>
@@ -190,7 +190,7 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
               </section>
             ) : null}
 
-            <p className="text-xs text-pretty text-muted-foreground">
+            <p className="text-xs text-pretty text-text-secondary">
               List prices at the entry tier as of {estimate?.as_of ?? "today"}; OpenRouter prices live; your own
               prices where set. Estimates are not bills.
             </p>
@@ -238,7 +238,7 @@ function AssumptionField({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id} className="text-xs font-medium text-muted-foreground">
+      <Label htmlFor={id} className="text-xs font-medium text-text-secondary">
         {assumption.label}
       </Label>
       <Input
@@ -249,7 +249,7 @@ function AssumptionField({
         className="h-9"
       />
       {assumption.source !== "default" ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-text-secondary">
           {assumption.source === "workspace" ? "Your workspace's average" : "Edited for this estimate"}
         </p>
       ) : null}
@@ -271,7 +271,7 @@ function BreakdownRow({ line }: { line: EstimateLine }) {
             : (line.note ?? "no price")}
         </span>
       </div>
-      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+      <div className="flex items-center justify-between gap-3 text-xs text-text-secondary">
         <span>{line.provider_id}{line.model ? ` · ${line.model}` : ""}</span>
         {line.quote ? (
           <span>
@@ -315,14 +315,14 @@ function TechnicalUnitDisclosure({ line }: { line: EstimateLine }) {
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          className="flex w-fit items-center gap-1 text-xs text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex w-fit items-center gap-1 text-xs text-text-secondary underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Icon as={ChevronRightIcon} size="sm" className={cn("transition-transform", open && "rotate-90")} />
           Details
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 text-xs text-text-secondary">
           {quantity != null ? `${quantity} ${unitWord}${line.quantity_per_min != null ? " per minute" : " per call"}` : "No quantity yet."}
           {line.quote ? ` · $${line.quote.usd_per_unit} per ${unitWord.replace(/s$/, "")}` : null}
         </p>

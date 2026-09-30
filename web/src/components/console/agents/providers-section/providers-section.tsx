@@ -299,7 +299,7 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
                   }}
                 />
               ) : connectionNote ? (
-                <p data-slot="connection-note" className="text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">
+                <p data-slot="connection-note" className="text-label leading-[1.125rem] text-pretty text-text-secondary">
                   {connectionNote}
                 </p>
               ) : undefined
@@ -387,12 +387,12 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
       </Group>
 
       <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-        <CollapsibleTrigger className="group/adv inline-flex items-center gap-1 rounded-xs text-sm font-medium text-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-          <ChevronRightIcon className="size-4 transition-transform duration-(--dur-2) group-data-[state=open]/adv:rotate-90" aria-hidden="true" />
+        <CollapsibleTrigger className="group/adv inline-flex items-center gap-1 rounded-sm text-sm font-medium text-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+          <ChevronRightIcon className="size-4 transition-transform duration-(--duration-base) group-data-[state=open]/adv:rotate-90" aria-hidden="true" />
           Advanced: hearing speech, ending turns, filtering noise
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-3 flex flex-col gap-3">
-          <p className="max-w-[65ch] text-[0.8125rem] text-pretty text-muted-foreground">
+          <p className="max-w-[65ch] text-label text-pretty text-text-secondary">
             You only need these to change the defaults. Left unset, the agent uses the connection&apos;s own choices.
           </p>
           {ADVANCED_SLOTS.map((key) => renderSlot(key, true))}
@@ -407,10 +407,10 @@ function Group({ title, description, children }: { title: string; description?: 
   return (
     <section aria-labelledby={id} className="flex flex-col gap-3">
       <div className="flex flex-col gap-0.5">
-        <h2 id={id} className="text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em] text-balance text-foreground">
+        <h2 id={id} className="text-dialog leading-6 font-semibold tracking-[-0.01em] text-balance text-foreground">
           {title}
         </h2>
-        {description ? <p className="max-w-[65ch] text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">{description}</p> : null}
+        {description ? <p className="max-w-[65ch] text-label leading-[1.125rem] text-pretty text-text-secondary">{description}</p> : null}
       </div>
       {children}
     </section>
@@ -461,8 +461,8 @@ function ModeCards({
                 disabled
                   ? "cursor-not-allowed opacity-60"
                   : cn(
-                      "cursor-pointer transition-colors duration-(--dur-2) hover:bg-accent",
-                      "has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft",
+                      "cursor-pointer transition-colors duration-(--duration-base) hover:bg-muted",
+                      "has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle",
                       "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background",
                     ),
               )}
@@ -478,14 +478,14 @@ function ModeCards({
               />
               <span
                 aria-hidden="true"
-                className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+                className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded bg-muted text-text-secondary"
               >
                 {mode.icon === "dots" ? <LinkedDots /> : <Icon as={mode.icon} size="md" />}
               </span>
               <span className="flex min-w-0 flex-col gap-1">
                 <span className="text-sm font-semibold text-foreground">{mode.title}</span>
-                <span className="text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">{mode.description}</span>
-                {disabled ? <span className="text-[0.8125rem] text-pretty text-warning-text">{halfCascadeDisabledReason}</span> : null}
+                <span className="text-label leading-[1.125rem] text-pretty text-text-secondary">{mode.description}</span>
+                {disabled ? <span className="text-label text-pretty text-warning-text">{halfCascadeDisabledReason}</span> : null}
               </span>
             </label>
           );
@@ -509,14 +509,14 @@ function LinkedDots() {
 
 function VisionNote({ onShowVisionModels }: { onShowVisionModels: () => void }) {
   return (
-    <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2 text-[0.8125rem] leading-[1.125rem] text-warning-text">
+    <div className="flex items-start gap-2 rounded bg-warning-subtle px-3 py-2 text-label leading-[1.125rem] text-warning-text">
       <Icon as={EyeOffIcon} size="sm" className="mt-0.5" />
       <p className="text-pretty">
         This model can&apos;t see images; pick one marked Vision to use the camera.{" "}
         <button
           type="button"
           onClick={onShowVisionModels}
-          className="rounded-xs font-medium underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded-sm font-medium underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           Show vision models
         </button>
@@ -576,7 +576,7 @@ function AvatarOptionsFields({
     framing && framing !== "auto" && declaredAspect && framing !== declaredAspect,
   );
   return (
-    <div className="ml-4 flex flex-col gap-4 rounded-md border border-dashed border-border p-4 sm:ml-7">
+    <div className="ml-4 flex flex-col gap-4 rounded border border-dashed border-border p-4 sm:ml-7">
       <h4 className="text-sm font-semibold text-foreground">Avatar options</h4>
       <div className="grid gap-4 sm:grid-cols-2">
         <Controller
@@ -696,7 +696,7 @@ function AvatarOptionsFields({
           data-testid="avatar-framing-preview"
           data-framing={previewFraming}
           data-fit={frame.objectFit}
-          className="bg-stage flex w-24 shrink-0 items-center justify-center overflow-hidden rounded-md"
+          className="bg-stage flex w-24 shrink-0 items-center justify-center overflow-hidden rounded"
           style={{ aspectRatio: aspectRatioStyle(frame.aspectRatio) }}
         >
           <Icon
@@ -706,7 +706,7 @@ function AvatarOptionsFields({
             style={frame.objectFit === "cover" ? { transform: "translateY(-20%)" } : undefined}
           />
         </div>
-        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <div className="flex flex-col gap-1 text-xs text-text-secondary">
           <p>
             Preview: {FRAMING_LABEL[previewFraming]} framing, {frame.objectFit === "cover" ? "filling the space" : "showing the whole avatar"}.
           </p>

@@ -21,10 +21,10 @@ import {
 } from "./template-meta";
 
 const BADGE_TONE: Record<TemplateBadge["tone"], string> = {
-  warning: "bg-warning-soft text-warning-text",
-  info: "bg-info-soft text-info-text",
-  neutral: "bg-muted text-muted-foreground",
-  success: "bg-transparent px-0 text-muted-foreground",
+  warning: "bg-warning-subtle text-warning-text",
+  info: "bg-info-subtle text-info-text",
+  neutral: "bg-muted text-text-secondary",
+  success: "bg-transparent px-0 text-text-secondary",
 };
 
 /** A capability chip: icon + label, the one-sentence help as its tooltip. */
@@ -37,9 +37,9 @@ export function TemplateChipPill({ chip }: { chip: keyof typeof TEMPLATE_CHIP_ME
       data-chip={chip}
       aria-label={meta.label}
       title={meta.help}
-      className="inline-flex h-6 items-center gap-1 rounded-full border border-border bg-background px-2 text-[0.6875rem] leading-none font-medium text-foreground/80"
+      className="inline-flex h-6 items-center gap-1 rounded-pill border border-border bg-background px-2 text-caption leading-none font-medium text-foreground/80"
     >
-      <Icon as={meta.icon} size="sm" className="size-3 text-muted-foreground" />
+      <Icon as={meta.icon} size="sm" className="size-3 text-text-secondary" />
       <span aria-hidden="true">{meta.label}</span>
     </span>
   );
@@ -52,11 +52,11 @@ export function TemplateBadgePill({ badge }: { badge: TemplateBadge }) {
       data-badge={badge.kind}
       title={badge.title}
       className={cn(
-        "inline-flex h-5 items-center gap-1 rounded-xs px-1.5 text-[0.6875rem] leading-none font-medium tracking-[0.01em] whitespace-nowrap",
+        "inline-flex h-5 items-center gap-1 rounded-sm px-1.5 text-caption leading-none font-medium tracking-[0.01em] whitespace-nowrap",
         BADGE_TONE[badge.tone],
       )}
     >
-      {badge.kind === "keys_present" ? <Icon as={CheckIcon} size="sm" className="size-3 text-success" /> : null}
+      {badge.kind === "keys_present" ? <Icon as={CheckIcon} size="sm" className="size-3 text-success-text" /> : null}
       {badge.label}
     </span>
   );
@@ -117,10 +117,10 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
       data-template={template.id}
       data-selected={selected ? "" : undefined}
       className={cn(
-        "group/tile relative flex flex-col rounded-lg border bg-card text-card-foreground transition-[border-color,background-color,box-shadow] duration-(--dur-2) ease-out",
+        "group/tile relative flex flex-col rounded-lg border bg-card text-foreground transition-[border-color,background-color,box-shadow] duration-(--duration-base) ease-out",
         "has-focus-visible:ring-2 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-background",
         selected
-          ? "border-brand-line bg-brand-soft/40 shadow-xs ring-1 ring-brand-line"
+          ? "border-brand-border bg-brand-subtle/40 shadow-xs ring-1 ring-brand-border"
           : "border-border hover:border-foreground/20 hover:bg-muted/40",
         className,
       )}
@@ -130,8 +130,8 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
           <span
             aria-hidden="true"
             className={cn(
-              "inline-flex size-9 shrink-0 items-center justify-center rounded-md border transition-colors duration-(--dur-2)",
-              selected ? "border-brand-line bg-brand-soft text-brand-text" : "border-border bg-muted/60 text-muted-foreground",
+              "inline-flex size-9 shrink-0 items-center justify-center rounded border transition-colors duration-(--duration-base)",
+              selected ? "border-brand-border bg-brand-subtle text-brand" : "border-border bg-muted/60 text-text-secondary",
             )}
           >
             <Icon as={category.icon} size="md" />
@@ -140,7 +140,7 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
             <span id={`${uid}-name`} className="block text-sm leading-5 font-semibold text-foreground">
               {template.name}
             </span>
-            <span id={`${uid}-tagline`} className="mt-0.5 block text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">
+            <span id={`${uid}-tagline`} className="mt-0.5 block text-label leading-[1.125rem] text-pretty text-text-secondary">
               {template.tagline}
             </span>
           </span>
@@ -170,13 +170,13 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
               <span
                 data-slot="template-estimate"
                 title={`Estimate at list prices as of ${item.estimate?.as_of}, before your own usage`}
-                className="inline-flex h-5 items-center rounded-xs bg-muted px-1.5 text-[0.6875rem] leading-none font-medium tracking-[0.01em] whitespace-nowrap text-muted-foreground"
+                className="inline-flex h-5 items-center rounded-sm bg-muted px-1.5 text-caption leading-none font-medium tracking-[0.01em] whitespace-nowrap text-text-secondary"
               >
                 {estimateUsd} · estimate
               </span>
             ) : null}
             {inference ? (
-              <span className="inline-flex items-center gap-1 text-[0.6875rem] leading-4 text-muted-foreground">
+              <span className="inline-flex items-center gap-1 text-caption leading-4 text-text-secondary">
                 <Icon as={ZapIcon} size="sm" className="size-3" />
                 Runs on LiveKit Inference — no vendor key
               </span>
@@ -185,7 +185,7 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
         ) : null}
       </label>
       {selected && children ? (
-        <div data-slot="template-tile-preview" className="border-t border-brand-line/60 px-3.5 py-3.5 lg:hidden">
+        <div data-slot="template-tile-preview" className="border-t border-brand-border/60 px-3.5 py-3.5 lg:hidden">
           {children}
         </div>
       ) : null}

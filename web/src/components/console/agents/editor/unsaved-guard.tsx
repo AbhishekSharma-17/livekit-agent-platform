@@ -81,7 +81,7 @@ export function UnsavedGuard({ dirty, name }: { dirty: boolean; name: string }) 
           <Button
             type="button"
             variant="destructive"
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90"
+            className="bg-destructive-solid text-destructive-foreground hover:bg-destructive-solid/90 dark:bg-destructive-solid dark:hover:bg-destructive-solid/90"
             onClick={() => {
               const href = pendingHref;
               setPendingHref(null);

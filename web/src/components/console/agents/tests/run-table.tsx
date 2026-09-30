@@ -47,7 +47,7 @@ export interface RunTableProps {
 
 export function RunTable({ runs, selectedRunId, onSelect }: RunTableProps) {
   if (runs.length === 0) {
-    return <p className="text-sm text-muted-foreground">No runs yet — pick Run to try the cases above.</p>;
+    return <p className="text-sm text-text-secondary">No runs yet — pick Run to try the cases above.</p>;
   }
   return (
     <ul className="flex flex-col gap-1.5" aria-label="Test runs">
@@ -58,15 +58,15 @@ export function RunTable({ runs, selectedRunId, onSelect }: RunTableProps) {
             onClick={() => onSelect(run.id)}
             aria-pressed={selectedRunId === run.id}
             className={cn(
-              "flex w-full flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-left transition-colors duration-(--dur-2) hover:bg-accent",
-              selectedRunId === run.id && "border-brand-line bg-brand-soft/40",
+              "flex w-full flex-wrap items-center justify-between gap-2 rounded border border-border px-3 py-2 text-left transition-colors duration-(--duration-base) hover:bg-muted",
+              selectedRunId === run.id && "border-brand-border bg-brand-subtle/40",
             )}
           >
             <span className="flex flex-wrap items-center gap-2">
               <StatusChip tone={RUN_STATUS_TONE[run.status]}>{RUN_STATUS_LABEL[run.status]}</StatusChip>
-              <span className="text-[0.8125rem] text-muted-foreground">{summary(run)}</span>
+              <span className="text-label text-text-secondary">{summary(run)}</span>
             </span>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-text-secondary">
               <RelativeTime iso={run.created_at} />
             </span>
           </button>

@@ -192,7 +192,7 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
             <div className="flex flex-col gap-3 p-4">
               <p className="text-sm font-semibold">This agent is live</p>
               <PublicUrlRow url={url} />
-              <p className="text-[0.8125rem] text-muted-foreground">Anyone with the link can call this agent.</p>
+              <p className="text-label text-text-secondary">Anyone with the link can call this agent.</p>
             </div>
             <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
               <Button asChild variant="outline" size="sm">
@@ -205,7 +205,7 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
                 type="button"
                 variant="outline"
                 size="sm"
-                className="text-danger-text hover:bg-danger-soft hover:text-danger-text"
+                className="text-destructive-text hover:bg-destructive-subtle hover:text-destructive-text"
                 onClick={() => {
                   setOpen(false);
                   setConfirmUnpublish(true);
@@ -229,7 +229,7 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
               <Button
                 type="button"
                 variant="destructive"
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90"
+                className="bg-destructive-solid text-destructive-foreground hover:bg-destructive-solid/90 dark:bg-destructive-solid dark:hover:bg-destructive-solid/90"
                 disabled={updateAgent.isPending}
                 onClick={() => void unpublish()}
               >
@@ -256,7 +256,7 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
         {step === "unsaved" ? (
           <div className="flex flex-col gap-3 p-4">
             <p className="text-sm font-semibold">You have unsaved changes</p>
-            <p className="text-[0.8125rem] text-pretty text-muted-foreground">
+            <p className="text-label text-pretty text-text-secondary">
               Publishing uses the saved configuration. Save first to publish what you see.
             </p>
             <div className="flex flex-wrap justify-end gap-2">
@@ -272,7 +272,7 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
           <>
             <div className="flex flex-col gap-3 p-4">
               <p className="text-sm font-semibold">Publish this agent</p>
-              <p className="text-[0.8125rem] text-pretty text-muted-foreground">
+              <p className="text-label text-pretty text-text-secondary">
                 Publishing makes <span className="font-mono text-foreground">/s/{agent.slug}</span> answer calls from
                 anyone with the link.
               </p>
@@ -286,7 +286,7 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
                 }}
               />
               {testsFailing ? (
-                <div role="status" className="flex flex-col gap-2 rounded-md bg-danger-soft px-3 py-2.5 text-[0.8125rem] text-danger-text">
+                <div role="status" className="flex flex-col gap-2 rounded bg-destructive-subtle px-3 py-2.5 text-label text-destructive-text">
                   <p className="flex items-center gap-1.5 font-semibold">
                     <Icon as={CircleAlertIcon} size="sm" />
                     Tests failing
@@ -332,7 +332,7 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
 function PublicUrlRow({ url }: { url: string }) {
   return (
     <div className="flex min-w-0 items-center gap-1 rounded-sm border border-border bg-muted py-1 pr-1 pl-2.5">
-      <span className="min-w-0 flex-1 truncate font-mono text-[0.8125rem]" title={url}>
+      <span className="min-w-0 flex-1 truncate font-mono text-label" title={url}>
         {url}
       </span>
       <CopyButton value={url} label="Copy public link" size="sm" />
@@ -353,7 +353,7 @@ function CheckResult({
 }) {
   if (check.status === "idle" || check.status === "loading") {
     return (
-      <p role="status" className="flex items-center gap-2 text-[0.8125rem] text-muted-foreground">
+      <p role="status" className="flex items-center gap-2 text-label text-text-secondary">
         <Icon as={LoaderCircleIcon} size="sm" className="animate-spin motion-reduce:animate-none" />
         Checking the saved configuration…
       </p>
@@ -361,7 +361,7 @@ function CheckResult({
   }
   if (check.status === "failed") {
     return (
-      <div role="status" className="flex flex-col gap-2 rounded-md bg-danger-soft px-3 py-2.5 text-[0.8125rem] text-danger-text">
+      <div role="status" className="flex flex-col gap-2 rounded bg-destructive-subtle px-3 py-2.5 text-label text-destructive-text">
         <p>Couldn&apos;t check the configuration — {check.message}</p>
         <button type="button" onClick={onRetry} className="self-start font-medium underline underline-offset-2">
           Try again
@@ -371,7 +371,7 @@ function CheckResult({
   }
   if (messages.errors.length > 0) {
     return (
-      <div role="status" className="flex flex-col gap-2 rounded-md bg-danger-soft px-3 py-2.5 text-[0.8125rem] text-danger-text">
+      <div role="status" className="flex flex-col gap-2 rounded bg-destructive-subtle px-3 py-2.5 text-label text-destructive-text">
         <p className="flex items-center gap-1.5 font-semibold">
           <Icon as={CircleAlertIcon} size="sm" />
           Fix {pluralize(messages.errors.length, "issue", "issues")} first
@@ -385,7 +385,7 @@ function CheckResult({
   }
   if (messages.warnings.length > 0) {
     return (
-      <div role="status" className="flex flex-col gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-[0.8125rem] text-warning-text">
+      <div role="status" className="flex flex-col gap-2 rounded bg-warning-subtle px-3 py-2.5 text-label text-warning-text">
         <p className="flex items-center gap-1.5 font-semibold">
           <Icon as={TriangleAlertIcon} size="sm" />
           {pluralize(messages.warnings.length, "warning", "warnings")}
@@ -395,7 +395,7 @@ function CheckResult({
     );
   }
   return (
-    <p role="status" className="flex items-center gap-1.5 rounded-md bg-success-soft px-3 py-2 text-[0.8125rem] text-success-text">
+    <p role="status" className="flex items-center gap-1.5 rounded bg-success-subtle px-3 py-2 text-label text-success-text">
       <Icon as={CircleCheckIcon} size="sm" />
       Configuration looks good
     </p>

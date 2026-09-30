@@ -86,7 +86,7 @@ export function PatternTester({ pattern, ignoreCase }: { pattern: string; ignore
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/30 p-3">
+    <div className="flex flex-col gap-2 rounded border border-border bg-muted/30 p-3">
       <Field
         label="Test this pattern"
         htmlFor="guardrail-pattern-sample"
@@ -110,19 +110,19 @@ export function PatternTester({ pattern, ignoreCase }: { pattern: string; ignore
         </div>
       </Field>
       {slow ? (
-        <p className="text-[0.8125rem] text-warning-text">
+        <p className="text-label text-warning-text">
           This pattern repeats a group that already repeats, which can take very long on long text; the
           server will refuse it on save until it&apos;s simplified.
         </p>
       ) : null}
       {result?.kind === "matched" ? (
-        <p className="text-[0.8125rem] font-medium text-danger-text">Matches — this would trip the rule.</p>
+        <p className="text-label font-medium text-destructive-text">Matches — this would trip the rule.</p>
       ) : null}
       {result?.kind === "no-match" ? (
-        <p className="text-[0.8125rem] text-muted-foreground">Doesn&apos;t match this sample.</p>
+        <p className="text-label text-text-secondary">Doesn&apos;t match this sample.</p>
       ) : null}
       {result?.kind === "cant-check" ? (
-        <p className="text-[0.8125rem] text-muted-foreground">
+        <p className="text-label text-text-secondary">
           Can&apos;t check this pattern in the browser — it&apos;s still checked when you save.
         </p>
       ) : null}

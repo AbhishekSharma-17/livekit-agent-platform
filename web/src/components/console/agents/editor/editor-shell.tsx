@@ -152,7 +152,7 @@ export function EditorShell({
           <div className="flex min-w-0 flex-col gap-1.5">
             <Link
               href="/console/agents"
-              className="inline-flex items-center gap-1 self-start rounded-xs text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="inline-flex items-center gap-1 self-start rounded-sm text-xs font-medium text-text-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <Icon as={ChevronLeftIcon} size="sm" />
               Agents
@@ -160,7 +160,7 @@ export function EditorShell({
             <AgentTitle />
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="inline-flex min-w-0 items-center gap-0.5">
-                <span className="truncate font-mono text-[0.8125rem] text-muted-foreground">/{agent.slug}</span>
+                <span className="truncate font-mono text-label text-text-secondary">/{agent.slug}</span>
                 <CopyButton value={agent.slug} label="Copy slug" size="xs" />
               </span>
               <StatusChip tone={agent.published ? "live" : "neutral"} size="sm">
@@ -169,8 +169,8 @@ export function EditorShell({
               <ConnectionChipSlot agent={agent} />
               {ModeChipSlot ? <ModeChipSlot agent={agent} /> : <ModeChip />}
               {dirty ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground" role="status">
-                  <span aria-hidden="true" className="size-1.5 rounded-full bg-warning" />
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-text-secondary" role="status">
+                  <span aria-hidden="true" className="size-1.5 rounded-pill bg-warning-solid" />
                   Unsaved changes
                 </span>
               ) : null}
@@ -213,7 +213,7 @@ export function EditorShell({
         {looksGood ? (
           <p
             role="status"
-            className="mb-3 flex items-center gap-1.5 rounded-sm bg-success-soft px-3 py-1.5 text-[0.8125rem] text-success-text"
+            className="mb-3 flex items-center gap-1.5 rounded-sm bg-success-subtle px-3 py-1.5 text-label text-success-text"
           >
             <Icon as={CircleCheckIcon} size="sm" />
             Configuration looks good
@@ -310,7 +310,7 @@ export function EditorShell({
             <Button
               type="button"
               variant="destructive"
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90"
+              className="bg-destructive-solid text-destructive-foreground hover:bg-destructive-solid/90 dark:bg-destructive-solid dark:hover:bg-destructive-solid/90"
               disabled={deleting}
               onClick={async () => {
                 setDeleting(true);
@@ -398,7 +398,7 @@ export function AgentTitle() {
             }}
             aria-invalid={shown ? true : undefined}
             aria-describedby={shown ? `${inputId}-error` : undefined}
-            className="h-9 max-w-md text-[1.0625rem] font-semibold"
+            className="h-9 max-w-md text-dialog font-semibold"
             data-issue-path="name"
             name="name"
           />
@@ -412,7 +412,7 @@ export function AgentTitle() {
           </Button>
         </div>
         {shown ? (
-          <p id={`${inputId}-error`} className="text-[0.8125rem] text-danger-text">
+          <p id={`${inputId}-error`} className="text-label text-destructive-text">
             {shown}
           </p>
         ) : null}
@@ -422,7 +422,7 @@ export function AgentTitle() {
 
   return (
     <div className="flex min-w-0 items-center gap-1">
-      <h1 className="truncate text-[1.375rem] leading-7 font-semibold tracking-[-0.015em]">{name}</h1>
+      <h1 className="truncate text-page leading-7 font-semibold tracking-[-0.015em]">{name}</h1>
       <Button
         ref={pencilRef}
         type="button"
@@ -430,11 +430,11 @@ export function AgentTitle() {
         size="icon-sm"
         aria-label="Edit name"
         onClick={start}
-        className="shrink-0 text-muted-foreground"
+        className="shrink-0 text-text-secondary"
       >
         <Icon as={PencilIcon} size="sm" />
       </Button>
-      {formError ? <span className="text-[0.8125rem] text-danger-text">{formError}</span> : null}
+      {formError ? <span className="text-label text-destructive-text">{formError}</span> : null}
     </div>
   );
 }

@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { connectionTypeLabel, useAgentConnection } from "./use-connection";
 
 const CHIP =
-  "inline-flex h-6 max-w-full min-w-0 items-center gap-1 rounded-xs border border-border bg-card px-2 text-xs font-medium text-muted-foreground";
+  "inline-flex h-6 max-w-full min-w-0 items-center gap-1 rounded-sm border border-border bg-card px-2 text-xs font-medium text-text-secondary";
 
 /**
  * Read-only connection chip (UI_UX_SPEC-V2-AMENDMENTS §2.3): name + type.

@@ -54,7 +54,7 @@ function OptionsEditor({ index }: { index: number }) {
         const options = field.value ?? [];
         return (
           <div className="flex flex-col gap-1.5">
-            <span className="text-[0.8125rem] font-medium">Choices</span>
+            <span className="text-label font-medium">Choices</span>
             {options.map((option, optionIndex) => (
               <div key={optionIndex} className="flex items-center gap-2">
                 <Input
@@ -218,7 +218,7 @@ export function QaFieldsCard() {
           >
             {qaEnabled === false ? (
               <SectionRow>
-                <p className="text-[0.8125rem] text-warning-text">
+                <p className="text-label text-warning-text">
                   These run only when post-call scoring is turned on for this
                   agent.
                 </p>
@@ -226,7 +226,7 @@ export function QaFieldsCard() {
             ) : null}
             <SectionRow className="flex flex-col divide-y divide-border">
               {rows.length === 0 ? (
-                <p className="py-1 text-sm text-muted-foreground">
+                <p className="py-1 text-sm text-text-secondary">
                   No fields yet.
                 </p>
               ) : (

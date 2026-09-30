@@ -214,7 +214,7 @@ export function CaseDialog({ open, onOpenChange, initial, otherIds, onSave }: Ca
 
           <fieldset className="flex flex-col gap-2">
             <legend className="text-sm font-medium">Expectations</legend>
-            <p className="text-[0.8125rem] text-muted-foreground">
+            <p className="text-label text-text-secondary">
               What must be true of the agent&apos;s side of the call — the judges check each one.
             </p>
             {draft.expectations.map((expectation, index) => (
@@ -239,7 +239,7 @@ export function CaseDialog({ open, onOpenChange, initial, otherIds, onSave }: Ca
 
           <fieldset className="flex flex-col gap-2">
             <legend className="text-sm font-medium">Tool mocks</legend>
-            <p className="text-[0.8125rem] text-muted-foreground">
+            <p className="text-label text-text-secondary">
               Optional: make a tool return a fixed result in this case instead of calling out. A plain value is kept
               as text; JSON (e.g. <span className="font-mono">{"{\"ok\": true}"}</span>) is parsed.
             </p>
@@ -265,7 +265,7 @@ export function CaseDialog({ open, onOpenChange, initial, otherIds, onSave }: Ca
                 </Button>
               </div>
             ))}
-            {mockErrors.some(Boolean) ? <p className="text-[0.8125rem] text-danger-text">Not a valid tool name.</p> : null}
+            {mockErrors.some(Boolean) ? <p className="text-label text-destructive-text">Not a valid tool name.</p> : null}
             <Button type="button" variant="outline" size="sm" className="self-start" onClick={addMockRow}>
               <Icon as={PlusIcon} size="sm" /> Add a mocked tool
             </Button>

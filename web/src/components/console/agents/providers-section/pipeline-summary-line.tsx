@@ -60,7 +60,7 @@ export function PipelineSummaryLine({ pipeline, providers, connection, variant =
   if (summary.text === "") return null;
   if (variant === "rail") {
     return (
-      <p data-slot="pipeline-summary" className={cn("text-[0.8125rem] leading-[1.125rem] text-pretty text-foreground", className)}>
+      <p data-slot="pipeline-summary" className={cn("text-label leading-[1.125rem] text-pretty text-foreground", className)}>
         {summary.text}
       </p>
     );
@@ -70,7 +70,7 @@ export function PipelineSummaryLine({ pipeline, providers, connection, variant =
       data-slot="pipeline-summary"
       className={cn("flex max-w-[65ch] flex-col gap-1 rounded-lg border border-border bg-muted/40 px-4 py-3", className)}
     >
-      <span className="text-xs font-medium text-muted-foreground">How this agent works</span>
+      <span className="text-xs font-medium text-text-secondary">How this agent works</span>
       <p className="text-sm leading-5 text-pretty text-foreground">{summary.text}</p>
     </div>
   );
@@ -87,12 +87,12 @@ export function ConnectionNotes({ connection, className }: { connection: Connect
   if (notes.length === 0) return null;
   return (
     <Collapsible defaultOpen={limited > 0} className={className} data-slot="connection-notes">
-      <CollapsibleTrigger className="group/notes inline-flex items-center gap-1 rounded-xs text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <ChevronRightIcon className="size-4 transition-transform duration-(--dur-2) group-data-[state=open]/notes:rotate-90" aria-hidden="true" />
+      <CollapsibleTrigger className="group/notes inline-flex items-center gap-1 rounded-sm text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <ChevronRightIcon className="size-4 transition-transform duration-(--duration-base) group-data-[state=open]/notes:rotate-90" aria-hidden="true" />
         {limited > 0 ? "What LiveKit Cloud has that this connection doesn't" : "What this connection has"}
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <ul className="mt-2 flex max-w-[65ch] flex-col gap-1.5 text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">
+        <ul className="mt-2 flex max-w-[65ch] flex-col gap-1.5 text-label leading-[1.125rem] text-pretty text-text-secondary">
           {notes.map((note) => (
             <li key={note.id} data-limited={note.limited ? "true" : undefined}>
               <span className="font-medium text-foreground">{note.label}: </span>

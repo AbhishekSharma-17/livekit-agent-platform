@@ -139,12 +139,12 @@ export function RuleDialog({ open, onOpenChange, initial, otherNames, stageLabel
                   <label
                     key={option.value}
                     htmlFor={id}
-                    className="flex items-start gap-2.5 rounded-md border border-border p-2.5 text-sm has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft/40"
+                    className="flex items-start gap-2.5 rounded border border-border p-2.5 text-sm has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle/40"
                   >
                     <RadioGroupItem id={id} value={option.value} className="mt-0.5" />
                     <span className="flex flex-col gap-0.5">
                       <span className="font-medium text-foreground">{option.label}</span>
-                      <span className="text-[0.8125rem] text-pretty text-muted-foreground">{option.hint}</span>
+                      <span className="text-label text-pretty text-text-secondary">{option.hint}</span>
                     </span>
                   </label>
                 );
@@ -212,7 +212,7 @@ export function RuleDialog({ open, onOpenChange, initial, otherNames, stageLabel
             <>
               <fieldset className="flex flex-col gap-2">
                 <legend className="text-sm font-medium text-foreground">What it flags</legend>
-                <p className="text-[0.8125rem] text-muted-foreground">
+                <p className="text-label text-text-secondary">
                   Leave every box unchecked to trip on anything the service flags.
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -257,7 +257,7 @@ export function RuleDialog({ open, onOpenChange, initial, otherNames, stageLabel
                   error={serverError}
                 />
               ) : (
-                <p className="text-[0.8125rem] text-muted-foreground">
+                <p className="text-label text-text-secondary">
                   No key selected uses the agent&apos;s own OpenAI key.
                 </p>
               )}

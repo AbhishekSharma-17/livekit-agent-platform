@@ -310,7 +310,7 @@ function ToolStepFields({
           </SelectContent>
         </Select>
         {toolOptions.length === 0 ? (
-          <p className="mt-1 text-[0.8125rem] text-muted-foreground">
+          <p className="mt-1 text-label text-text-secondary">
             Attach a tool to this agent first, in its Tools section.
           </p>
         ) : null}
@@ -380,12 +380,12 @@ function ToolOutcomesField({
     <div className="flex flex-col gap-3">
       <div>
         <h3 className="text-sm font-medium text-foreground">Outcomes</h3>
-        <p className="text-[0.8125rem] text-pretty text-muted-foreground">
+        <p className="text-label text-pretty text-text-secondary">
           Which path this step takes next, depending on how the call went.
         </p>
       </div>
       {edgeOptions.length === 0 ? (
-        <p className="text-[0.8125rem] text-muted-foreground">
+        <p className="text-label text-text-secondary">
           Draw a path from this step on the canvas, then assign it to an outcome here.
         </p>
       ) : (
@@ -431,7 +431,7 @@ function ToolOutcomesField({
                   })}
                 </SelectContent>
               </Select>
-              {stale ? <p className="mt-1 text-[0.8125rem] text-danger-text">This path no longer exists.</p> : null}
+              {stale ? <p className="mt-1 text-label text-destructive-text">This path no longer exists.</p> : null}
             </Field>
           );
         })
@@ -475,14 +475,14 @@ function KbScopeNote({
       count === 1 ? "Inherits the one knowledge base of this agent." : `Inherits all ${count} knowledge bases of this agent.`;
     const narrow = isGlobal ? "Pick some here to narrow every step." : "Pick some here or on the Global node to narrow.";
     return (
-      <p id={id} data-kb-scope="inherits" className="text-[0.8125rem] text-muted-foreground">
+      <p id={id} data-kb-scope="inherits" className="text-label text-text-secondary">
         {inherits} {narrow}
       </p>
     );
   }
   if (scope.state === "none") {
     return (
-      <p id={id} data-kb-scope="none" className="text-[0.8125rem] text-warning-text">
+      <p id={id} data-kb-scope="none" className="text-label text-warning-text">
         {isGlobal
           ? "Adds no knowledge base to the steps; each step searches only its own picks."
           : "This step searches no knowledge base."}
@@ -529,7 +529,7 @@ export function CheckboxList({
   ];
   if (all.length === 0) {
     return (
-      <p id={id} className="text-[0.8125rem] text-muted-foreground" aria-describedby={describedBy}>
+      <p id={id} className="text-label text-text-secondary" aria-describedby={describedBy}>
         {empty}
       </p>
     );
@@ -549,11 +549,11 @@ export function CheckboxList({
               onCheckedChange={(checked) => toggle(option.value, checked === true)}
             />
             <label htmlFor={checkboxId} className="flex min-w-0 flex-col text-sm leading-5">
-              <span className={cn("truncate", option.unknown && "text-danger-text")}>
+              <span className={cn("truncate", option.unknown && "text-destructive-text")}>
                 {option.label}
-                {option.group ? <span className="ml-1.5 text-xs text-muted-foreground">{option.group}</span> : null}
+                {option.group ? <span className="ml-1.5 text-xs text-text-secondary">{option.group}</span> : null}
               </span>
-              {option.hint ? <span className="text-xs text-muted-foreground">{option.hint}</span> : null}
+              {option.hint ? <span className="text-xs text-text-secondary">{option.hint}</span> : null}
             </label>
           </div>
         );
@@ -591,7 +591,7 @@ function ProviderOverrides({
         const slotOptions = options.filter((option) => option.kind === slot);
         return (
           <div key={slot} className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-2">
-            <span className="text-xs font-medium uppercase text-muted-foreground">{slot}</span>
+            <span className="text-xs font-medium uppercase text-text-secondary">{slot}</span>
             <div className="flex min-w-0 flex-col gap-1.5">
               <Select
                 value={current?.provider_id ?? DEFAULT}

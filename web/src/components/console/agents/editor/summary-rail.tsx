@@ -95,8 +95,8 @@ function RailRow({ label, section, onClick, actionLabel, children }: RailRowProp
   const canLink = Boolean(section && ctx?.sections.some((s) => s.id === section));
   const body = (
     <>
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <span className="min-w-0 text-[0.8125rem] leading-[1.125rem]">{children}</span>
+      <span className="text-xs font-medium text-text-secondary">{label}</span>
+      <span className="min-w-0 text-label leading-[1.125rem]">{children}</span>
     </>
   );
   if (onClick) {
@@ -105,13 +105,13 @@ function RailRow({ label, section, onClick, actionLabel, children }: RailRowProp
         type="button"
         onClick={onClick}
         aria-label={actionLabel ?? label}
-        className="group/rail-row relative flex w-full flex-col gap-1 px-4 py-3 pr-9 text-left outline-none transition-colors duration-(--dur-2) ease-out hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        className="group/rail-row relative flex w-full flex-col gap-1 px-4 py-3 pr-9 text-left outline-none transition-colors duration-(--duration-base) ease-out hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       >
         {body}
         <Icon
           as={ChevronRightIcon}
           size="sm"
-          className="absolute top-3.5 right-3 text-muted-foreground opacity-0 transition-opacity duration-(--dur-2) group-hover/rail-row:opacity-100 group-focus-visible/rail-row:opacity-100"
+          className="absolute top-3.5 right-3 text-text-secondary opacity-0 transition-opacity duration-(--duration-base) group-hover/rail-row:opacity-100 group-focus-visible/rail-row:opacity-100"
         />
       </button>
     );
@@ -127,13 +127,13 @@ function RailRow({ label, section, onClick, actionLabel, children }: RailRowProp
         onNavigate?.();
       }}
       aria-label={`${label}: open the ${ctx.sections.find((s) => s.id === section)?.label ?? section} section`}
-      className="group/rail-row relative flex w-full flex-col gap-1 px-4 py-3 pr-9 text-left outline-none transition-colors duration-(--dur-2) ease-out hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      className="group/rail-row relative flex w-full flex-col gap-1 px-4 py-3 pr-9 text-left outline-none transition-colors duration-(--duration-base) ease-out hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
     >
       {body}
       <Icon
         as={ChevronRightIcon}
         size="sm"
-        className="absolute top-3.5 right-3 text-muted-foreground opacity-0 transition-opacity duration-(--dur-2) group-hover/rail-row:opacity-100 group-focus-visible/rail-row:opacity-100"
+        className="absolute top-3.5 right-3 text-text-secondary opacity-0 transition-opacity duration-(--duration-base) group-hover/rail-row:opacity-100 group-focus-visible/rail-row:opacity-100"
       />
     </button>
   );
@@ -143,8 +143,8 @@ function SlotLine({ slot, value, providers }: { slot: PipelineSlot; value: Provi
   if (!value?.provider_id) {
     return (
       <li className="flex items-center gap-2">
-        <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-xs border border-dashed border-border" />
-        <span className="text-muted-foreground">
+        <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm border border-dashed border-border" />
+        <span className="text-text-secondary">
           {PART_JOBS[slot].verb}: {SLOT_LABEL[slot].toLowerCase()} not set
         </span>
       </li>
@@ -157,9 +157,9 @@ function SlotLine({ slot, value, providers }: { slot: PipelineSlot; value: Provi
     <li className="flex min-w-0 items-center gap-2">
       <VendorMark vendor={spec?.vendor ?? value.provider_id} size="sm" />
       <span className="min-w-0">
-        <span className="block text-[0.6875rem] leading-4 text-muted-foreground">{PART_JOBS[slot].verb}</span>
+        <span className="block text-caption leading-4 text-text-secondary">{PART_JOBS[slot].verb}</span>
         <span className="block truncate font-medium">{spec?.label ?? value.provider_id}</span>
-        {modelLabel ? <span className="block truncate text-xs text-muted-foreground">{modelLabel}</span> : null}
+        {modelLabel ? <span className="block truncate text-xs text-text-secondary">{modelLabel}</span> : null}
       </span>
     </li>
   );
@@ -193,26 +193,26 @@ export function NextStepsCard({ className }: { className?: string }) {
   }
 
   const itemClass =
-    "group/step flex w-full items-start gap-2.5 rounded-xs px-4 py-2 text-left text-[0.8125rem] leading-[1.125rem] outline-none transition-colors duration-(--dur-2) ease-out hover:bg-brand-soft/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
+    "group/step flex w-full items-start gap-2.5 rounded-sm px-4 py-2 text-left text-label leading-[1.125rem] outline-none transition-colors duration-(--duration-base) ease-out hover:bg-brand-subtle/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
   return (
     <section
       aria-labelledby={headingId}
       data-slot="next-steps"
-      className={cn("shrink-0 overflow-hidden rounded-lg border border-brand-line bg-brand-soft/30", className)}
+      className={cn("shrink-0 overflow-hidden rounded-lg border border-brand-border bg-brand-subtle/30", className)}
     >
       <div className="flex items-start gap-2 px-4 pt-3 pb-2">
-        <Icon as={ListChecksIcon} size="sm" className="mt-0.5 text-brand-text" />
+        <Icon as={ListChecksIcon} size="sm" className="mt-0.5 text-brand" />
         <div className="min-w-0 flex-1">
           <h2 id={headingId} className="text-sm font-semibold">
             Next steps
           </h2>
-          <p className="text-xs text-muted-foreground">Created from {template.name}</p>
+          <p className="text-xs text-text-secondary">Created from {template.name}</p>
         </div>
         <button
           type="button"
           onClick={dismiss}
-          className="shrink-0 rounded-xs text-xs font-medium text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+          className="shrink-0 rounded-sm text-xs font-medium text-text-secondary underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
         >
           Dismiss
         </button>
@@ -221,7 +221,7 @@ export function NextStepsCard({ className }: { className?: string }) {
         {steps.map((step) => {
           const body = (
             <>
-              <Icon as={CircleDashedIcon} size="sm" className="mt-0.5 text-muted-foreground group-hover/step:text-brand-text" />
+              <Icon as={CircleDashedIcon} size="sm" className="mt-0.5 text-text-secondary group-hover/step:text-brand" />
               <span className="min-w-0 flex-1 text-pretty">{step.label}</span>
             </>
           );
@@ -252,7 +252,7 @@ export function NextStepsCard({ className }: { className?: string }) {
             <li key={step.label}>
               <Link href={step.href ?? "#"} className={itemClass}>
                 {body}
-                <Icon as={ArrowUpRightIcon} size="sm" className="mt-0.5 text-muted-foreground" />
+                <Icon as={ArrowUpRightIcon} size="sm" className="mt-0.5 text-text-secondary" />
               </Link>
             </li>
           );
@@ -374,7 +374,7 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
               <StatusChip tone="neutral" size="sm" className="self-start">
                 Draft
               </StatusChip>
-              <span className="text-xs text-muted-foreground">Only test calls can reach it.</span>
+              <span className="text-xs text-text-secondary">Only test calls can reach it.</span>
             </span>
           )}
         </RailRow>
@@ -405,15 +405,15 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
               <span>
                 ≈ {formatUsd(costEstimate.estimate.per_minute_usd.mid) ?? "—"}/min · estimate
               </span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-text-secondary">
                 typically {formatUsd(costEstimate.estimate.per_minute_usd.low) ?? "—"}–
                 {formatUsd(costEstimate.estimate.per_minute_usd.high) ?? "—"}
               </span>
             </span>
           ) : costEstimate.isLoading ? (
-            <span className="text-muted-foreground">Estimating…</span>
+            <span className="text-text-secondary">Estimating…</span>
           ) : (
-            <span className="text-muted-foreground">No price set yet</span>
+            <span className="text-text-secondary">No price set yet</span>
           )}
         </RailRow>
         <RailRow label="Capabilities" section="panel">
@@ -426,8 +426,8 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
                   key={key}
                   title={`${meta.label}: ${on ? "on" : "off"}`}
                   className={cn(
-                    "inline-flex size-7 items-center justify-center rounded-xs border",
-                    on ? "border-brand-line bg-brand-soft text-brand-text" : "border-border text-muted-foreground/60",
+                    "inline-flex size-7 items-center justify-center rounded-sm border",
+                    on ? "border-brand-border bg-brand-subtle text-brand" : "border-border text-text-secondary/60",
                   )}
                 >
                   <Icon as={meta.icon} size="sm" label={`${meta.label}: ${on ? "on" : "off"}`} />
@@ -449,25 +449,25 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
           {recordingOn ? "On · audio" : "Off"}
         </RailRow>
         <div className="flex flex-col gap-1.5 px-4 py-3">
-          <Label htmlFor={descriptionId} className="text-xs font-medium text-muted-foreground">
+          <Label htmlFor={descriptionId} className="text-xs font-medium text-text-secondary">
             Description
           </Label>
           <Textarea
             id={descriptionId}
             rows={3}
             placeholder="What this agent is for"
-            className="min-h-16 resize-y text-[0.8125rem]"
+            className="min-h-16 resize-y text-label"
             aria-describedby={`${descriptionId}-hint`}
             name={description.field.name}
             value={description.field.value}
             onChange={description.field.onChange}
             onBlur={description.field.onBlur}
           />
-          <p id={`${descriptionId}-hint`} className="text-xs text-muted-foreground">
+          <p id={`${descriptionId}-hint`} className="text-xs text-text-secondary">
             Shown to callers on the call page. Saved with the agent.
           </p>
         </div>
-        <div className="flex flex-col gap-1 px-4 py-3 text-xs text-muted-foreground">
+        <div className="flex flex-col gap-1 px-4 py-3 text-xs text-text-secondary">
           <span className="flex items-center gap-2">
             <span>Version {agent.config_version}</span>
             {VersionHistory ? (
@@ -478,7 +478,7 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
                 type="button"
                 disabled
                 title="Version history isn't available yet"
-                className="rounded-xs font-medium underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-sm font-medium underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 History
               </button>

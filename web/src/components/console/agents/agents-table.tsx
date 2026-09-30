@@ -223,7 +223,7 @@ export function AgentsTable() {
           <div className="flex items-center gap-2">
             <span className="font-medium text-foreground">{agent.name}</span>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-xs text-text-secondary">
             <span className="font-mono">/{agent.slug}</span>
             <span aria-hidden="true">·</span>
             <span>{packLabels.get(agent.pack_id) ?? agent.pack_id}</span>
@@ -234,13 +234,13 @@ export function AgentsTable() {
     {
       id: "connection",
       header: "Connection",
-      cell: (agent) => <span className="text-[0.8125rem] text-muted-foreground">{connectionLabel(agent)}</span>,
+      cell: (agent) => <span className="text-label text-text-secondary">{connectionLabel(agent)}</span>,
     },
     {
       id: "mode",
       header: "Mode",
       cell: (agent) => (
-        <span className="text-[0.8125rem] text-muted-foreground">
+        <span className="text-label text-text-secondary">
           {PIPELINE_MODE_LABEL[agent.config.pipeline.mode ?? "cascaded"] ?? (agent.config.pipeline.mode ?? "Cascaded")}
         </span>
       ),
@@ -250,7 +250,7 @@ export function AgentsTable() {
       header: "Pipeline",
       cell: (agent) => {
         const ids = pipelineProviderIds(agent);
-        if (ids.length === 0) return <span className="text-[0.8125rem] text-muted-foreground">—</span>;
+        if (ids.length === 0) return <span className="text-label text-text-secondary">—</span>;
         return (
           <div className="flex items-center gap-1">
             {ids.map((id) => (
@@ -268,7 +268,7 @@ export function AgentsTable() {
     {
       id: "updated",
       header: "Last updated",
-      cell: (agent) => <RelativeTime iso={agent.updated_at} className="text-muted-foreground" />,
+      cell: (agent) => <RelativeTime iso={agent.updated_at} className="text-text-secondary" />,
     },
     {
       id: "actions",
@@ -402,11 +402,11 @@ function AgentCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate font-medium text-foreground">{agent.name}</p>
-          <p className="truncate font-mono text-xs text-muted-foreground">/{agent.slug}</p>
+          <p className="truncate font-mono text-xs text-text-secondary">/{agent.slug}</p>
         </div>
         <AgentStatusChip agent={agent} />
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary">
         <span>{packLabels.get(agent.pack_id) ?? agent.pack_id}</span>
         <span aria-hidden="true">·</span>
         <span>{connectionLabel}</span>
@@ -421,7 +421,7 @@ function AgentCard({
         ) : null}
       </div>
       <div className="flex items-center justify-between gap-2 pt-1">
-        <RelativeTime iso={agent.updated_at} className="text-xs text-muted-foreground" />
+        <RelativeTime iso={agent.updated_at} className="text-xs text-text-secondary" />
         {isArchived(agent) ? (
           <RestoreAgentButton agent={agent} />
         ) : (
@@ -597,7 +597,7 @@ function AgentRowMenu({
               <Button
                 type="button"
                 variant="destructive"
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90"
+                className="bg-destructive-solid text-destructive-foreground hover:bg-destructive-solid/90 dark:bg-destructive-solid dark:hover:bg-destructive-solid/90"
                 disabled={deleteAgent.isPending}
                 onClick={() => void confirmDelete()}
               >
@@ -625,7 +625,7 @@ function AgentRowMenu({
                 type="button"
                 variant={agent.published ? "destructive" : "default"}
                 className={
-                  agent.published ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90" : undefined
+                  agent.published ? "bg-destructive-solid text-destructive-foreground hover:bg-destructive-solid/90 dark:bg-destructive-solid dark:hover:bg-destructive-solid/90" : undefined
                 }
                 disabled={updateAgent.isPending}
                 onClick={() => void togglePublished()}

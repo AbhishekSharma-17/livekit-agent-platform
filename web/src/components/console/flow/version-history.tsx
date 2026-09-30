@@ -45,7 +45,7 @@ export function VersionHistory({ agent, variant = "link" }: { agent: AgentOut; v
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="rounded-xs font-medium underline underline-offset-2 hover:text-foreground"
+          className="rounded-sm font-medium underline underline-offset-2 hover:text-foreground"
         >
           History
         </button>
@@ -105,9 +105,9 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
           {versions.isLoading ? (
             <SkeletonRows label="Loading versions" rows={4} rowClassName="h-12" />
           ) : versions.isError ? (
-            <p className="text-sm text-danger-text">Couldn&apos;t load versions — {errorMessage(versions.error)}</p>
+            <p className="text-sm text-destructive-text">Couldn&apos;t load versions — {errorMessage(versions.error)}</p>
           ) : (
-            <ol aria-label="Versions" className="flex flex-col divide-y divide-border rounded-md border border-border">
+            <ol aria-label="Versions" className="flex flex-col divide-y divide-border rounded border border-border">
               {items.map((item) => {
                 const current = item.config_version === agent.config_version;
                 const active = item.config_version === selected;
@@ -125,7 +125,7 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
                     >
                       <span className="flex min-w-0 flex-col">
                         <span className="font-medium">Version {item.config_version}</span>
-                        <span className="truncate text-xs text-muted-foreground">
+                        <span className="truncate text-xs text-text-secondary">
                           <RelativeTime iso={item.created_at} />
                           {item.note ? ` · ${item.note}` : ""}
                         </span>
@@ -164,13 +164,13 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
               {version.data ? (
                 <VersionDiff before={version.data} after={agent} />
               ) : version.isError ? (
-                <p className="text-sm text-danger-text">Couldn&apos;t load version {selected}.</p>
+                <p className="text-sm text-destructive-text">Couldn&apos;t load version {selected}.</p>
               ) : (
                 <SkeletonRows label="Loading this version" rows={4} rowClassName="h-6" />
               )}
             </section>
           ) : (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-text-secondary">
               {items.length > 1
                 ? "Pick a version to see what changed since then."
                 : versions.isLoading
@@ -226,13 +226,13 @@ export function VersionDiff({ before, after }: { before: ConfigVersionOut; after
     };
   }, [before, after]);
 
-  if (failed) return <p className="text-sm text-danger-text">Couldn&apos;t compute the difference.</p>;
-  if (rows === null) return <p className="text-sm text-muted-foreground">Comparing…</p>;
-  if (rows.length === 0) return <p className="text-sm text-muted-foreground">No differences.</p>;
+  if (failed) return <p className="text-sm text-destructive-text">Couldn&apos;t compute the difference.</p>;
+  if (rows === null) return <p className="text-sm text-text-secondary">Comparing…</p>;
+  if (rows.length === 0) return <p className="text-sm text-text-secondary">No differences.</p>;
   return (
     <ul aria-label="Changes" className="flex flex-col gap-2">
       {rows.map((row, index) => (
-        <li key={`${row.path}-${index}`} className="rounded-md border border-border p-2 text-xs" data-diff-kind={row.kind}>
+        <li key={`${row.path}-${index}`} className="rounded border border-border p-2 text-xs" data-diff-kind={row.kind}>
           <div className="flex items-center gap-2">
             <StatusChip
               size="sm"
@@ -243,7 +243,7 @@ export function VersionDiff({ before, after }: { before: ConfigVersionOut; after
             <code className="truncate font-mono">{row.path || "(config)"}</code>
           </div>
           {row.kind === "changed" || row.kind === "removed" ? (
-            <p className="mt-1 font-mono break-all text-danger-text">− {preview(row.before)}</p>
+            <p className="mt-1 font-mono break-all text-destructive-text">− {preview(row.before)}</p>
           ) : null}
           {row.kind === "changed" || row.kind === "added" ? (
             <p className="mt-1 font-mono break-all text-success-text">+ {preview(row.after)}</p>

@@ -145,13 +145,13 @@ export function ConversationSection() {
                       key={p.value}
                       htmlFor={id}
                       className={cn(
-                        "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors duration-(--dur-2)",
-                        selected ? "border-brand-line bg-brand-soft/40 ring-1 ring-brand-line" : "border-border hover:border-foreground/20",
+                        "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors duration-(--duration-base)",
+                        selected ? "border-brand-border bg-brand-subtle/40 ring-1 ring-brand-border" : "border-border hover:border-foreground/20",
                       )}
                     >
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm font-medium leading-5">{p.label}</span>
-                        <span className="mt-0.5 block text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">
+                        <span className="mt-0.5 block text-label leading-[1.125rem] text-pretty text-text-secondary">
                           {p.description}
                         </span>
                       </span>
@@ -163,7 +163,7 @@ export function ConversationSection() {
             )}
           />
           {preset === "fast" ? (
-            <p className="text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">
+            <p className="text-label leading-[1.125rem] text-pretty text-text-secondary">
               Fast does not change how long voice activity detection waits for silence. To shorten that too, set Voice
               activity detection in Providers and lower its &quot;Silence before speech ends&quot;.
             </p>
@@ -363,7 +363,7 @@ export function ConversationSection() {
                     <RadioGroupItem id="turn-detector-stt" value="stt" /> Let speech-to-text decide
                   </label>
                 </RadioGroup>
-                <p className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                <p className="text-label leading-[1.125rem] text-text-secondary">
                   Leave unset to let the connection decide. Speech-to-text decides only with a model that can, such as
                   Deepgram Flux; with any other model the turn detector still runs.
                 </p>
@@ -463,16 +463,16 @@ export function ConversationSection() {
            */}
           <div className="flex flex-col gap-1.5">
             <p className="text-sm font-medium leading-5">Noise cancellation</p>
-            <p className="text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">
+            <p className="text-label leading-[1.125rem] text-pretty text-text-secondary">
               Cleans up the caller&apos;s audio before it reaches speech-to-text. Chosen in the Providers section.
             </p>
             <div className="flex flex-col gap-1 text-sm">
               <span>{ncProvider ? ncProvider.label : "Off"}</span>
               {ncProvider?.price_note ? (
-                <span className="text-[0.8125rem] text-muted-foreground">{ncProvider.price_note}</span>
+                <span className="text-label text-text-secondary">{ncProvider.price_note}</span>
               ) : null}
               {preset === "telephony" && ncProvider?.telephony_variant ? (
-                <span className="text-[0.8125rem] text-muted-foreground">
+                <span className="text-label text-text-secondary">
                   On phone calls this automatically uses the variant tuned for phone audio.
                 </span>
               ) : null}
@@ -480,7 +480,7 @@ export function ConversationSection() {
                 type="button"
                 variant="link"
                 size="sm"
-                className="h-auto w-fit p-0 text-[0.8125rem]"
+                className="h-auto w-fit p-0 text-label"
                 onClick={() => ctx?.goToSection("providers")}
               >
                 Change in Providers
@@ -526,7 +526,7 @@ export function ConversationSection() {
             // carries the same `data-issue-path` and is what actually receives
             // focus; `tabIndex` here only makes this local hint focusable too,
             // in case it is ever reached directly.
-            <p data-issue-path="tools.max_tool_steps" tabIndex={-1} className="text-[0.8125rem] text-warning-text">
+            <p data-issue-path="tools.max_tool_steps" tabIndex={-1} className="text-label text-warning-text">
               Read tools run &quot;{executionDefault}&quot; and each announcement spends a tool step; with {maxToolSteps} tool
               steps a chain of lookups can run out of steps — use {MIN_TOOL_STEPS_FOR_BACKGROUND} or more (Tools tab →
               Advanced → Tool steps per turn).
@@ -584,7 +584,7 @@ export function ConversationSection() {
                     );
                   })}
                 </RadioGroup>
-                <p className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                <p className="text-label leading-[1.125rem] text-text-secondary">
                   On a phone call there&apos;s no screen, so the banner is spoken in the greeting too.
                 </p>
               </div>
@@ -668,14 +668,14 @@ function AdvancedTurnHandling() {
         <Collapsible open={open} onOpenChange={setOpen}>
           <CollapsibleTrigger
             className={cn(
-              "group/more inline-flex items-center gap-1 rounded-xs text-[0.8125rem] font-medium text-muted-foreground outline-none",
+              "group/more inline-flex items-center gap-1 rounded-sm text-label font-medium text-text-secondary outline-none",
               "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
             )}
           >
             <Icon
               as={ChevronRightIcon}
               size="sm"
-              className="transition-transform duration-(--dur-2) group-data-[state=open]/more:rotate-90"
+              className="transition-transform duration-(--duration-base) group-data-[state=open]/more:rotate-90"
             />
             Advanced
           </CollapsibleTrigger>

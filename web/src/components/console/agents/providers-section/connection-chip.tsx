@@ -22,7 +22,7 @@ function hasNoWorkers(connection: ConnectionOut | undefined): boolean {
 }
 
 const CHIP =
-  "inline-flex h-6 max-w-full min-w-0 items-center gap-1 rounded-xs border border-border bg-card px-2 text-xs font-medium text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex h-6 max-w-full min-w-0 items-center gap-1 rounded-sm border border-border bg-card px-2 text-xs font-medium text-text-secondary outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
  * The `connectionChip` slot (V2-13, `agents/editor/README.md`): the header's
@@ -74,7 +74,7 @@ export function ConnectionChip({ agent: _agent }: { agent: AgentOut }) {
           </button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-80" aria-label="Choose a connection">
-          <p className="mb-2 text-xs font-medium text-muted-foreground">Run this agent on</p>
+          <p className="mb-2 text-xs font-medium text-text-secondary">Run this agent on</p>
           <div className="flex flex-col gap-1" role="listbox" aria-label="Connections">
             <ConnectionOption
               label={`Workspace default${defaultConnection ? ` (${defaultConnection.name})` : ""}`}
@@ -95,7 +95,7 @@ export function ConnectionChip({ agent: _agent }: { agent: AgentOut }) {
                 onSelect={() => choose(connection.id)}
               />
             ))}
-            {connections.length === 0 ? <p className="px-2 py-1.5 text-xs text-muted-foreground">No connections yet.</p> : null}
+            {connections.length === 0 ? <p className="px-2 py-1.5 text-xs text-text-secondary">No connections yet.</p> : null}
           </div>
         </PopoverContent>
       </Popover>
@@ -103,7 +103,7 @@ export function ConnectionChip({ agent: _agent }: { agent: AgentOut }) {
         <Link
           href={`/console/connections/${current.id}`}
           data-slot="connection-no-worker"
-          className="inline-flex min-w-0 items-center gap-1 rounded-xs text-xs font-medium text-warning-text underline-offset-3 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex min-w-0 items-center gap-1 rounded-sm text-xs font-medium text-warning-text underline-offset-3 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Icon as={TriangleAlertIcon} size="sm" />
           <span className="truncate">No worker is running for “{current.name}” — calls won&apos;t be answered. Start one</span>
@@ -137,8 +137,8 @@ function ConnectionOption({
       aria-selected={active}
       onClick={onSelect}
       className={cn(
-        "flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring",
-        active && "bg-brand-soft",
+        "flex flex-col gap-0.5 rounded px-2 py-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
+        active && "bg-brand-subtle",
       )}
     >
       <span className="flex items-center gap-1.5 text-foreground">
@@ -146,7 +146,7 @@ function ConnectionOption({
         {label}
       </span>
       {status ? (
-        <span className={cn("pl-5 text-xs", idle ? "text-warning-text" : "text-muted-foreground")}>{status}</span>
+        <span className={cn("pl-5 text-xs", idle ? "text-warning-text" : "text-text-secondary")}>{status}</span>
       ) : null}
       {warnings.length > 0 ? (
         <span className="pl-5 text-xs text-pretty text-warning-text">{warnings.join(" ")}</span>

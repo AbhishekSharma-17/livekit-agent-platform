@@ -108,11 +108,11 @@ export function AddToWebsiteDialog({
         <DialogBody className="gap-4">
           {/* The copy button has its own gutter inside the box, so the scrolling
               snippet never slides underneath it. */}
-          <div className="flex min-w-0 items-start rounded-md border border-border bg-muted/40">
+          <div className="flex min-w-0 items-start rounded border border-border bg-muted/40">
             <pre
               tabIndex={0}
               aria-label="Widget snippet"
-              className="min-w-0 flex-1 overflow-x-auto rounded-l-md py-3 pr-2 pl-3 font-mono text-xs leading-5 whitespace-pre text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              className="min-w-0 flex-1 overflow-x-auto rounded-l py-3 pr-2 pl-3 font-mono text-xs leading-5 whitespace-pre text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
             >
               <code>{snippet}</code>
             </pre>
@@ -120,7 +120,7 @@ export function AddToWebsiteDialog({
               <CopyButton value={snippet} label="Copy the widget snippet" />
             </div>
           </div>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-text-secondary">
             {hasOrigins
               ? "This site is already in the agent's allowed origins."
               : "Add the website's address to this agent's allowed origins first, or the widget won't be able to start a chat."}{" "}

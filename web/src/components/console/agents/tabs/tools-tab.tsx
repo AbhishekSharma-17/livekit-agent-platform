@@ -184,7 +184,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
           return (
             <React.Fragment key={group.label}>
               <SectionRow compact className="bg-muted/40">
-                <p className="text-xs font-medium text-muted-foreground">{group.label}</p>
+                <p className="text-xs font-medium text-text-secondary">{group.label}</p>
               </SectionRow>
               {group.tools.map((name) => {
                 const tool = byName.get(name);
@@ -205,7 +205,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
         })}
 
         <SectionRow compact className="bg-muted/40">
-          <p className="text-xs font-medium text-muted-foreground">Team notifications</p>
+          <p className="text-xs font-medium text-text-secondary">Team notifications</p>
         </SectionRow>
         <SectionRow>
           <NotifyTeamCard
@@ -217,7 +217,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
         </SectionRow>
 
         <SectionRow compact className="bg-muted/40">
-          <p className="text-xs font-medium text-muted-foreground">Network</p>
+          <p className="text-xs font-medium text-text-secondary">Network</p>
         </SectionRow>
         <SectionRow>
           <Field
@@ -266,7 +266,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
           <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
             <div className="flex flex-col gap-0.5">
               <h3 className="text-sm font-semibold text-foreground">{byName.get("fetch_url")?.label ?? "Read a web page"}</h3>
-              <p className="text-xs text-pretty text-muted-foreground">{byName.get("fetch_url")?.help}</p>
+              <p className="text-xs text-pretty text-text-secondary">{byName.get("fetch_url")?.help}</p>
             </div>
             <AllowedHostsEditor
               value={fetchUrlHosts}
@@ -292,7 +292,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
             error={slotProblem("tools.sms")?.message}
             errorTone={slotProblem("tools.sms")?.tone}
             notice={
-              <p className="text-[0.8125rem] text-muted-foreground">
+              <p className="text-label text-text-secondary">
                 The saved numbers it may text besides the caller live in the Telephony section, below.
               </p>
             }
@@ -303,12 +303,12 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
           <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
             <CollapsibleTrigger
               className={cn(
-                "group/more inline-flex items-center gap-1 rounded-xs text-[0.8125rem] font-medium text-muted-foreground outline-none",
+                "group/more inline-flex items-center gap-1 rounded-sm text-label font-medium text-text-secondary outline-none",
                 "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
               )}
             >
               <ChevronRightIcon
-                className="size-3.5 transition-transform duration-(--dur-2) group-data-[state=open]/more:rotate-90"
+                className="size-3.5 transition-transform duration-(--duration-base) group-data-[state=open]/more:rotate-90"
                 aria-hidden="true"
               />
               Advanced
@@ -394,7 +394,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
             </div>
           )}
           {datasetTools.length > 0 ? (
-            <p className="mt-2 text-[0.8125rem] text-muted-foreground">Saved automatically to this agent.</p>
+            <p className="mt-2 text-label text-text-secondary">Saved automatically to this agent.</p>
           ) : null}
         </SectionRow>
       </Section>
@@ -462,7 +462,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
             </div>
           )}
           {httpTools.length > 0 ? (
-            <p className="mt-2 text-[0.8125rem] text-muted-foreground">Saved automatically to this agent.</p>
+            <p className="mt-2 text-label text-text-secondary">Saved automatically to this agent.</p>
           ) : null}
         </SectionRow>
       </Section>
@@ -510,7 +510,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
             </div>
           )}
           {mcpTools.length > 0 ? (
-            <p className="mt-2 text-[0.8125rem] text-muted-foreground">Saved automatically to this agent.</p>
+            <p className="mt-2 text-label text-text-secondary">Saved automatically to this agent.</p>
           ) : null}
         </SectionRow>
       </Section>
@@ -550,13 +550,13 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
           {packsQuery.isLoading ? (
             <Skeleton className="h-6 w-48" />
           ) : (pack?.tool_names.length ?? 0) === 0 ? (
-            <p className="text-sm text-muted-foreground">This pack registers no code tools.</p>
+            <p className="text-sm text-text-secondary">This pack registers no code tools.</p>
           ) : (
             <ul className="flex flex-wrap gap-1.5">
               {pack?.tool_names.map((name) => (
                 <li
                   key={name}
-                  className="rounded-full bg-secondary px-2.5 py-0.5 font-mono text-xs text-secondary-foreground"
+                  className="rounded-pill bg-muted-strong px-2.5 py-0.5 font-mono text-xs text-foreground"
                 >
                   {name}
                 </li>
@@ -662,7 +662,7 @@ function AllowedHostsEditor({
             placeholder="docs.example.com"
             autoComplete="off"
             spellCheck={false}
-            className="font-mono text-[0.8125rem]"
+            className="font-mono text-label"
             onChange={(event) => {
               setDraft(event.target.value);
               if (draftError) setDraftError(null);
@@ -686,14 +686,14 @@ function AllowedHostsEditor({
           {value.map((host) => (
             <li
               key={host}
-              className="inline-flex h-7 items-center gap-1 rounded-xs border border-border bg-muted pr-0.5 pl-2 font-mono text-xs"
+              className="inline-flex h-7 items-center gap-1 rounded-sm border border-border bg-muted pr-0.5 pl-2 font-mono text-xs"
             >
               <span className="max-w-64 truncate">{host}</span>
               <button
                 type="button"
                 onClick={() => onChange(value.filter((item) => item !== host))}
                 aria-label={`Remove ${host}`}
-                className="inline-flex size-6 items-center justify-center rounded-xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex size-6 items-center justify-center rounded-sm text-text-secondary outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Icon as={XIcon} size="sm" />
               </button>
@@ -701,7 +701,7 @@ function AllowedHostsEditor({
           ))}
         </ul>
       ) : (
-        <p className="text-[0.8125rem] text-muted-foreground">No sites allowed yet: the agent can&apos;t read any web page.</p>
+        <p className="text-label text-text-secondary">No sites allowed yet: the agent can&apos;t read any web page.</p>
       )}
     </div>
   );
@@ -822,7 +822,7 @@ function NotifyTeamCard({
         </div>
       ) : null}
       {error ? (
-        <p className={cn("text-[0.8125rem]", error.tone === "error" ? "text-danger-text" : "text-warning-text")}>
+        <p className={cn("text-label", error.tone === "error" ? "text-destructive-text" : "text-warning-text")}>
           {error.message}
         </p>
       ) : null}

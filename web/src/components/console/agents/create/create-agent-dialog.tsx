@@ -349,7 +349,7 @@ function ChooseStep({
                 <React.Fragment key={item.template.id}>
                   {index === firstExample && firstExample > 0 ? (
                     <div className="col-span-full mt-2 flex items-center gap-3" data-slot="gallery-divider">
-                      <span className="inline-flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
+                      <span className="inline-flex items-center gap-1.5 text-caption font-semibold tracking-[0.06em] text-text-secondary uppercase">
                         <Icon as={FlaskConicalIcon} size="sm" className="size-3.5" />
                         Advanced example
                       </span>
@@ -370,7 +370,7 @@ function ChooseStep({
             </RadioGroup>
           )}
           {gallery?.source === "packs" ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-text-secondary">
               This server lists packs rather than starters. Update the server to see every starter.
             </p>
           ) : null}
@@ -397,7 +397,7 @@ function ChooseStep({
 
       <DialogFooter className="sm:items-center">
         {selected ? (
-          <p className="mr-auto hidden min-w-0 truncate text-xs text-muted-foreground sm:block" aria-live="polite">
+          <p className="mr-auto hidden min-w-0 truncate text-xs text-text-secondary sm:block" aria-live="polite">
             Selected: <span className="font-medium text-foreground">{selected.template.name}</span>
           </p>
         ) : null}
@@ -506,16 +506,16 @@ function NameStep({
 
       <DialogBody>
         <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
-          <div className="flex items-start gap-3 rounded-lg border border-brand-line bg-brand-soft/40 p-3.5">
+          <div className="flex items-start gap-3 rounded-lg border border-brand-border bg-brand-subtle/40 p-3.5">
             <span
               aria-hidden="true"
-              className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-brand-line bg-brand-soft text-brand-text"
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded border border-brand-border bg-brand-subtle text-brand"
             >
               <Icon as={category.icon} size="md" />
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-foreground">{template.name}</p>
-              <p className="mt-0.5 text-[0.8125rem] leading-[1.125rem] text-muted-foreground">{template.tagline}</p>
+              <p className="mt-0.5 text-label leading-[1.125rem] text-text-secondary">{template.tagline}</p>
               {(template.chips ?? []).length > 0 ? (
                 <span role="list" aria-label="Capabilities" className="mt-2.5 flex flex-wrap gap-1.5">
                   {(template.chips ?? []).map((chip) => (
@@ -603,22 +603,22 @@ function NameStep({
               ref={errorRef}
               role="alert"
               data-slot="create-agent-issues"
-              className="overflow-hidden rounded-lg border border-danger/30 bg-danger-soft"
+              className="overflow-hidden rounded-lg border border-destructive-solid/30 bg-destructive-subtle"
             >
-              <p className="flex items-center gap-2 px-4 pt-3 text-sm font-semibold text-danger-text">
+              <p className="flex items-center gap-2 px-4 pt-3 text-sm font-semibold text-destructive-text">
                 <Icon as={CircleAlertIcon} size="md" />
                 {error.title}
               </p>
               <ul className="flex flex-col gap-2 px-4 py-3">
                 {error.lines.map((line, index) => (
-                  <li key={`${line.path ?? ""}-${index}`} className="text-[0.8125rem] leading-[1.125rem] text-danger-text">
+                  <li key={`${line.path ?? ""}-${index}`} className="text-label leading-[1.125rem] text-destructive-text">
                     <p className="text-pretty break-words">{line.message}</p>
                     {line.path ? <p className="mt-0.5 font-mono text-xs break-all opacity-80">{line.path}</p> : null}
                   </li>
                 ))}
               </ul>
               {error.needsKeys ? (
-                <p className="border-t border-danger/20 px-4 py-2.5 text-[0.8125rem] leading-[1.125rem] text-danger-text">
+                <p className="border-t border-destructive-solid/20 px-4 py-2.5 text-label leading-[1.125rem] text-destructive-text">
                   This connection can&apos;t use LiveKit Inference.{" "}
                   <Link href="/console/providers" className="font-medium underline underline-offset-2">
                     Add a provider key

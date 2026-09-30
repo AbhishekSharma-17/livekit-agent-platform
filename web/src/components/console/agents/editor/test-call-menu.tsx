@@ -77,7 +77,7 @@ export function TestCallMenu({ agent, dirty, saveNow, extraItems = [] }: TestCal
       <PopoverContent align="end" className="w-[min(20rem,calc(100vw-2rem))]">
         <div className="flex flex-col gap-3">
           <p className="text-sm font-semibold">You have unsaved changes</p>
-          <p className="text-[0.8125rem] text-pretty text-muted-foreground">
+          <p className="text-label text-pretty text-text-secondary">
             The test call runs the saved configuration.
           </p>
           <div className="flex flex-wrap justify-end gap-2">

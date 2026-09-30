@@ -113,7 +113,7 @@ export function GuardrailsSection() {
             <legend className="text-sm font-medium text-foreground">
               What happens next, for what the caller or the agent says
             </legend>
-            <p className="text-[0.8125rem] text-muted-foreground">
+            <p className="text-label text-text-secondary">
               A tool result that trips is always replaced by the safe reply above — this choice doesn&apos;t
               change that.
             </p>
@@ -134,12 +134,12 @@ export function GuardrailsSection() {
                       <label
                         key={option.value}
                         htmlFor={id}
-                        className="flex items-start gap-2.5 rounded-md border border-border p-3 text-sm has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft/40"
+                        className="flex items-start gap-2.5 rounded border border-border p-3 text-sm has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle/40"
                       >
                         <RadioGroupItem id={id} value={option.value} className="mt-0.5" />
                         <span className="flex flex-col gap-0.5">
                           <span className="font-medium text-foreground">{option.label}</span>
-                          <span className="text-[0.8125rem] text-pretty text-muted-foreground">{option.hint}</span>
+                          <span className="text-label text-pretty text-text-secondary">{option.hint}</span>
                         </span>
                       </label>
                     );
@@ -148,7 +148,7 @@ export function GuardrailsSection() {
               )}
             />
             {onTripIssue ? (
-              <p className="text-[0.8125rem] text-warning-text">{displayMessage(onTripIssue)}</p>
+              <p className="text-label text-warning-text">{displayMessage(onTripIssue)}</p>
             ) : null}
           </fieldset>
         </SectionRow>
@@ -211,7 +211,7 @@ export function GuardrailsSection() {
             />
           </Field>
           {Number.isFinite(budgetMs) && (budgetMs as number) < 200 ? (
-            <p className="mt-1.5 text-[0.8125rem] text-warning-text">
+            <p className="mt-1.5 text-label text-warning-text">
               A very short budget means these checks fail open (let the text through) more often.
             </p>
           ) : null}

@@ -48,12 +48,12 @@ function RuleRow({
       <div className="min-w-0">
         <p className="flex flex-wrap items-center gap-1.5 text-sm font-medium text-foreground">
           {rule.name}
-          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[0.6875rem] font-medium text-muted-foreground">
+          <span className="rounded-pill bg-muted px-1.5 py-0.5 text-caption font-medium text-text-secondary">
             {RULE_KIND_LABEL[rule.kind]}
           </span>
         </p>
-        <p className="truncate text-[0.8125rem] text-muted-foreground">{ruleSummary(rule)}</p>
-        {error ? <p className="mt-0.5 text-[0.8125rem] text-danger-text">{error}</p> : null}
+        <p className="truncate text-label text-text-secondary">{ruleSummary(rule)}</p>
+        {error ? <p className="mt-0.5 text-label text-destructive-text">{error}</p> : null}
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <Button type="button" variant="ghost" size="icon" aria-label={`Edit ${rule.name}`} onClick={onEdit}>
@@ -101,7 +101,7 @@ export function RuleListCard({ stage, title, description, checksLabel }: RuleLis
     >
       <SectionRow className="flex flex-col divide-y divide-border">
         {fields.length === 0 ? (
-          <p className="py-1 text-sm text-muted-foreground">No rules yet.</p>
+          <p className="py-1 text-sm text-text-secondary">No rules yet.</p>
         ) : (
           fields.map((field, index) => {
             const rule = values[index];

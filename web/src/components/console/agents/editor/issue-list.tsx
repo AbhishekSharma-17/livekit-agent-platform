@@ -50,8 +50,8 @@ export function SectionIssueList({ sectionId, className }: { sectionId?: string;
               key={issue.key}
               data-severity={issue.severity}
               className={cn(
-                "flex items-start gap-2.5 px-4 py-2.5 text-[0.8125rem] leading-[1.125rem]",
-                isError ? "bg-danger-soft text-danger-text" : "bg-warning-soft text-warning-text",
+                "flex items-start gap-2.5 px-4 py-2.5 text-label leading-[1.125rem]",
+                isError ? "bg-destructive-subtle text-destructive-text" : "bg-warning-subtle text-warning-text",
               )}
             >
               <Icon
@@ -68,7 +68,7 @@ export function SectionIssueList({ sectionId, className }: { sectionId?: string;
                 <button
                   type="button"
                   onClick={() => focusIssue(issue)}
-                  className="shrink-0 rounded-xs text-xs font-medium underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  className="shrink-0 rounded-sm text-xs font-medium underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   Show field
                 </button>

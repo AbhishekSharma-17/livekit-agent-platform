@@ -69,7 +69,7 @@ export function SectionNav({ sections, active, onSelect, summary, variant, class
         ref={listRef}
         className={cn(
           isBar
-            ? "flex w-max min-w-full gap-1 rounded-md bg-muted p-1"
+            ? "flex w-max min-w-full gap-1 rounded bg-muted p-1"
             : "flex flex-col gap-0.5",
         )}
       >
@@ -91,26 +91,26 @@ export function SectionNav({ sections, active, onSelect, summary, variant, class
                 onFocus={() => setFocusId(section.id)}
                 className={cn(
                   "group/nav-item flex w-full items-center gap-2.5 rounded-sm text-left text-sm font-medium outline-none",
-                  "transition-colors duration-(--dur-2) ease-out",
+                  "transition-colors duration-(--duration-base) ease-out",
                   "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   isBar ? "h-8 px-3 whitespace-nowrap" : "h-9 px-2.5",
                   selected
-                    ? "bg-brand-soft text-brand-text"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                    ? "bg-brand-subtle text-brand"
+                    : "text-text-secondary hover:bg-muted hover:text-foreground",
                 )}
               >
                 <Icon
                   as={section.icon}
                   size={isBar ? "md" : "lg"}
-                  className={cn(selected ? "text-brand-text" : "text-muted-foreground group-hover/nav-item:text-foreground")}
+                  className={cn(selected ? "text-brand" : "text-text-secondary group-hover/nav-item:text-foreground")}
                 />
                 <span className={cn(!isBar && "min-w-0 flex-1 truncate")}>{section.label}</span>
                 {tone ? (
                   <span
                     data-tone={tone}
                     className={cn(
-                      "size-2 shrink-0 rounded-full",
-                      tone === "error" ? "bg-danger" : "bg-warning",
+                      "size-2 shrink-0 rounded-pill",
+                      tone === "error" ? "bg-destructive-solid" : "bg-warning-solid",
                     )}
                   >
                     <span className="sr-only">{tone === "error" ? "Has errors" : "Has warnings"}</span>

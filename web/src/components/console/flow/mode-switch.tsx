@@ -96,7 +96,7 @@ export function ModeSwitchChip({ agent }: { agent: AgentOut }) {
         data-slot="mode-chip"
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
-        className="font-medium text-muted-foreground"
+        className="font-medium text-text-secondary"
       >
         <Icon as={isFlow ? WorkflowIcon : MessageSquareTextIcon} size="sm" />
         <span className="sr-only">Mode: </span>
@@ -113,7 +113,7 @@ export function ModeSwitchChip({ agent }: { agent: AgentOut }) {
                 : `Calls will use the instructions alone. The flow (${stepCount} ${stepCount === 1 ? "node" : "nodes"}) is removed when you save — you can bring it back from version history.`}
             </DialogDescription>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">Nothing changes until you save.</p>
+          <p className="text-sm text-text-secondary">Nothing changes until you save.</p>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel

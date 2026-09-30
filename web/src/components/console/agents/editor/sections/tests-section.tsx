@@ -33,11 +33,11 @@ function CaseRow({ testCase, onEdit, onRemove }: { testCase: AgentTestForm; onEd
     <div className="flex flex-wrap items-start justify-between gap-3 py-1">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-foreground">{testCase.name || testCase.id}</p>
-        <p className="truncate text-[0.8125rem] text-muted-foreground">
+        <p className="truncate text-label text-text-secondary">
           {testCase.scenario || testCase.persona_instructions}
         </p>
         {testCase.expectations.length > 0 ? (
-          <p className="text-xs text-muted-foreground">{pluralize(testCase.expectations.length, "expectation", "expectations")}</p>
+          <p className="text-xs text-text-secondary">{pluralize(testCase.expectations.length, "expectation", "expectations")}</p>
         ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-1">
@@ -104,7 +104,7 @@ export function TestsSection() {
       >
         <SectionRow className="flex flex-col divide-y divide-border">
           {fields.length === 0 ? (
-            <p className="py-1 text-sm text-muted-foreground">No cases yet. Add one to start testing this agent.</p>
+            <p className="py-1 text-sm text-text-secondary">No cases yet. Add one to start testing this agent.</p>
           ) : (
             fields.map((field, index) => {
               const testCase = testValues[index];
@@ -146,7 +146,7 @@ export function TestsSection() {
       >
         {isDirty && fields.length > 0 ? (
           <SectionRow>
-            <p className="text-[0.8125rem] text-warning-text">
+            <p className="text-label text-warning-text">
               Save your changes first — a run always plays the last saved version of this agent.
             </p>
           </SectionRow>
@@ -160,7 +160,7 @@ export function TestsSection() {
                   key={v.case_id}
                   type="button"
                   onClick={() => setVerdictCaseId(v.case_id)}
-                  className="rounded-md border border-border px-2 py-1 text-[0.8125rem] hover:bg-accent"
+                  className="rounded border border-border px-2 py-1 text-label hover:bg-muted"
                 >
                   {v.case_name}: {v.status}
                 </button>

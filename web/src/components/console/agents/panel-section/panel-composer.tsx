@@ -213,8 +213,8 @@ function PanelChoice({ value, onChange }: { value: string; onChange: (id: string
             key={id}
             className={cn(
               "relative flex cursor-pointer flex-col gap-1 rounded-lg border border-border bg-card p-4",
-              "transition-colors duration-(--dur-2) hover:bg-accent",
-              "has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft",
+              "transition-colors duration-(--duration-base) hover:bg-muted",
+              "has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle",
               "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background",
             )}
           >
@@ -234,8 +234,8 @@ function PanelChoice({ value, onChange }: { value: string; onChange: (id: string
                 </StatusChip>
               ) : null}
             </span>
-            <span className="text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">{meta.description}</span>
-            {id !== COMPOSITE_PANEL_ID ? <span className="font-mono text-xs text-muted-foreground">{id}</span> : null}
+            <span className="text-label leading-[1.125rem] text-pretty text-text-secondary">{meta.description}</span>
+            {id !== COMPOSITE_PANEL_ID ? <span className="font-mono text-xs text-text-secondary">{id}</span> : null}
           </label>
         );
       })}
@@ -290,8 +290,8 @@ function LayoutChoice({ value, onChange }: { value: "side" | "wide"; onChange: (
         <label
           key={option.value}
           className={cn(
-            "flex cursor-pointer items-start gap-2.5 rounded-md border border-border px-3 py-2.5",
-            "has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft hover:bg-accent",
+            "flex cursor-pointer items-start gap-2.5 rounded border border-border px-3 py-2.5",
+            "has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle hover:bg-muted",
             "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
           )}
         >
@@ -305,7 +305,7 @@ function LayoutChoice({ value, onChange }: { value: "side" | "wide"; onChange: (
           />
           <span className="flex flex-col">
             <span className="text-sm font-medium">{option.label}</span>
-            <span className="text-[0.8125rem] text-muted-foreground">{option.hint}</span>
+            <span className="text-label text-text-secondary">{option.hint}</span>
           </span>
         </label>
       ))}
@@ -342,14 +342,14 @@ function AddBlockPalette({ onAdd }: { onAdd: (type: BlockType) => void }) {
                     onAdd(type);
                     setOpen(false);
                   }}
-                  className="flex w-full items-start gap-3 rounded-md border border-border px-3 py-2.5 text-left transition-colors duration-(--dur-2) hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  className="flex w-full items-start gap-3 rounded border border-border px-3 py-2.5 text-left transition-colors duration-(--duration-base) hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
-                  <span aria-hidden="true" className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                  <span aria-hidden="true" className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded bg-muted text-text-secondary">
                     <Icon as={BLOCK_ICONS[type]} size="sm" />
                   </span>
                   <span className="flex min-w-0 flex-col">
                     <span className="text-sm font-medium">{entry.label}</span>
-                    <span className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">{entry.description}</span>
+                    <span className="text-label leading-[1.125rem] text-text-secondary">{entry.description}</span>
                   </span>
                 </button>
               </li>
@@ -436,7 +436,7 @@ function BlockList({
         {announcement}
       </p>
       {panel.blocks.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No blocks yet. Add one below; the panel shows them top to bottom.</p>
+        <p className="text-sm text-text-secondary">No blocks yet. Add one below; the panel shows them top to bottom.</p>
       ) : (
         <ol aria-label="Blocks" data-slot="block-list" className="flex flex-col gap-2">
           {panel.blocks.map((block, index) => {
@@ -463,10 +463,10 @@ function BlockList({
                   setDropAt(null);
                 }}
                 className={cn(
-                  "rounded-md border border-border bg-card transition-colors",
+                  "rounded border border-border bg-card transition-colors",
                   dragFrom === index && "opacity-50",
-                  "data-[drop-target=true]:border-brand-line",
-                  idErrors[index] && "border-danger",
+                  "data-[drop-target=true]:border-brand-border",
+                  idErrors[index] && "border-destructive-solid",
                 )}
               >
                 <div className="flex items-center gap-2 px-2 py-2">
@@ -493,11 +493,11 @@ function BlockList({
                         move(index, index + (event.key === "ArrowUp" ? -1 : 1), true);
                       }
                     }}
-                    className="flex size-7 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:cursor-grabbing"
+                    className="flex size-7 shrink-0 cursor-grab items-center justify-center rounded-sm text-text-secondary hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:cursor-grabbing"
                   >
                     <Icon as={GripVerticalIcon} size="sm" />
                   </button>
-                  <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                  <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded bg-muted text-text-secondary">
                     <Icon as={BLOCK_ICONS[block.type]} size="sm" />
                   </span>
                   <button
@@ -508,14 +508,14 @@ function BlockList({
                     className="flex min-w-0 flex-1 flex-col items-start rounded-sm px-1 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   >
                     <span className="truncate text-sm font-medium">{heading}</span>
-                    <span className="truncate text-xs text-muted-foreground">
+                    <span className="truncate text-xs text-text-secondary">
                       {entry.label} · <span className="font-mono">{block.id}</span>
                     </span>
                   </button>
                   <Icon
                     as={ChevronDownIcon}
                     size="sm"
-                    className={cn("text-muted-foreground transition-transform duration-(--dur-2)", isOpen && "rotate-180")}
+                    className={cn("text-text-secondary transition-transform duration-(--duration-base)", isOpen && "rotate-180")}
                   />
                   <Button
                     type="button"
@@ -532,7 +532,7 @@ function BlockList({
                   </Button>
                 </div>
                 {idErrors[index] && !isOpen ? (
-                  <p className="px-3 pb-2 text-[0.8125rem] text-danger-text">{idErrors[index]}</p>
+                  <p className="px-3 pb-2 text-label text-destructive-text">{idErrors[index]}</p>
                 ) : null}
                 {isOpen ? (
                   <div id={detailsId} className="border-t border-border px-3 py-3">
@@ -596,7 +596,7 @@ function CustomPanelSummary({ agent, panelId }: { agent: AgentOut; panelId: stri
   const manifest = packsQuery.data?.items.find((item) => item.manifest.id === agent.pack_id)?.manifest;
   const exposed = manifest && manifest.ui_panel_id === panelId ? (manifest.blocks ?? []) : [];
   return (
-    <p className="text-[0.8125rem] text-muted-foreground" data-slot="custom-panel-summary">
+    <p className="text-label text-text-secondary" data-slot="custom-panel-summary">
       Custom panel: <span className="font-mono text-foreground">{panelId}</span> —{" "}
       {exposed.length > 0
         ? `blocks the panel exposes: ${exposed.map((block) => (block as { title?: string | null }).title || block.id).join(", ")}.`

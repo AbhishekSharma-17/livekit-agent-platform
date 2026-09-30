@@ -257,7 +257,7 @@ export function KbEvalDialog({
           <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="button" onClick={() => void handleSave()} disabled={putEvals.isPending || rows.length === 0}>
+          <Button type="button" variant="primary" onClick={() => void handleSave()} disabled={putEvals.isPending || rows.length === 0}>
             {putEvals.isPending ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>

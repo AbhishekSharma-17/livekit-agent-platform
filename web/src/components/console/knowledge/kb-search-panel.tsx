@@ -5,11 +5,13 @@ import { toast } from "sonner";
 import { SearchIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { InputWithIcon } from "@/components/shared/search-field";
+import { Tag } from "@/components/shared/tag";
+import { plainStatusError } from "@/components/console/knowledge/status-error";
 import { useKbSearch } from "@/components/console/lib/api-hooks";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { EmptyState } from "@/components/console/shared/empty-state";
-import { Icon } from "@/components/shared/icon";
 import { cn } from "@/lib/utils";
 import type { KbHit, KbSearchRequest } from "@/contracts/lkap-contracts";
 
@@ -39,7 +41,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
     <>
       {segments.map((segment, index) =>
         segment.match ? (
-          <mark key={index} className="rounded-sm bg-warning-subtle text-warning-text">
+          <mark key={index} className="rounded-sm bg-warning-subtle text-foreground">
             {segment.value}
           </mark>
         ) : (
@@ -149,7 +151,7 @@ export function KbSearchPanel({ kbId }: { kbId: string }) {
       if (outcome.status === "fulfilled") {
         const warnings = outcome.value.warnings ?? [];
         nextResults[key] = outcome.value.hits;
-        if (warnings.length > 0) nextErrors[key] = warnings[0].message;
+        if (warnings.length > 0) nextErrors[key] = plainStatusError(warnings[0].message, "This setting had a problem; its results may be incomplete.");
         anyOk = true;
       } else {
         nextResults[key] = [];
@@ -166,86 +168,89 @@ export function KbSearchPanel({ kbId }: { kbId: string }) {
   const totalHits = results ? Object.values(results).reduce((sum, hits) => sum + hits.length, 0) : 0;
 
   return (
-    <div className="flex flex-col gap-3">
-      <h2 className="text-body font-semibold text-foreground">Test search</h2>
-      <p className="text-label text-text-secondary">
-        Runs one question four ways at once, so you can see which setting finds the right passage.
-      </p>
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Ask a question…"
-          aria-label="Try a question"
-          className="flex-1"
-        />
-        <Button type="submit" disabled={pending || query.trim() === ""}>
-          <Icon as={SearchIcon} size="sm" /> {pending ? "Searching…" : "Search"}
-        </Button>
-      </form>
-
-      {results ? (
-        totalHits === 0 ? (
-          <EmptyState
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h2>Test search</h2>
+        </CardTitle>
+        <CardDescription>Runs one question four ways at once, so you can see which setting finds the right passage.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <form onSubmit={handleSearch} className="flex flex-col gap-2 sm:flex-row">
+          <InputWithIcon
             icon={SearchIcon}
-            title="No matches"
-            description="Try different words or upload more documents."
-            compact
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Ask a question…"
+            aria-label="Try a question"
+            wrapperClassName="flex-1"
           />
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {COLUMNS.map((column) => {
-              const hits = results[column.key] ?? [];
-              const warning = columnErrors[column.key];
-              return (
-                <div
-                  key={column.key}
-                  className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-card p-3"
-                >
-                  <div>
-                    <h3 className="text-body font-semibold text-foreground">{column.label}</h3>
-                    <p className="text-caption text-text-secondary">{column.hint}</p>
+          <Button type="submit" variant="secondary" disabled={query.trim() === ""} busy={pending} busyLabel="Searching…">
+            Search
+          </Button>
+        </form>
+  
+        {results ? (
+          totalHits === 0 ? (
+            <EmptyState
+              icon={SearchIcon}
+              title="No matches"
+              description="Try different words or upload more documents."
+              compact
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {COLUMNS.map((column) => {
+                const hits = results[column.key] ?? [];
+                const warning = columnErrors[column.key];
+                return (
+                  <div
+                    key={column.key}
+                    className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-card p-3"
+                  >
+                    <div>
+                      <h3 className="text-body font-semibold text-foreground">{column.label}</h3>
+                      <p className="text-caption text-text-secondary">{column.hint}</p>
+                    </div>
+                    {warning ? <p className="text-caption text-warning-text">{warning}</p> : null}
+                    {hits.length === 0 ? (
+                      <p className="text-caption text-text-secondary">Nothing found this way.</p>
+                    ) : (
+                      <ul className="flex flex-col gap-2">
+                        {hits.map((hit, index) => {
+                          const scorePct = Math.round(Math.max(0, Math.min(1, hit.score)) * 100);
+                          const locator = locatorLine(hit);
+                          return (
+                            <li
+                              key={hit.chunk_id}
+                              className={cn(
+                                "rounded border p-2 text-caption",
+                                index === 0 ? "border-brand-border bg-brand-subtle" : "border-border",
+                              )}
+                            >
+                              <div className="mb-1 flex items-center justify-between gap-2">
+                                <span className="min-w-0 truncate font-medium text-foreground">{hit.filename}</span>
+                                <span className="shrink-0 tabular-nums text-text-secondary">{scorePct}%</span>
+                              </div>
+                              {locator ? <p className="mb-1 text-text-secondary">{locator}</p> : null}
+                              {index === 0 ? (
+                                <Tag className="mb-1">Top match</Tag>
+                              ) : null}
+                              <p className="line-clamp-3 whitespace-pre-wrap text-foreground">
+                                <HighlightedText text={hit.text} query={lastQuery} />
+                              </p>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
                   </div>
-                  {warning ? <p className="text-caption text-warning-text">{warning}</p> : null}
-                  {hits.length === 0 ? (
-                    <p className="text-caption text-text-secondary">No matches.</p>
-                  ) : (
-                    <ul className="flex flex-col gap-2">
-                      {hits.map((hit, index) => {
-                        const scorePct = Math.round(Math.max(0, Math.min(1, hit.score)) * 100);
-                        const locator = locatorLine(hit);
-                        return (
-                          <li
-                            key={hit.chunk_id}
-                            className={cn(
-                              "rounded border p-2 text-caption",
-                              index === 0 ? "border-brand-border bg-brand-subtle" : "border-border",
-                            )}
-                          >
-                            <div className="mb-1 flex items-center justify-between gap-2">
-                              <span className="min-w-0 truncate font-medium text-foreground">{hit.filename}</span>
-                              <span className="shrink-0 tabular-nums text-text-secondary">{scorePct}%</span>
-                            </div>
-                            {locator ? <p className="mb-1 text-text-secondary">{locator}</p> : null}
-                            {index === 0 ? (
-                              <span className="mb-1 inline-block rounded-sm bg-brand-subtle px-1.5 py-0.5 text-caption font-medium text-brand">
-                                Top match
-                              </span>
-                            ) : null}
-                            <p className="line-clamp-3 whitespace-pre-wrap text-foreground/90">
-                              <HighlightedText text={hit.text} query={lastQuery} />
-                            </p>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )
-      ) : null}
-    </div>
+                );
+              })}
+            </div>
+          )
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

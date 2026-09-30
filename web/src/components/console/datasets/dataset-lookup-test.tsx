@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { SearchIcon } from "lucide-react";
+import { SearchIcon, SearchXIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Icon } from "@/components/shared/icon";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Field, FormError } from "@/components/shared/field";
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { useDatasetLookup } from "@/components/console/lib/api-hooks";
@@ -23,7 +24,8 @@ import type { DatasetKeyColumn, DatasetOut } from "@/contracts/lkap-contracts";
  * "Test a lookup" (ask #104): one value per key column, exact or prefix match, run through
  * the same route (`POST /v1/datasets/{id}/lookup`) an agent's `dataset` tool calls — a
  * builder write (`agents:write`), like the knowledge base's test search. 409 while the table
- * is still importing and 422 for a bad value both show as a plain inline message.
+ * is still importing and 422 for a bad value both show as a plain form-level message; what
+ * was typed stays put. Look up is the detail page's one primary action.
  */
 export function DatasetLookupTest({ dataset }: { dataset: DatasetOut }) {
   const [values, setValues] = React.useState<Record<string, string>>({});
@@ -54,76 +56,76 @@ export function DatasetLookupTest({ dataset }: { dataset: DatasetOut }) {
   const result = lookup.data;
 
   return (
-    <div className="flex flex-col gap-3">
-      <h2 className="text-body font-semibold text-foreground">Test a lookup</h2>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <div className="flex flex-wrap gap-3">
-          {keyColumns.map((column) => (
-            <div key={column.name} className="flex flex-col gap-1">
-              <label htmlFor={`lookup-${column.name}`} className="text-caption font-medium text-text-secondary">
-                {column.name}
-              </label>
-              <Input
-                id={`lookup-${column.name}`}
-                className="w-40 font-mono text-body"
-                value={values[column.name] ?? ""}
-                onChange={(e) => setValues((v) => ({ ...v, [column.name]: e.target.value }))}
-              />
-            </div>
-          ))}
-          <div className="flex flex-col gap-1">
-            <span className="text-caption font-medium text-text-secondary">Match</span>
-            <Select value={match} onValueChange={(v) => setMatch(v as "exact" | "prefix")}>
-              <SelectTrigger className="w-36" aria-label="Match">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="exact">Exactly</SelectItem>
-                <SelectItem value="prefix">Starts with</SelectItem>
-              </SelectContent>
-            </Select>
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h2>Test a lookup</h2>
+        </CardTitle>
+        <CardDescription>Runs the same lookup an agent&apos;s tool makes, and shows up to five matching rows.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-end gap-3">
+            {keyColumns.map((column) => (
+              <Field key={column.name} label={<span className="font-mono">{column.name}</span>} htmlFor={`lookup-${column.name}`} className="w-full sm:w-44">
+                <Input
+                  id={`lookup-${column.name}`}
+                  className="font-mono"
+                  value={values[column.name] ?? ""}
+                  onChange={(e) => setValues((v) => ({ ...v, [column.name]: e.target.value }))}
+                />
+              </Field>
+            ))}
+            <Field label="Match" htmlFor="lookup-match" className="w-full sm:w-40">
+              <Select value={match} onValueChange={(v) => setMatch(v as "exact" | "prefix")}>
+                <SelectTrigger id="lookup-match" className="w-full" aria-label="Match">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="exact">Exactly</SelectItem>
+                  <SelectItem value="prefix">Starts with</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Button type="submit" variant="primary" disabled={filled.length === 0} busy={lookup.isPending} busyLabel="Looking up…">
+              <SearchIcon aria-hidden="true" /> Look up
+            </Button>
           </div>
-          <Button type="submit" className="self-end" disabled={lookup.isPending || filled.length === 0}>
-            <Icon as={SearchIcon} size="sm" /> {lookup.isPending ? "Looking up…" : "Look up"}
-          </Button>
-        </div>
-      </form>
+          <FormError>{message}</FormError>
+        </form>
 
-      {message ? <p className="text-label text-destructive-text">{message}</p> : null}
-
-      {result ? (
-        result.rows.length === 0 ? (
-          <EmptyState compact icon={SearchIcon} title="No matches" description="Try a different value or match type." />
-        ) : (
-          <div className="overflow-x-auto rounded border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {Object.keys(result.rows[0]).map((key) => (
-                    <TableHead key={key} className="whitespace-nowrap">
-                      {key}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {result.rows.map((row, index) => (
-                  <TableRow key={index}>
+        {result ? (
+          result.rows.length === 0 ? (
+            <EmptyState compact icon={SearchXIcon} title="No matching rows" description="Try a different value or match type." />
+          ) : (
+            <div className="flex flex-col gap-2">
+              <Table framed>
+                <TableHeader>
+                  <TableRow>
                     {Object.keys(result.rows[0]).map((key) => (
-                      <TableCell key={key} className="max-w-64 truncate font-mono text-caption">
-                        {row[key] ?? ""}
-                      </TableCell>
+                      <TableHead key={key} className="whitespace-nowrap">
+                        {key}
+                      </TableHead>
                     ))}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {result.truncated ? (
-              <p className="p-2 text-label text-text-secondary">More rows matched than shown here.</p>
-            ) : null}
-          </div>
-        )
-      ) : null}
-    </div>
+                </TableHeader>
+                <TableBody>
+                  {result.rows.map((row, index) => (
+                    <TableRow key={index}>
+                      {Object.keys(result.rows[0]).map((key) => (
+                        <TableCell key={key} className="max-w-64 truncate font-mono text-caption">
+                          {row[key] ?? ""}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {result.truncated ? <p className="text-label text-text-secondary">More rows matched than shown here.</p> : null}
+            </div>
+          )
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

@@ -66,6 +66,7 @@ from lkap_contracts.agent_config import (
     VoiceConfig,
     effective_languages,
     effective_qa,
+    transcriber_ends_turns,
 )
 from lkap_contracts.api_models import (
     CatalogItem,
@@ -130,9 +131,9 @@ from lkap_contracts.tools import (
     never_background,
 )
 from lkap_contracts.turn_handling import (
-    CONVERSATION_PRESETS,
     REALTIME_IGNORED_KEYS,
     TurnHandlingOptions,
+    preset_values,
     resolve_turn_handling,
     turn_handling_dict,
 )
@@ -154,6 +155,7 @@ from lkap_api.db.models import (
     Workspace,
     WorkspaceProvider,
 )
+from lkap_api.turn_latency_checks import turn_latency_issues
 
 if TYPE_CHECKING:  # runtime import is deferred: `lkap_api.telephony` registers a validator from here
     from lkap_api.telephony.policy import TelephonyPolicy
@@ -565,6 +567,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
     findings.extend(canvas_vision_issues(ctx))  # V6-12
     findings.extend(reasoning_issues(ctx))  # V6-31
     findings.extend(extraction_rules_issues(ctx))
+    findings.extend(turn_latency_issues(ctx))  # V6-34
     for validator in list(VALIDATORS):
         findings.extend(validator(ctx))
     return findings.result()
@@ -1072,9 +1075,9 @@ def knowledge_auto_inject_issues(ctx: ValidationContext) -> list[Issue]:
     if not knowledge.auto_inject or not knowledge.kb_ids:
         return []
     pipeline = ctx.config.pipeline
-    preemptive = resolve_turn_handling(pipeline.conversation_preset, pipeline.turn_handling).get(
-        "preemptive_generation"
-    )
+    preemptive = resolve_turn_handling(
+        pipeline.conversation_preset, pipeline.turn_handling, stt_turns=transcriber_ends_turns(pipeline)
+    ).get("preemptive_generation")
     explicit = preemptive.get("enabled") if isinstance(preemptive, dict) else None
     if explicit is False:
         return []
@@ -1181,7 +1184,8 @@ def conversation_preset_issues(ctx: ValidationContext) -> list[Issue]:
     preset = pipeline.conversation_preset
     if preset == "custom":
         return []
-    set_by_preset = CONVERSATION_PRESETS[preset]
+    # V6-34: `fast` resolves per pipeline; its keys are the same whichever way the turn ends.
+    set_by_preset = preset_values(preset, stt_turns=transcriber_ends_turns(pipeline))
     if pipeline.mode == "realtime":
         ignored = [key for key in REALTIME_IGNORED_KEYS if key in set_by_preset]
         reason = "a realtime model decides when the caller has finished and handles interruptions itself"

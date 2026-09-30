@@ -795,14 +795,14 @@ def _preset_issues(result: Any) -> list[Any]:
     return [i for i in result.issues if i.path == "pipeline.conversation_preset"]
 
 
-@pytest.mark.parametrize("preset", ["patient", "balanced", "snappy", "telephony"])
+@pytest.mark.parametrize("preset", ["patient", "balanced", "snappy", "telephony", "fast"])
 def test_a_preset_on_a_realtime_pipeline_warns_which_settings_are_ignored(preset: str) -> None:
     result = validate(ValidationContext(config=_realtime_config(conversation_preset=preset)))
 
     (issue,) = _preset_issues(result)
     assert issue.severity == "warning"
     assert "endpointing" in issue.message and "interruption" in issue.message
-    assert ("preemptive_generation" in issue.message) is (preset == "snappy")
+    assert ("preemptive_generation" in issue.message) is (preset in ("snappy", "fast"))
 
 
 def test_custom_on_a_realtime_pipeline_does_not_warn() -> None:
@@ -811,7 +811,7 @@ def test_custom_on_a_realtime_pipeline_does_not_warn() -> None:
     assert _preset_issues(validate(ValidationContext(config=config))) == []
 
 
-@pytest.mark.parametrize("preset", ["patient", "balanced", "snappy", "telephony"])
+@pytest.mark.parametrize("preset", ["patient", "balanced", "snappy", "telephony", "fast"])
 def test_a_preset_on_a_cascaded_pipeline_does_not_warn(preset: str) -> None:
     config = inference_config()
     config.pipeline.conversation_preset = preset  # type: ignore[assignment]
@@ -819,7 +819,7 @@ def test_a_preset_on_a_cascaded_pipeline_does_not_warn(preset: str) -> None:
     assert _preset_issues(validate(ValidationContext(config=config))) == []
 
 
-@pytest.mark.parametrize(("preset", "warns"), [("snappy", True), ("patient", False)])
+@pytest.mark.parametrize(("preset", "warns"), [("snappy", True), ("fast", True), ("patient", False)])
 def test_half_cascade_warns_only_about_early_replies(preset: str, warns: bool) -> None:
     config = _realtime_config(mode="half_cascade", conversation_preset=preset)
 

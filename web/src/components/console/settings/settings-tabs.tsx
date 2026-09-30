@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { AppearanceTab } from "./appearance-tab";
 import { EnvironmentTab } from "./environment-tab";
 import { WorkspaceTab } from "./workspace-tab";
@@ -36,7 +37,7 @@ import { DangerTab } from "./danger-tab";
  * tab list, so `?tab=` stays the single source of truth and only the active
  * section mounts (Radix unmounts inactive `TabsContent`), which keeps each
  * section's queries from firing until someone opens it. Below 768 px the same
- * list lays out as a strip that scrolls sideways above the content.
+ * list becomes a horizontal tab strip that scrolls sideways above the content.
  *
  * Tab ids are stable deep links used elsewhere (`?tab=workspace#account`,
  * `?tab=webhooks`, `?tab=knowledge-connections`); never rename one.
@@ -70,22 +71,22 @@ export function SettingsTabs() {
   const searchParams = useSearchParams();
   const requested = searchParams.get("tab");
   const active = requested && TAB_IDS.has(requested) ? requested : DEFAULT_TAB;
+  // Desktop-first: the server renders the vertical nav; phones switch to the
+  // primitive's sideways-scrolling tab strip after mount (arrow keys follow).
+  const phone = useMediaQuery("(max-width: 767px)");
 
   return (
     <Tabs
-      orientation="vertical"
+      orientation={phone ? "horizontal" : "vertical"}
       value={active}
       onValueChange={(next) => {
         router.replace(`/console/settings?tab=${next}`, { scroll: false });
       }}
-      className="flex-col gap-5 md:grid md:grid-cols-[208px_minmax(0,1fr)] md:items-start md:gap-8"
+      className="max-md:flex-col md:grid md:grid-cols-[208px_minmax(0,1fr)] md:items-start md:gap-8"
     >
-      <TabsList
-        aria-label="Settings sections"
-        className="max-md:-mx-1 max-md:w-auto max-md:flex-row max-md:gap-1 max-md:overflow-x-auto max-md:px-1 max-md:pb-1 max-md:[scrollbar-width:none] md:sticky md:top-[calc(var(--layout-topbar)+16px)]"
-      >
+      <TabsList aria-label="Settings sections" className="md:sticky md:top-[calc(var(--layout-topbar)+16px)]">
         {TABS.map((tab) => (
-          <TabsTrigger key={tab.id} value={tab.id} className="gap-2 max-md:w-auto">
+          <TabsTrigger key={tab.id} value={tab.id} className="gap-2">
             <tab.icon aria-hidden="true" />
             {tab.label}
           </TabsTrigger>

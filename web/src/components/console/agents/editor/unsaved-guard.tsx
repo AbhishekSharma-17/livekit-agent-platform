@@ -3,15 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 
 /**
  * The internal URL an anchor click would navigate to, or null when the click
@@ -68,30 +60,19 @@ export function UnsavedGuard({ dirty, name }: { dirty: boolean; name: string }) 
   }, []);
 
   return (
-    <Dialog open={pendingHref !== null} onOpenChange={(open) => !open && setPendingHref(null)}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Leave without saving?</DialogTitle>
-          <DialogDescription>Your unsaved changes to {name} will be lost.</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setPendingHref(null)}>
-            Stay
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            className="bg-destructive-solid text-destructive-foreground hover:bg-destructive-solid/90 dark:bg-destructive-solid dark:hover:bg-destructive-solid/90"
-            onClick={() => {
-              const href = pendingHref;
-              setPendingHref(null);
-              if (href) router.push(href);
-            }}
-          >
-            Leave without saving
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <ConfirmDialog
+      open={pendingHref !== null}
+      onOpenChange={(open) => !open && setPendingHref(null)}
+      title="Leave without saving?"
+      description={`Your unsaved changes to ${name} will be lost.`}
+      cancelLabel="Stay"
+      confirmLabel="Leave without saving"
+      busyLabel="Leaving…"
+      onConfirm={() => {
+        const href = pendingHref;
+        setPendingHref(null);
+        if (href) router.push(href);
+      }}
+    />
   );
 }

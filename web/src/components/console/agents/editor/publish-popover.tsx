@@ -2,22 +2,17 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { CircleAlertIcon, CircleCheckIcon, ExternalLinkIcon, LoaderCircleIcon, TriangleAlertIcon } from "lucide-react";
+import { ExternalLinkIcon } from "lucide-react";
 
 import { CopyButton } from "@/components/shared/copy-button";
 import { Icon } from "@/components/shared/icon";
+import { LoadingRow } from "@/components/shared/loading-state";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useUpdateAgent, useValidateAgent } from "@/components/console/lib/api-hooks";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { friendlyError } from "@/components/console/lib/friendly-error";
+import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { ApiError } from "@/lib/api";
 import type { AgentOut, PublishGateRefusal, ValidationResult } from "@/contracts/lkap-contracts";
@@ -46,7 +41,8 @@ function testsFailingMessage(details: PublishGateRefusal): string {
         : `Its last test run didn't reach ${needed}% passing.`;
     }
     case "error":
-      return `The tests didn't run${details.error ? ` — ${details.error}` : ""}. Run them again, or turn off "Require passing tests".`;
+      // `details.error` is the runner's raw text: logs only, never shown (docs/ui/DESIGN-SYSTEM.md section 3).
+      return `The tests didn't run. Run them again, or turn off "Require passing tests".`;
   }
 }
 
@@ -86,13 +82,13 @@ const MAX_LISTED = 3;
  * validates the *saved* config on open (dirty forms first choose "Save and
  * publish" or "Publish the saved version"); errors block, warnings need
  * "Publish anyway". Live: the URL, copy, "Open page", and "Unpublish" behind
- * a confirmation dialog rendered as a sibling of the popover.
+ * a confirmation dialog rendered as a sibling of the popover. The editor
+ * renders it only for people who can write (decision D12); busy buttons say
+ * the gerund ("Publishing…"), never a spinner.
  */
 export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIssue }: PublishControlProps) {
   const updateAgent = useUpdateAgent(agent.id);
   const validateAgent = useValidateAgent(agent.id);
-  const { canWrite } = useWriteAccess();
-  const writeReason = writeAccessReason();
   const ctx = useEditorContext();
   const [open, setOpen] = React.useState(false);
   const [step, setStep] = React.useState<"unsaved" | "review">("review");
@@ -128,18 +124,15 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
         setTestsFailing(error.details as PublishGateRefusal);
         return;
       }
-      toast.error(`Couldn't publish — ${errorMessage(error)}`);
+      const friendly = friendlyError(error, { action: "publish" });
+      toast.error(friendly.title, { description: friendly.message });
     }
   }
 
+  // A failure throws into the confirmation, which says why and stays open.
   async function unpublish() {
-    try {
-      await updateAgent.mutateAsync({ published: false });
-      toast.success("Unpublished");
-      setConfirmUnpublish(false);
-    } catch (error) {
-      toast.error(`Couldn't unpublish — ${errorMessage(error)}`);
-    }
+    await updateAgent.mutateAsync({ published: false });
+    toast.success("Unpublished");
   }
 
   function onOpenChange(next: boolean) {
@@ -182,20 +175,20 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
   if (agent.published) {
     return (
       <>
-        <Popover open={canWrite && open} onOpenChange={(next) => canWrite && setOpen(next)}>
+        <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
-            <Button type="button" variant="outline" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
+            <Button type="button" variant="secondary">
               Unpublish
             </Button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] p-0" aria-label="Published agent">
             <div className="flex flex-col gap-3 p-4">
-              <p className="text-sm font-semibold">This agent is live</p>
+              <p className="text-body font-semibold">This agent is live</p>
               <PublicUrlRow url={url} />
               <p className="text-label text-text-secondary">Anyone with the link can call this agent.</p>
             </div>
-            <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
-              <Button asChild variant="outline" size="sm">
+            <div className="flex flex-wrap justify-end gap-2 border-t border-border bg-muted px-4 py-3">
+              <Button asChild variant="secondary" size="sm">
                 <a href={url} target="_blank" rel="noopener noreferrer">
                   Open page
                   <Icon as={ExternalLinkIcon} size="sm" />
@@ -203,9 +196,8 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
               </Button>
               <Button
                 type="button"
-                variant="outline"
+                variant="danger-outline"
                 size="sm"
-                className="text-destructive-text hover:bg-destructive-subtle hover:text-destructive-text"
                 onClick={() => {
                   setOpen(false);
                   setConfirmUnpublish(true);
@@ -216,28 +208,14 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
             </div>
           </PopoverContent>
         </Popover>
-        <Dialog open={confirmUnpublish} onOpenChange={setConfirmUnpublish}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Unpublish &ldquo;{agent.name}&rdquo;?</DialogTitle>
-              <DialogDescription>The public link stops answering immediately.</DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setConfirmUnpublish(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                className="bg-destructive-solid text-destructive-foreground hover:bg-destructive-solid/90 dark:bg-destructive-solid dark:hover:bg-destructive-solid/90"
-                disabled={updateAgent.isPending}
-                onClick={() => void unpublish()}
-              >
-                {updateAgent.isPending ? "Unpublishing…" : "Unpublish"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ConfirmDialog
+          open={confirmUnpublish}
+          onOpenChange={setConfirmUnpublish}
+          title={`Unpublish “${agent.name}”?`}
+          description="The public link stops answering immediately."
+          confirmLabel="Unpublish"
+          onConfirm={unpublish}
+        />
       </>
     );
   }
@@ -246,32 +224,39 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
   const blocked = check.status !== "done" || messages.errors.length > 0;
 
   return (
-    <Popover open={canWrite && open} onOpenChange={(next) => canWrite && onOpenChange(next)}>
+    <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
+        <Button type="button" variant="secondary">
           Publish
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))] p-0" aria-label="Publish this agent">
         {step === "unsaved" ? (
           <div className="flex flex-col gap-3 p-4">
-            <p className="text-sm font-semibold">You have unsaved changes</p>
+            <p className="text-body font-semibold">You have unsaved changes</p>
             <p className="text-label text-pretty text-text-secondary">
               Publishing uses the saved configuration. Save first to publish what you see.
             </p>
             <div className="flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={publishSavedVersion} disabled={saving}>
+              <Button type="button" variant="secondary" size="sm" onClick={publishSavedVersion} disabled={saving}>
                 Publish the saved version
               </Button>
-              <Button type="button" size="sm" onClick={() => void saveAndPublish()} disabled={saving}>
-                {saving ? "Saving…" : "Save and publish"}
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={() => void saveAndPublish()}
+                busy={saving}
+                busyLabel="Saving…"
+              >
+                Save and publish
               </Button>
             </div>
           </div>
         ) : (
           <>
             <div className="flex flex-col gap-3 p-4">
-              <p className="text-sm font-semibold">Publish this agent</p>
+              <p className="text-body font-semibold">Publish this agent</p>
               <p className="text-label text-pretty text-text-secondary">
                 Publishing makes <span className="font-mono text-foreground">/s/{agent.slug}</span> answer calls from
                 anyone with the link.
@@ -286,40 +271,39 @@ export function PublishControl({ agent, dirty, saveNow, onValidated, goToFirstIs
                 }}
               />
               {testsFailing ? (
-                <div role="status" className="flex flex-col gap-2 rounded bg-destructive-subtle px-3 py-2.5 text-label text-destructive-text">
-                  <p className="flex items-center gap-1.5 font-semibold">
-                    <Icon as={CircleAlertIcon} size="sm" />
-                    Tests failing
-                  </p>
+                <Alert tone="danger" title="Tests failing">
                   <p>{testsFailingMessage(testsFailing)}</p>
                   {ctx ? (
-                    <button
+                    <Button
                       type="button"
+                      variant="link-destructive"
+                      className="mt-1"
                       onClick={() => {
                         setOpen(false);
                         ctx.goToSection("tests");
                       }}
-                      className="self-start font-medium underline underline-offset-2"
                     >
                       Open Tests
-                    </button>
+                    </Button>
                   ) : null}
-                </div>
+                </Alert>
               ) : null}
               <PublicUrlRow url={url} />
             </div>
-            <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
-              <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-border bg-muted px-4 py-3">
+              <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
               <Button
                 type="button"
-                variant="brand"
+                variant="primary"
                 size="sm"
-                disabled={blocked || updateAgent.isPending}
+                disabled={blocked}
+                busy={updateAgent.isPending}
+                busyLabel="Publishing…"
                 onClick={() => void publish()}
               >
-                {updateAgent.isPending ? "Publishing…" : messages.warnings.length > 0 ? "Publish anyway" : "Publish"}
+                {messages.warnings.length > 0 ? "Publish anyway" : "Publish"}
               </Button>
             </div>
           </>
@@ -352,54 +336,41 @@ function CheckResult({
   onGoToIssues: () => void;
 }) {
   if (check.status === "idle" || check.status === "loading") {
-    return (
-      <p role="status" className="flex items-center gap-2 text-label text-text-secondary">
-        <Icon as={LoaderCircleIcon} size="sm" className="animate-spin motion-reduce:animate-none" />
-        Checking the saved configuration…
-      </p>
-    );
+    return <LoadingRow label="Checking the saved configuration…" className="py-0" />;
   }
   if (check.status === "failed") {
     return (
-      <div role="status" className="flex flex-col gap-2 rounded bg-destructive-subtle px-3 py-2.5 text-label text-destructive-text">
-        <p>Couldn&apos;t check the configuration — {check.message}</p>
-        <button type="button" onClick={onRetry} className="self-start font-medium underline underline-offset-2">
-          Try again
-        </button>
-      </div>
+      <Alert
+        tone="danger"
+        title="Couldn't check the configuration"
+        actions={
+          <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
+            Retry
+          </Button>
+        }
+      >
+        {check.message}
+      </Alert>
     );
   }
   if (messages.errors.length > 0) {
     return (
-      <div role="status" className="flex flex-col gap-2 rounded bg-destructive-subtle px-3 py-2.5 text-label text-destructive-text">
-        <p className="flex items-center gap-1.5 font-semibold">
-          <Icon as={CircleAlertIcon} size="sm" />
-          Fix {pluralize(messages.errors.length, "issue", "issues")} first
-        </p>
+      <Alert tone="danger" title={`Fix ${pluralize(messages.errors.length, "issue", "issues")} first`}>
         <MessageList items={messages.errors} />
-        <button type="button" onClick={onGoToIssues} className="self-start font-medium underline underline-offset-2">
+        <Button type="button" variant="link-destructive" className="mt-1" onClick={onGoToIssues}>
           Show the issues
-        </button>
-      </div>
+        </Button>
+      </Alert>
     );
   }
   if (messages.warnings.length > 0) {
     return (
-      <div role="status" className="flex flex-col gap-2 rounded bg-warning-subtle px-3 py-2.5 text-label text-warning-text">
-        <p className="flex items-center gap-1.5 font-semibold">
-          <Icon as={TriangleAlertIcon} size="sm" />
-          {pluralize(messages.warnings.length, "warning", "warnings")}
-        </p>
+      <Alert tone="warning" title={pluralize(messages.warnings.length, "warning", "warnings")}>
         <MessageList items={messages.warnings} />
-      </div>
+      </Alert>
     );
   }
-  return (
-    <p role="status" className="flex items-center gap-1.5 rounded bg-success-subtle px-3 py-2 text-label text-success-text">
-      <Icon as={CircleCheckIcon} size="sm" />
-      Configuration looks good
-    </p>
-  );
+  return <Alert tone="success">Configuration looks good</Alert>;
 }
 
 function MessageList({ items }: { items: string[] }) {

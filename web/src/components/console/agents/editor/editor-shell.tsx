@@ -4,39 +4,25 @@ import * as React from "react";
 import Link from "next/link";
 import { useFormContext, useWatch } from "react-hook-form";
 import {
+  ArrowLeftIcon,
   CheckIcon,
-  ChevronLeftIcon,
-  CircleCheckIcon,
-  MoreHorizontalIcon,
   PanelRightOpenIcon,
   PencilIcon,
+  RefreshCwIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
 
 import { CopyButton } from "@/components/shared/copy-button";
 import { Icon } from "@/components/shared/icon";
-import { StatusChip } from "@/components/shared/status-chip";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { LifecycleBadge } from "@/components/shared/status-chip";
+import { Alert } from "@/components/ui/alert";
+import { Button, IconButton } from "@/components/ui/button";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
-import { GatedButton } from "@/components/shared/gated-button";
+import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
+import { IfCan, ReadOnlyNote, readOnlyCopy } from "@/components/console/shared/permission";
 import type { AgentOut, ValidationResult } from "@/contracts/lkap-contracts";
 import { cn } from "@/lib/utils";
 
@@ -52,9 +38,10 @@ import type { SectionIssueSummary } from "./validation-map";
 
 /**
  * Layout contract with the console shell (WP-1, `shell/console-shell.tsx`):
- * `main` pads 16 / 24 / 32 px (base / md / lg) and the top bar is sticky at
- * 56 px (< 1024) / 48 px (≥ 1024). The shell may override the top bar height
- * with `--console-topbar-height`; the gutter bleed mirrors `main`'s padding.
+ * `main` pads 16 / 24 / 32 px (base / md / lg) and the top bar is sticky. The
+ * spec's top bar is 56 px at every width (docs/ui/DESIGN-SYSTEM.md section 7.1);
+ * the shell may override it with `--console-topbar-height`, and the gutter
+ * bleed mirrors `main`'s padding.
  */
 const BLEED = "-mx-4 px-4 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8";
 /**
@@ -63,9 +50,9 @@ const BLEED = "-mx-4 px-4 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8";
  * title block above the actions) so the title and chips scroll away.
  */
 const UNDER_TOPBAR =
-  "top-[calc(var(--console-topbar-height,3.5rem)-var(--editor-header-collapse,0px))] lg:top-[var(--console-topbar-height,3rem)]";
+  "top-[calc(var(--console-topbar-height,3.5rem)-var(--editor-header-collapse,0px))] lg:top-[var(--console-topbar-height,3.5rem)]";
 /** Sticky offset for the nav and rail columns under the editor header (measured into `--editor-header-height`). */
-const UNDER_HEADER = "lg:top-[calc(var(--console-topbar-height,3rem)+var(--editor-header-height,0px)+1.5rem)]";
+const UNDER_HEADER = "lg:top-[calc(var(--console-topbar-height,3.5rem)+var(--editor-header-height,0px)+1.5rem)]";
 
 export interface EditorShellProps {
   agent: AgentOut;
@@ -81,16 +68,24 @@ export interface EditorShellProps {
   saveNow: () => Promise<SaveOutcome | null>;
   onValidated: (result: ValidationResult) => void;
   goToFirstIssue: () => void;
+  /** Deletes the agent; throws on failure so the confirmation can say why. */
   onDelete: () => Promise<void>;
+  /** Re-reads the agent from the server (the header's Refresh). */
+  onRefresh: () => void;
+  refreshing: boolean;
   contentRef: React.Ref<HTMLDivElement>;
   children: React.ReactNode;
 }
 
 /**
- * The agent editor frame (docs/UI_UX_SPEC.md §4.3): sticky header, then
- * section nav (200 px) · content (≤ 720 px) · summary rail (280 px) at
- * ≥ 1024 px; below that the nav becomes a scrollable segmented control
- * pinned under the header and the rail a "Summary" dialog.
+ * The agent editor frame (docs/UI_UX_SPEC.md §4.3; the detail archetype of
+ * docs/ui/DESIGN-SYSTEM.md section 7.4): a sticky header with the back link,
+ * the name plus its status pill and meta, then the actions: Refresh, the
+ * danger-outline Delete, Test call, Publish and **Save, the one primary,
+ * last**. People who can't write see a read-only note instead of Save,
+ * Publish and Delete (decision D12). Below: section nav (200 px) · content
+ * (≤ 720 px) · summary rail (280 px) at ≥ 1024 px; below that the nav becomes
+ * a scrollable bar pinned under the header and the rail a "Summary" dialog.
  */
 export function EditorShell({
   agent,
@@ -106,6 +101,8 @@ export function EditorShell({
   onValidated,
   goToFirstIssue,
   onDelete,
+  onRefresh,
+  refreshing,
   contentRef,
   children,
 }: EditorShellProps) {
@@ -115,8 +112,6 @@ export function EditorShell({
   const [collapse, setCollapse] = React.useState(0);
   const [summaryOpen, setSummaryOpen] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
-  const [deleting, setDeleting] = React.useState(false);
-  const { canWrite } = useWriteAccess();
 
   React.useLayoutEffect(() => {
     const node = headerRef.current;
@@ -152,72 +147,77 @@ export function EditorShell({
           <div className="flex min-w-0 flex-col gap-1.5">
             <Link
               href="/console/agents"
-              className="inline-flex items-center gap-1 self-start rounded-sm text-xs font-medium text-text-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              data-slot="page-back-link"
+              className="-ml-2 inline-flex h-7 items-center gap-1.5 self-start rounded-sm px-2 text-label text-text-secondary transition-colors duration-(--duration-fast) hover:bg-muted hover:text-foreground"
             >
-              <Icon as={ChevronLeftIcon} size="sm" />
-              Agents
+              <ArrowLeftIcon aria-hidden="true" className="size-[15px]" />
+              Back to agents
             </Link>
-            <AgentTitle />
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+              <AgentTitle />
+              <LifecycleBadge state={agent.published ? "live" : "draft"} />
+            </div>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="inline-flex min-w-0 items-center gap-0.5">
                 <span className="truncate font-mono text-label text-text-secondary">/{agent.slug}</span>
                 <CopyButton value={agent.slug} label="Copy slug" size="xs" />
               </span>
-              <StatusChip tone={agent.published ? "live" : "neutral"} size="sm">
-                {agent.published ? "Live" : "Draft"}
-              </StatusChip>
               <ConnectionChipSlot agent={agent} />
               {ModeChipSlot ? <ModeChipSlot agent={agent} /> : <ModeChip />}
               {dirty ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-text-secondary" role="status">
+                <span className="inline-flex items-center gap-1.5 text-caption font-medium text-warning-text" role="status">
                   <span aria-hidden="true" className="size-1.5 rounded-pill bg-warning-solid" />
                   Unsaved changes
                 </span>
               ) : null}
             </div>
           </div>
-          <div ref={actionsRef} className="flex flex-wrap items-center gap-2">
+          <div ref={actionsRef} data-slot="page-actions" className="flex flex-wrap items-center gap-2">
+            <IconButton
+              type="button"
+              label={refreshing ? "Refreshing agent" : "Refresh agent"}
+              disabled={refreshing}
+              onClick={onRefresh}
+            >
+              <RefreshCwIcon className={cn(refreshing && "animate-spin")} />
+            </IconButton>
+            <IfCan>
+              <Button type="button" variant="danger-outline" onClick={() => setConfirmDelete(true)}>
+                <Icon as={Trash2Icon} size="md" />
+                Delete agent
+              </Button>
+            </IfCan>
             {slots.headerActions.map((Action, index) => (
               <Action key={index} agent={agent} />
             ))}
             <TestCallMenu agent={agent} dirty={dirty} saveNow={saveNow} extraItems={slots.testCallItems} />
-            <PublishControl
-              agent={agent}
-              dirty={dirty}
-              saveNow={saveNow}
-              onValidated={onValidated}
-              goToFirstIssue={goToFirstIssue}
-            />
-            <GatedButton type="submit" allowed={canWrite} reason={writeAccessReason()} disabled={!dirty || saving}>
-              {saving ? "Saving…" : "Save"}
-            </GatedButton>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button type="button" variant="ghost" size="icon" aria-label="More agent actions">
-                  <Icon as={MoreHorizontalIcon} size="md" />
+            <IfCan>
+              <PublishControl
+                agent={agent}
+                dirty={dirty}
+                saveNow={saveNow}
+                onValidated={onValidated}
+                goToFirstIssue={goToFirstIssue}
+              />
+            </IfCan>
+            <IfCan
+              loading={
+                <Button type="button" variant="primary" disabled>
+                  Save
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  variant="destructive"
-                  disabled={!canWrite}
-                  onSelect={() => setConfirmDelete(true)}
-                >
-                  <Icon as={Trash2Icon} size="md" />
-                  Delete agent
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              }
+              fallback={<ReadOnlyNote>{readOnlyCopy("builder")}</ReadOnlyNote>}
+            >
+              <Button type="submit" variant="primary" disabled={!dirty} busy={saving} busyLabel="Saving…">
+                Save
+              </Button>
+            </IfCan>
           </div>
         </div>
         {looksGood ? (
-          <p
-            role="status"
-            className="mb-3 flex items-center gap-1.5 rounded-sm bg-success-subtle px-3 py-1.5 text-label text-success-text"
-          >
-            <Icon as={CircleCheckIcon} size="sm" />
+          <Alert tone="success" className="mb-3">
             Configuration looks good
-          </p>
+          </Alert>
         ) : null}
         <div className="flex items-center gap-2 pb-3 lg:hidden">
           <div className="-ml-4 min-w-0 flex-1 overflow-x-auto pl-4 md:-ml-6 md:pl-6">
@@ -229,7 +229,7 @@ export function EditorShell({
               summary={summary}
             />
           </div>
-          <Button type="button" variant="outline" className="shrink-0" onClick={() => setSummaryOpen(true)}>
+          <Button type="button" variant="secondary" className="shrink-0" onClick={() => setSummaryOpen(true)}>
             <Icon as={PanelRightOpenIcon} size="md" />
             Summary
           </Button>
@@ -274,7 +274,7 @@ export function EditorShell({
               agent={agent}
               slots={slots}
               className={cn(
-                "lg:sticky lg:max-h-[calc(100vh-var(--console-topbar-height,3rem)-var(--editor-header-height,0px)-3rem)] lg:overflow-y-auto",
+                "lg:sticky lg:max-h-[calc(100dvh-var(--console-topbar-height,3.5rem)-var(--editor-header-height,0px)-3rem)] lg:overflow-y-auto",
                 UNDER_HEADER,
               )}
             />
@@ -294,39 +294,14 @@ export function EditorShell({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={confirmDelete} onOpenChange={(open) => !deleting && setConfirmDelete(open)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete &ldquo;{agent.name}&rdquo;?</DialogTitle>
-            <DialogDescription>
-              This permanently deletes the agent and its private tools. Agents that have sessions can&apos;t be
-              deleted — sessions are kept for the audit trail. Unpublish it instead.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setConfirmDelete(false)} disabled={deleting}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              className="bg-destructive-solid text-destructive-foreground hover:bg-destructive-solid/90 dark:bg-destructive-solid dark:hover:bg-destructive-solid/90"
-              disabled={deleting}
-              onClick={async () => {
-                setDeleting(true);
-                try {
-                  await onDelete();
-                  setConfirmDelete(false);
-                } finally {
-                  setDeleting(false);
-                }
-              }}
-            >
-              {deleting ? "Deleting…" : "Delete agent"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete “${agent.name}”?`}
+        description="This permanently deletes the agent and its private tools. Agents that have sessions can't be deleted — sessions are kept for the audit trail. Unpublish it instead."
+        confirmLabel="Delete agent"
+        onConfirm={onDelete}
+      />
     </div>
   );
 }
@@ -398,11 +373,11 @@ export function AgentTitle() {
             }}
             aria-invalid={shown ? true : undefined}
             aria-describedby={shown ? `${inputId}-error` : undefined}
-            className="h-9 max-w-md text-dialog font-semibold"
+            className="max-w-md text-dialog font-semibold"
             data-issue-path="name"
             name="name"
           />
-          <Button type="button" size="sm" onClick={() => finish(true)}>
+          <Button type="button" size="sm" variant="secondary" onClick={() => finish(true)}>
             <Icon as={CheckIcon} size="sm" />
             Save
           </Button>
@@ -422,18 +397,20 @@ export function AgentTitle() {
 
   return (
     <div className="flex min-w-0 items-center gap-1">
-      <h1 className="truncate text-page leading-7 font-semibold tracking-[-0.015em]">{name}</h1>
-      <Button
-        ref={pencilRef}
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Edit name"
-        onClick={start}
-        className="shrink-0 text-text-secondary"
-      >
-        <Icon as={PencilIcon} size="sm" />
-      </Button>
+      <h1 className="truncate text-page font-semibold tracking-[-0.018em] text-foreground">{name}</h1>
+      <IfCan>
+        <Button
+          ref={pencilRef}
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Edit name"
+          onClick={start}
+          className="shrink-0"
+        >
+          <Icon as={PencilIcon} size="sm" />
+        </Button>
+      </IfCan>
       {formError ? <span className="text-label text-destructive-text">{formError}</span> : null}
     </div>
   );

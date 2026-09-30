@@ -8,10 +8,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Icon } from "@/components/shared/icon";
 import { StateMeter } from "@/components/shared/state-meter";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
+import { Tag } from "@/components/shared/tag";
 import type { MeterState } from "@/components/shared/agent-state";
 import { RULE_KIND_LABEL } from "@/components/console/agents/guardrails/kinds";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import type {
   ConsentEvent,
   GuardrailEvent,
@@ -62,8 +63,9 @@ export function SessionTimeline({
   if (eventsQuery.isError) {
     return (
       <ErrorBanner
-        message={`Couldn't load the events for this call — ${errorMessage(eventsQuery.error)}`}
-        onRetry={() => eventsQuery.refetch()}
+        error={eventsQuery.error}
+        context={{ action: "load the events for this call" }}
+        onRetry={() => void eventsQuery.refetch()}
       />
     );
   }
@@ -142,22 +144,22 @@ export function TimelineView({
                 aria-pressed={on}
                 disabled={counts[filter.id] === 0}
                 onClick={() => toggle(filter.id)}
-                className="h-7 gap-1.5 px-2.5 text-xs"
+                className="h-7 gap-1.5 px-2.5 text-caption"
               >
                 {filter.label}
-                <span className="font-mono text-[0.6875rem] tabular-nums text-muted-foreground">{counts[filter.id]}</span>
+                <span className="font-mono text-caption tabular-nums text-text-secondary">{counts[filter.id]}</span>
               </Button>
             );
           })}
         </div>
         {minutes.length > 1 ? (
           <nav aria-label="Jump to minute" className="flex items-center gap-1 overflow-x-auto pb-0.5">
-            <span className="mr-1 shrink-0 text-[0.6875rem] text-muted-foreground">Jump to</span>
+            <span className="mr-1 shrink-0 text-caption text-text-secondary">Jump to</span>
             {minutes.map((marker) => (
               <a
                 key={marker.key}
                 href={`#timeline-minute-${marker.minute}`}
-                className="shrink-0 rounded-xs px-1.5 py-0.5 font-mono text-[0.6875rem] tabular-nums text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                className="shrink-0 rounded-sm px-1.5 py-0.5 font-mono text-caption tabular-nums text-text-secondary outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {formatOffset(marker.at, origin)}
               </a>
@@ -196,7 +198,7 @@ function TimelineRowView({ row, origin, agentName }: { row: TimelineRow; origin:
           className="flex scroll-mt-32 items-center gap-3 pt-3 pb-1 first:pt-0"
           aria-label={`Minute ${row.minute}`}
         >
-          <span className="font-mono text-[0.6875rem] font-medium tabular-nums text-muted-foreground">
+          <span className="font-mono text-caption font-medium tabular-nums text-text-secondary">
             {formatOffset(row.at, origin)}
           </span>
           <span aria-hidden="true" className="h-px flex-1 bg-border" />
@@ -242,11 +244,11 @@ function ConsentRow({ entry, origin }: { entry: EventEntry; origin: number }) {
 
   return (
     <RowFrame at={entry.at} origin={origin} testId="consent">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-        <StatusChip tone={payload.accepted ? "success" : "neutral"} size="sm" dot>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-caption">
+        <StatusPill tone={payload.accepted ? "success" : "neutral"} size="sm">
           {payload.accepted ? "Agreed" : "Declined"} — {kindLabel}
-        </StatusChip>
-        <span className="text-muted-foreground">{method}</span>
+        </StatusPill>
+        <span className="text-text-secondary">{method}</span>
       </div>
       {hash ? (
         <DetailsDisclosure>
@@ -308,19 +310,19 @@ function GuardrailRow({ entry, origin }: { entry: EventEntry; origin: number }) 
 
   return (
     <RowFrame at={entry.at} origin={origin} tone={urgent ? "danger" : "warning"} testId="guardrail">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption">
         {stage === "input" ? (
-          <StatusChip tone="neutral" size="sm">
+          <StatusPill tone="neutral" size="sm">
             You
-          </StatusChip>
+          </StatusPill>
         ) : null}
-        <Icon as={ShieldAlertIcon} size="sm" label="Guardrail" className={urgent ? "text-danger" : "text-warning"} />
+        <Icon as={ShieldAlertIcon} size="sm" label="Guardrail" className={urgent ? "text-destructive-solid" : "text-warning-solid"} />
         <span className="font-medium text-foreground">{STAGE_STOPPED_LABEL[stage]}</span>
-        <StatusChip tone={urgent ? "danger" : "warning"} size="sm">
+        <StatusPill tone={urgent ? "danger" : "warning"} size="sm">
           {ACTION_LABEL[action]}
-        </StatusChip>
+        </StatusPill>
       </div>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <p className="mt-1 text-body text-text-secondary">
         {kindLabel} · {payload.rule ?? "Unnamed rule"}
         {payload.tool ? ` · Tool: ${payload.tool}` : null}
         {categories.length > 0 ? ` · ${categories.join(", ")}` : null}
@@ -350,7 +352,7 @@ function GuardrailTimeoutRow({ entry, origin }: { entry: EventEntry; origin: num
 
   return (
     <RowFrame at={entry.at} origin={origin} thin testId="guardrail-timeout">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-caption text-text-secondary">
         <Icon as={ShieldOffIcon} size="sm" />
         <span>
           A check on {STAGE_LABEL[stage]} {TIMEOUT_REASON_LABEL[reason]}
@@ -358,7 +360,7 @@ function GuardrailTimeoutRow({ entry, origin }: { entry: EventEntry; origin: num
           through unchecked.
         </span>
       </div>
-      <p className="mt-0.5 text-xs text-muted-foreground">
+      <p className="mt-0.5 text-caption text-text-secondary">
         {kindLabel} · {payload.rule ?? "Unnamed rule"}
       </p>
     </RowFrame>
@@ -385,15 +387,15 @@ function RowFrame({
       <time
         dateTime={new Date(at).toISOString()}
         title={formatDateTime(at, { seconds: true })}
-        className={cn("pt-0.5 font-mono text-xs tabular-nums text-muted-foreground", thin && "pt-0")}
+        className={cn("pt-0.5 font-mono text-caption tabular-nums text-text-secondary", thin && "pt-0")}
       >
         {formatOffset(at, origin)}
       </time>
       <div
         className={cn(
           "min-w-0",
-          tone === "danger" && "rounded-md bg-danger-soft px-3 py-2 text-danger-text",
-          tone === "warning" && "rounded-md bg-warning-soft px-3 py-2 text-warning-text",
+          tone === "danger" && "rounded bg-destructive-subtle px-3 py-2 text-destructive-text",
+          tone === "warning" && "rounded bg-warning-subtle px-3 py-2 text-warning-text",
         )}
       >
         {children}
@@ -407,16 +409,14 @@ function TurnRow({ entry, origin, agentName }: { entry: TurnEntry; origin: numbe
   return (
     <RowFrame at={entry.at} origin={origin} testId="turn">
       <div className="flex flex-wrap items-center gap-1.5">
-        <StatusChip tone={isAgent ? "info" : "neutral"} size="sm">
-          {isAgent ? agentName : "You"}
-        </StatusChip>
+        <Tag className={isAgent ? "text-foreground" : undefined}>{isAgent ? agentName : "You"}</Tag>
         {entry.interrupted ? (
-          <StatusChip tone="warning" size="sm">
+          <StatusPill tone="warning" size="sm">
             Interrupted
-          </StatusChip>
+          </StatusPill>
         ) : null}
       </div>
-      <p className="mt-1 text-sm leading-relaxed whitespace-pre-wrap text-foreground">{entry.text}</p>
+      <p className="mt-1 text-body leading-relaxed whitespace-pre-wrap text-foreground">{entry.text}</p>
     </RowFrame>
   );
 }
@@ -428,12 +428,12 @@ function ToolRow({ entry, origin }: { entry: ToolEntry; origin: number }) {
   return (
     <RowFrame at={entry.at} origin={origin} tone={status.tone === "danger" ? "danger" : undefined} testId="tool">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <Icon as={WrenchIcon} size="sm" className="text-muted-foreground" />
-        <span className="font-mono text-[0.8125rem] font-medium text-foreground">{entry.tool}</span>
-        <StatusChip tone={status.tone} size="sm">
+        <Icon as={WrenchIcon} size="sm" className="text-text-secondary" />
+        <span className="font-mono text-label font-medium text-foreground">{entry.tool}</span>
+        <StatusPill tone={status.tone} size="sm">
           {status.label}
-        </StatusChip>
-        {duration ? <span className="font-mono text-xs tabular-nums text-muted-foreground">{duration}</span> : null}
+        </StatusPill>
+        {duration ? <span className="font-mono text-caption tabular-nums text-text-secondary">{duration}</span> : null}
       </div>
       {hasDetails ? (
         <DetailsDisclosure>
@@ -460,7 +460,7 @@ function StateTrack({ entry, origin }: { entry: StateEntry; origin: number }) {
 
   return (
     <RowFrame at={entry.at} origin={origin} thin testId="state">
-      <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-2 text-caption text-text-secondary">
         <StateMeter state={toMeter(last.state)} size="xs" />
         {expandable ? (
           <button
@@ -468,13 +468,13 @@ function StateTrack({ entry, origin }: { entry: StateEntry; origin: number }) {
             aria-expanded={open}
             aria-controls={panelId}
             onClick={() => setOpen((value) => !value)}
-            className="inline-flex min-w-0 items-center gap-1 rounded-xs text-left outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex min-w-0 items-center gap-1 rounded-sm text-left outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span className="truncate">{summary}</span>
             <Icon
               as={ChevronDownIcon}
               size="sm"
-              className={cn("shrink-0 transition-transform duration-(--dur-1) motion-reduce:transition-none", open && "rotate-180")}
+              className={cn("shrink-0 transition-transform duration-(--duration-fast) motion-reduce:transition-none", open && "rotate-180")}
             />
           </button>
         ) : (
@@ -484,7 +484,7 @@ function StateTrack({ entry, origin }: { entry: StateEntry; origin: number }) {
       {expandable && open ? (
         <ol id={panelId} aria-label="State changes" className="mt-1.5 space-y-0.5 border-l border-border pl-3">
           {entry.transitions.map((transition) => (
-            <li key={transition.id} className="flex items-center gap-2 text-xs text-muted-foreground">
+            <li key={transition.id} className="flex items-center gap-2 text-caption text-text-secondary">
               <span
                 className="font-mono tabular-nums"
                 title={formatDateTime(transition.at, { seconds: true })}
@@ -515,19 +515,19 @@ function EventRow({ entry, origin }: { entry: EventEntry; origin: number }) {
       <details data-slot="details-disclosure" className="group/details">
         <summary
           className={cn(
-            "flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xs text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden",
-            emphasised ? "" : "text-muted-foreground hover:text-foreground",
+            "flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-0.5 rounded-sm text-caption outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden",
+            emphasised ? "" : "text-text-secondary hover:text-foreground",
           )}
         >
           <Icon as={kind?.icon ?? CircleDotIcon} size="sm" />
           <span className={cn("font-medium", emphasised ? "" : "text-foreground")}>{title}</span>
           {count > 1 ? <span className="font-mono tabular-nums">×{count}</span> : null}
           {summary ? <span className="min-w-0 break-words">{summary}</span> : null}
-          <span className="inline-flex items-center gap-0.5 text-muted-foreground">
+          <span className="inline-flex items-center gap-0.5 text-text-secondary">
             <Icon
               as={ChevronRightIcon}
               size="sm"
-              className="transition-transform duration-(--dur-1) ease-out group-open/details:rotate-90 motion-reduce:transition-none"
+              className="transition-transform duration-(--duration-fast) ease-out group-open/details:rotate-90 motion-reduce:transition-none"
             />
             Details
           </span>

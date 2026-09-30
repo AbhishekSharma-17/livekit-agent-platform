@@ -5,8 +5,8 @@ import { MessageSquareTextIcon } from "lucide-react";
 
 import { CopyButton } from "@/components/shared/copy-button";
 import { EmptyState } from "@/components/shared/empty-state";
-import { StatusChip } from "@/components/shared/status-chip";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { StatusPill } from "@/components/shared/status-chip";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import type { SessionDetailOut } from "@/contracts/lkap-contracts";
 import { formatDateTime } from "@/lib/format";
 
@@ -29,8 +29,9 @@ export function SessionTranscript({ session }: { session: SessionDetailOut }) {
   if (!hasStored && eventsQuery.isError) {
     return (
       <ErrorBanner
-        message={`Couldn't load the events for this call — ${errorMessage(eventsQuery.error)}`}
-        onRetry={() => eventsQuery.refetch()}
+        error={eventsQuery.error}
+        context={{ action: "load the events for this call" }}
+        onRetry={() => void eventsQuery.refetch()}
       />
     );
   }
@@ -72,11 +73,11 @@ export function TranscriptView({
   return (
     <div data-slot="session-transcript" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-caption text-text-secondary">
           {turns.length === 1 ? "1 turn" : `${turns.length} turns`}
           {fromEvents ? " · rebuilt from live events (no final transcript was saved)" : null}
         </p>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1 text-caption text-text-secondary">
           Copy transcript
           <CopyButton value={plainText} label="Copy transcript" size="sm" />
         </div>
@@ -87,20 +88,20 @@ export function TranscriptView({
             <time
               dateTime={new Date(turn.at).toISOString()}
               title={formatDateTime(turn.at, { seconds: true })}
-              className="pt-0.5 font-mono text-xs tabular-nums text-muted-foreground"
+              className="pt-0.5 font-mono text-caption tabular-nums text-text-secondary"
             >
               {formatOffset(turn.at, origin)}
             </time>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs font-medium text-foreground">{speaker(turn, agentName)}</span>
+                <span className="text-caption font-medium text-foreground">{speaker(turn, agentName)}</span>
                 {turn.interrupted ? (
-                  <StatusChip tone="warning" size="sm">
+                  <StatusPill tone="warning" size="sm">
                     Interrupted
-                  </StatusChip>
+                  </StatusPill>
                 ) : null}
               </div>
-              <p className="mt-0.5 text-sm leading-relaxed whitespace-pre-wrap text-foreground">{turn.text}</p>
+              <p className="mt-0.5 text-body leading-relaxed whitespace-pre-wrap text-foreground">{turn.text}</p>
             </div>
           </li>
         ))}

@@ -33,7 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Icon } from "@/components/shared/icon";
 import { RelativeTime } from "@/components/shared/relative-time";
-import { StatusChip, type StatusTone } from "@/components/shared/status-chip";
+import { StatusPill, type StatusTone } from "@/components/shared/status-chip";
 import { useLiveSessionEvents } from "@/components/console/lib/api-hooks";
 import type { SessionDetailOut } from "@/contracts/lkap-contracts";
 import { useUiState } from "@/hooks/useUiState";
@@ -135,12 +135,12 @@ export function LiveTabContent({
         />
 
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card p-3">
-          <StatusChip tone={PHASE_TONE[listen.phase]} dot={listen.phase !== "live"}>
+          <StatusPill tone={PHASE_TONE[listen.phase]}>
             {PHASE_LABEL[listen.phase]}
-          </StatusChip>
+          </StatusPill>
           <div className="flex items-center gap-2">
-            <Icon as={muted ? VolumeXIcon : Volume2Icon} size="sm" className="text-muted-foreground" />
-            <Label htmlFor="live-mute-toggle" className="text-sm">
+            <Icon as={muted ? VolumeXIcon : Volume2Icon} size="sm" className="text-text-secondary" />
+            <Label htmlFor="live-mute-toggle" className="text-body">
               Mute
             </Label>
             <Switch
@@ -173,9 +173,9 @@ export function LiveTabContent({
 
       <div className="flex w-full flex-col gap-4 lg:w-80 lg:shrink-0">
         <div className="flex min-h-48 flex-col overflow-hidden rounded-lg border border-border bg-card">
-          <div className="border-b border-border px-4 py-2 text-sm font-medium text-foreground">Transcript</div>
+          <div className="border-b border-border px-4 py-2 text-body font-medium text-foreground">Transcript</div>
           {messages.length === 0 ? (
-            <p className="text-muted-foreground p-4 text-sm">Nothing said yet.</p>
+            <p className="text-text-secondary p-4 text-body">Nothing said yet.</p>
           ) : (
             <AgentChatTranscript messages={messages} scrollAnchor="any" className="max-h-96 min-h-0 flex-1" />
           )}
@@ -206,7 +206,7 @@ function LiveStatusBanner({
           Your connection to this call dropped — most likely your listen-in link expired after 15 minutes.
         </AlertDescription>
         <AlertAction>
-          <Button type="button" size="sm" variant="outline" onClick={onReconnect}>
+          <Button type="button" size="sm" variant="secondary" onClick={onReconnect}>
             Reconnect
           </Button>
         </AlertAction>
@@ -219,7 +219,7 @@ function LiveStatusBanner({
         <Icon as={CircleAlertIcon} size="md" />
         <AlertDescription>{errorMessage ?? "Couldn't connect to this call."}</AlertDescription>
         <AlertAction>
-          <Button type="button" size="sm" variant="outline" onClick={onReconnect}>
+          <Button type="button" size="sm" variant="secondary" onClick={onReconnect}>
             Try again
           </Button>
         </AlertAction>
@@ -248,12 +248,12 @@ function LiveStatusBanner({
 function LiveTimeline({ entries }: { entries: ReturnType<typeof liveTimelineEntries> }) {
   return (
     <div data-slot="live-timeline" className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="border-b border-border px-4 py-2 text-sm font-medium text-foreground">Supervisor activity</div>
+      <div className="border-b border-border px-4 py-2 text-body font-medium text-foreground">Supervisor activity</div>
       <ul className="flex flex-col gap-2 p-4">
         {entries.map((entry) => (
-          <li key={entry.id} className="flex items-start justify-between gap-3 text-sm">
+          <li key={entry.id} className="flex items-start justify-between gap-3 text-body">
             <span className={entry.kind === "escalation" ? "text-warning-text" : "text-foreground"}>{entry.text}</span>
-            <RelativeTime iso={entry.ts} className="shrink-0 text-xs text-muted-foreground" />
+            <RelativeTime iso={entry.ts} className="shrink-0 text-caption text-text-secondary" />
           </li>
         ))}
       </ul>

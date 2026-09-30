@@ -68,10 +68,10 @@ export function SessionAssetsCard({ items, isLoading }: { items: SessionAssetOut
         <ul data-slot="session-assets-list" className="flex flex-col gap-2.5">
           {items.map((item) => (
             <li key={item.id} className="flex items-center gap-2.5">
-              <Icon as={PaperclipIcon} size="sm" className="text-muted-foreground shrink-0" />
+              <Icon as={PaperclipIcon} size="sm" className="text-text-secondary shrink-0" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm">{item.name}</p>
-                <p className="text-muted-foreground text-xs">
+                <p className="truncate text-body">{item.name}</p>
+                <p className="text-text-secondary text-caption">
                   {item.mime} · {formatBytes(item.size)}
                 </p>
               </div>
@@ -80,13 +80,13 @@ export function SessionAssetsCard({ items, isLoading }: { items: SessionAssetOut
                   href={item.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex shrink-0 items-center gap-1 rounded-xs text-xs focus-visible:ring-2 focus-visible:outline-none"
+                  className="text-text-secondary hover:text-foreground focus-visible:ring-ring inline-flex shrink-0 items-center gap-1 rounded-sm text-caption focus-visible:ring-2 focus-visible:outline-none"
                 >
                   <Icon as={DownloadIcon} size="sm" />
                   Download
                 </a>
               ) : (
-                <span className="text-muted-foreground shrink-0 text-xs">Link expired</span>
+                <span className="text-text-secondary shrink-0 text-caption">Link expired</span>
               )}
             </li>
           ))}

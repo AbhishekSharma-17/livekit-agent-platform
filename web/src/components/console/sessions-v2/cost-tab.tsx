@@ -3,6 +3,7 @@
 import { CoinsIcon } from "lucide-react";
 
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { StatCard, StatGrid } from "@/components/shared/data-display";
 import { EmptyState } from "@/components/shared/empty-state";
 import { driverSentence, formatUsd } from "@/components/console/lib/cost-hooks";
 import type { CostDriver, CostLine } from "@/contracts/lkap-contracts";
@@ -42,23 +43,15 @@ function varianceText(variance: string | number | null | undefined, pct: number 
   return `${sign}${usd}${pctText}`;
 }
 
-function CostTile({ label, value, tone }: { label: string; value: string; tone?: "danger" | "success" }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-3">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p
-        className={
-          tone === "danger"
-            ? "mt-1 font-mono text-lg font-semibold tabular-nums text-danger-text"
-            : tone === "success"
-              ? "mt-1 font-mono text-lg font-semibold tabular-nums text-success-text"
-              : "mt-1 font-mono text-lg font-semibold tabular-nums text-foreground"
-        }
-      >
-        {value}
-      </p>
-    </div>
-  );
+/**
+ * The difference as words beside the figure, never colour alone
+ * (docs/ui/DESIGN-SYSTEM.md section 9): over or under the estimate.
+ */
+function varianceHint(variance: string | number | null | undefined): string | undefined {
+  if (variance == null) return undefined;
+  const n = Number(variance);
+  if (!Number.isFinite(n) || n === 0) return "As estimated";
+  return n > 0 ? "Over the estimate" : "Under the estimate";
 }
 
 export function CostTab({ session }: SessionTabProps) {
@@ -80,50 +73,56 @@ export function CostTab({ session }: SessionTabProps) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <CostTile label="Estimated" value={formatUsd(cost.estimated_usd) ?? "no estimate"} />
-        <CostTile label="Actual" value={formatUsd(cost.total_usd) ?? "—"} />
-        <CostTile
-          label="Difference"
-          value={cost.estimated_usd != null && cost.total_usd != null ? varianceText(cost.variance_usd, cost.variance_pct) : "—"}
-          tone={cost.variance_usd != null ? (Number(cost.variance_usd) > 0 ? "danger" : "success") : undefined}
-        />
-        {cost.reconciled_usd != null ? <CostTile label="Vendor charged" value={formatUsd(cost.reconciled_usd) ?? "—"} /> : null}
-      </div>
+      <StatGrid>
+        <StatCard label="Estimated" value={formatUsd(cost.estimated_usd) ?? "no estimate"} hint="Snapshot when the call started" />
+        <StatCard label="Actual" value={formatUsd(cost.total_usd) ?? "—"} hint="From the call's final usage" />
+        {cost.estimated_usd != null && cost.total_usd != null ? (
+          <StatCard
+            label="Difference"
+            value={varianceText(cost.variance_usd, cost.variance_pct)}
+            hint={varianceHint(cost.variance_usd)}
+          />
+        ) : (
+          <StatCard label="Difference" value="—" hint="Needs both figures" />
+        )}
+        {cost.reconciled_usd != null ? (
+          <StatCard label="Vendor charged" value={formatUsd(cost.reconciled_usd) ?? "—"} hint="Reconciled with the vendor" />
+        ) : null}
+      </StatGrid>
 
       {lines.length > 0 ? (
-        <Table aria-label="Cost lines">
+        <Table framed aria-label="Cost lines">
           <TableHeader>
             <TableRow>
               <TableHead>Provider</TableHead>
               <TableHead>Model</TableHead>
               <TableHead>Unit</TableHead>
-              <TableHead className="text-right">Quantity</TableHead>
-              <TableHead className="text-right">Unit price</TableHead>
-              <TableHead className="text-right">Estimated</TableHead>
-              {hasVendorCharge ? <TableHead className="text-right">Vendor charged</TableHead> : null}
-              <TableHead className="text-right">Cost</TableHead>
+              <TableHead numeric>Quantity</TableHead>
+              <TableHead numeric>Unit price</TableHead>
+              <TableHead numeric>Estimated</TableHead>
+              {hasVendorCharge ? <TableHead numeric>Vendor charged</TableHead> : null}
+              <TableHead numeric>Cost</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {lines.map((line, index) => (
               <TableRow key={`${line.provider_id}-${line.unit}-${index}`}>
                 <TableCell className="font-medium text-foreground">{line.provider_id}</TableCell>
-                <TableCell className="text-muted-foreground">{line.model ?? "—"}</TableCell>
-                <TableCell className="text-muted-foreground">{line.unit}</TableCell>
-                <TableCell className="text-right font-mono tabular-nums">{String(line.quantity)}</TableCell>
-                <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                <TableCell className="text-text-secondary">{line.model ?? "—"}</TableCell>
+                <TableCell className="text-text-secondary">{line.unit}</TableCell>
+                <TableCell numeric>{String(line.quantity)}</TableCell>
+                <TableCell numeric className="text-text-secondary">
                   {line.unit_price_usd != null ? (formatUsd(line.unit_price_usd) ?? "—") : "—"}
                 </TableCell>
-                <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                <TableCell numeric className="text-text-secondary">
                   {estimatedCellFor(line, drivers)}
                 </TableCell>
                 {hasVendorCharge ? (
-                  <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                  <TableCell numeric className="text-text-secondary">
                     {line.vendor_usd != null ? (formatUsd(line.vendor_usd) ?? "—") : "—"}
                   </TableCell>
                 ) : null}
-                <TableCell className="text-right font-mono tabular-nums">{costCell(line)}</TableCell>
+                <TableCell numeric>{costCell(line)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -132,7 +131,7 @@ export function CostTab({ session }: SessionTabProps) {
               <TableCell colSpan={hasVendorCharge ? 7 : 6} className="font-medium text-foreground">
                 Total
               </TableCell>
-              <TableCell className="text-right font-mono font-medium tabular-nums text-foreground">
+              <TableCell numeric className="font-medium text-foreground">
                 {formatUsd(cost.total_usd) ?? "—"}
               </TableCell>
             </TableRow>
@@ -141,9 +140,9 @@ export function CostTab({ session }: SessionTabProps) {
       ) : null}
 
       {notableDrivers.length > 0 ? (
-        <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted/30 p-3">
-          <h3 className="text-sm font-semibold text-foreground">Why it differs</h3>
-          <ul className="flex flex-col gap-1 text-[0.8125rem] text-muted-foreground">
+        <div className="flex flex-col gap-1.5 rounded border border-border bg-muted p-3">
+          <h3 className="text-body font-semibold text-foreground">Why it differs</h3>
+          <ul className="flex flex-col gap-1 text-label text-text-secondary">
             {notableDrivers.map((driver, index) => (
               <li key={`${driver.slot}-${driver.unit}-${index}`}>{driverSentence(driver)}</li>
             ))}
@@ -151,7 +150,7 @@ export function CostTab({ session }: SessionTabProps) {
         </div>
       ) : null}
 
-      {cost.estimate_as_of ? <p className="text-xs text-muted-foreground">Prices as of {cost.estimate_as_of}.</p> : null}
+      {cost.estimate_as_of ? <p className="text-caption text-text-secondary">Prices as of {cost.estimate_as_of}.</p> : null}
     </div>
   );
 }

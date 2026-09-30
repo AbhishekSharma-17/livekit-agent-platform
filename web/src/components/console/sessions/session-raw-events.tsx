@@ -5,7 +5,7 @@ import { BracesIcon } from "lucide-react";
 
 import { CopyButton } from "@/components/shared/copy-button";
 import { EmptyState } from "@/components/shared/empty-state";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import type { SessionDetailOut, SessionEventOut } from "@/contracts/lkap-contracts";
 import { formatDateTime, toMillis } from "@/lib/format";
 
@@ -27,8 +27,9 @@ export function SessionRawEvents({ session }: { session: SessionDetailOut }) {
   if (eventsQuery.isError) {
     return (
       <ErrorBanner
-        message={`Couldn't load the events for this call — ${errorMessage(eventsQuery.error)}`}
-        onRetry={() => eventsQuery.refetch()}
+        error={eventsQuery.error}
+        context={{ action: "load the events for this call" }}
+        onRetry={() => void eventsQuery.refetch()}
       />
     );
   }
@@ -66,11 +67,11 @@ export function RawEventsView({
   return (
     <div data-slot="session-raw-events" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-caption text-text-secondary">
           {events.length === 1 ? "1 event" : `${events.length.toLocaleString("en-GB")} events`}
           {truncated ? ` · showing the first ${EVENTS_MAX.toLocaleString("en-GB")}` : null}
         </p>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1 text-caption text-text-secondary">
           Copy all as JSON
           <CopyButton value={json} label="Copy all events as JSON" size="sm" />
         </div>
@@ -83,14 +84,14 @@ export function RawEventsView({
               <time
                 dateTime={event.ts}
                 title={formatDateTime(at, { seconds: true })}
-                className="pt-0.5 font-mono text-xs tabular-nums text-muted-foreground"
+                className="pt-0.5 font-mono text-caption tabular-nums text-text-secondary"
               >
                 {formatOffset(at, origin)}
               </time>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="font-mono text-[0.8125rem] text-foreground">{event.type}</span>
-                  <span className="font-mono text-[0.6875rem] tabular-nums text-muted-foreground">#{event.id}</span>
+                  <span className="font-mono text-label text-foreground">{event.type}</span>
+                  <span className="font-mono text-caption tabular-nums text-text-secondary">#{event.id}</span>
                 </div>
                 <DetailsDisclosure className="mt-1">
                   <CodeBlock value={prettyJson(event.payload)} />

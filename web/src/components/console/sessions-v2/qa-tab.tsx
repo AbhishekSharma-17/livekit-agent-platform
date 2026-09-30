@@ -2,16 +2,19 @@
 
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { GaugeIcon, RotateCwIcon } from "lucide-react";
+import { GaugeIcon, RefreshCwIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Icon } from "@/components/shared/icon";
 import { RelativeTime } from "@/components/shared/relative-time";
-import { StatusChip, type StatusTone } from "@/components/shared/status-chip";
+import { StatusPill, type StatusTone } from "@/components/shared/status-chip";
+import { Tag, TagList } from "@/components/shared/tag";
+import { errorMessage } from "@/components/console/shared/error-banner";
 import { DetailsDisclosure, CodeBlock } from "@/components/console/sessions/details-disclosure";
 import type { SessionTabProps } from "@/components/console/sessions/detail/types";
+import { sentenceCase } from "@/components/console/sessions/session-model";
 import { ApiError, api } from "@/lib/api";
 import type { QaOut, SessionScrubOut } from "@/contracts/lkap-contracts";
 
@@ -62,22 +65,22 @@ function ScrubRow({ session }: SessionTabProps) {
       else toast.success("Cleanup queued");
       void queryClient.invalidateQueries({ queryKey: ["sessions", session.id] });
     },
-    onError: (err: unknown) => toast.error(err instanceof ApiError ? err.message : "Couldn't clean up this session"),
+    onError: (err: unknown) => toast.error(`Couldn't clean up this session. ${errorMessage(err)}`),
   });
 
   if (session.scrubbed_at) {
     return (
-      <p className="text-[0.8125rem] text-muted-foreground">
+      <p className="text-label text-text-secondary">
         Personal details cleaned up <RelativeTime iso={session.scrubbed_at} />.
       </p>
     );
   }
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <p className="text-[0.8125rem] text-muted-foreground">
+      <p className="text-label text-text-secondary">
         Not cleaned up yet. This normally happens by itself once the call ends.
       </p>
-      <Button type="button" variant="outline" size="sm" onClick={() => scrub.mutate()} disabled={scrub.isPending}>
+      <Button type="button" variant="secondary" size="sm" onClick={() => scrub.mutate()} disabled={scrub.isPending}>
         {scrub.isPending ? "Cleaning up…" : "Clean up now"}
       </Button>
     </div>
@@ -97,23 +100,27 @@ export function QaTab({ session }: SessionTabProps) {
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError && err.code === "qa_judge_unavailable") {
-        toast.error(err.message);
+        toast.error("Scoring isn't available on this server yet. Ask an admin to set up the QA model.");
       } else {
-        toast.error(err instanceof ApiError ? err.message : "Couldn't re-score this session");
+        toast.error(`Couldn't re-score this session. ${errorMessage(err)}`);
       }
     },
   });
 
-  // A `pending` QA row (still being scored) polls quietly until it settles.
+  // A `pending` QA row (still being scored) polls quietly until it settles,
+  // and pauses while the tab is hidden (spec section 9).
   React.useEffect(() => {
     if (status !== "pending") return;
-    const id = setInterval(() => queryClient.invalidateQueries({ queryKey: ["sessions", session.id] }), 5000);
+    const id = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      void queryClient.invalidateQueries({ queryKey: ["sessions", session.id] });
+    }, 5000);
     return () => clearInterval(id);
   }, [status, session.id, queryClient]);
 
   const rescoreButton = (
-    <Button type="button" variant="outline" size="sm" onClick={() => rescore.mutate()} disabled={rescore.isPending}>
-      <Icon as={RotateCwIcon} size="sm" className={rescore.isPending ? "animate-spin" : undefined} />
+    <Button type="button" variant="secondary" size="sm" onClick={() => rescore.mutate()} disabled={rescore.isPending}>
+      <Icon as={RefreshCwIcon} size="sm" className={rescore.isPending ? "animate-spin" : undefined} />
       Re-score
     </Button>
   );
@@ -149,33 +156,31 @@ export function QaTab({ session }: SessionTabProps) {
     body = (
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
-          <StatusChip tone={scoreTone(qa.score)}>{qa.score != null ? `Score ${qa.score}/10` : "No score"}</StatusChip>
+          <StatusPill tone={scoreTone(qa.score)}>{qa.score != null ? `Score ${qa.score}/10` : "No score"}</StatusPill>
           {qa.sentiment ? (
-            <StatusChip tone={SENTIMENT_TONE[qa.sentiment] ?? "neutral"}>{qa.sentiment}</StatusChip>
+            <StatusPill tone={SENTIMENT_TONE[qa.sentiment] ?? "neutral"}>{sentenceCase(qa.sentiment)}</StatusPill>
           ) : null}
-          {qa.model ? <span className="font-mono text-xs text-muted-foreground">{qa.model}</span> : null}
-          <span className="text-xs text-muted-foreground">
+          {qa.model ? <span className="font-mono text-caption text-text-secondary">{qa.model}</span> : null}
+          <span className="text-caption text-text-secondary">
             {qa.scored_by === "worker" ? "Scored at call end" : qa.scored_by === "api" ? "Re-scored" : null}
           </span>
           <div className="ml-auto">{rescoreButton}</div>
         </div>
         {qa.tags && qa.tags.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
+          <TagList>
             {qa.tags.map((tag) => (
-              <StatusChip key={tag} tone="neutral" size="sm">
-                {tag}
-              </StatusChip>
+              <Tag key={tag}>{tag}</Tag>
             ))}
-          </div>
+          </TagList>
         ) : null}
-        {qa.summary ? <p className="max-w-[70ch] text-sm text-pretty text-foreground">{qa.summary}</p> : null}
+        {qa.summary ? <p className="max-w-[70ch] text-body text-pretty text-foreground">{qa.summary}</p> : null}
         {fieldEntries.length > 0 ? (
           <div className="flex flex-col gap-1.5">
-            <h3 className="text-sm font-semibold text-foreground">Post-call fields</h3>
+            <h3 className="text-body font-semibold text-foreground">Post-call fields</h3>
             <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
               {fieldEntries.map(([name, value]) => (
-                <div key={name} className="flex items-baseline justify-between gap-2 text-sm">
-                  <dt className="text-muted-foreground">{fieldLabel(name)}</dt>
+                <div key={name} className="flex items-baseline justify-between gap-2 text-body">
+                  <dt className="text-text-secondary">{fieldLabel(name)}</dt>
                   <dd className="text-right text-foreground">{fieldValueText(value)}</dd>
                 </div>
               ))}

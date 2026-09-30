@@ -3,21 +3,26 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CircleAlertIcon, SearchXIcon } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { SearchXIcon } from "lucide-react";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CopyButton } from "@/components/shared/copy-button";
+import { MetaList, type MetaItem } from "@/components/shared/data-display";
 import { DescriptionList, type DescriptionItem } from "@/components/shared/description-list";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Icon } from "@/components/shared/icon";
+import { LoadingRegion } from "@/components/shared/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { RelativeTime } from "@/components/shared/relative-time";
-import { StatusChip, type StatusTone } from "@/components/shared/status-chip";
+import { Section, SectionRow } from "@/components/shared/section";
+import { StatusPill, type StatusTone } from "@/components/shared/status-chip";
+import { lifecycleStatus } from "@/components/shared/status-map";
 import { useSessionDetail } from "@/components/console/lib/api-hooks";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useSetBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
 import type { LocaleEvent, SessionDetailOut, SessionEventOut } from "@/contracts/lkap-contracts";
 import { ApiError } from "@/lib/api";
@@ -27,6 +32,7 @@ import { formatMs } from "./detail/builtin-event-kinds";
 import { pickTab, visibleTabs } from "./detail/registry";
 import { DEFAULT_SESSION_TAB_ID, sessionDetailSlots, sessionTabs } from "./detail/resolved";
 import type { SessionTabDef } from "./detail/types";
+import { RefreshButton } from "./refresh-button";
 import {
   channelLabel,
   formatUsd,
@@ -40,16 +46,20 @@ import {
 import { describeUsage, UsageGroups } from "./session-usage";
 import { collectTurns, pairToolCalls } from "./timeline-model";
 import { useAllSessionEvents, useConnectionNames } from "./use-session-queries";
-import { LoadingRegion } from "@/components/shared/loading-state";
 
 // Kept importable from here: `tests/console-session-detail-view.test.ts` and older callers use this path.
 export { formatUsageLabel, formatUsageValue } from "./session-usage";
 
+const BACK = { href: "/console/sessions", label: "Back to sessions" };
+
 /**
- * Session detail (docs/UI_UX_SPEC.md §4.10, §7.8 item 2;
- * docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §2.4): header, stats strip, and the
- * tabs from the registry in `./detail` (V2-14 adds Recording, Cost and QA
- * there without touching this file — see `./README.md`).
+ * Session detail — the detail archetype, wide (docs/ui/DESIGN-SYSTEM.md
+ * section 7.4): a back link, the agent as the title with the status beside
+ * it, Refresh plus any extension actions, a page-level alert for a real
+ * failure, then a main column (call summary and the tabs from the registry
+ * in `./detail` — V2-14 adds Recording, Cost and QA there without touching
+ * this file, see `./README.md`) beside a side column of facts. The side
+ * column stacks under the main one on narrow screens.
  */
 export function SessionDetailView({
   sessionId,
@@ -70,19 +80,27 @@ export function SessionDetailView({
   if (isError || !session) {
     if (error instanceof ApiError && error.status === 404) {
       return (
-        <EmptyState
-          icon={SearchXIcon}
-          title="This session doesn't exist"
-          description="It may belong to another workspace, or the link is wrong."
-          action={
-            <Button asChild variant="outline">
-              <Link href="/console/sessions">All sessions</Link>
-            </Button>
-          }
-        />
+        <>
+          <PageHeader back={BACK} title="Session not found" />
+          <EmptyState
+            icon={SearchXIcon}
+            title="This session doesn't exist"
+            description="It may belong to another workspace, or the link is wrong."
+            action={
+              <Button asChild variant="secondary">
+                <Link href="/console/sessions">All sessions</Link>
+              </Button>
+            }
+          />
+        </>
       );
     }
-    return <ErrorBanner message={`Couldn't load this session — ${errorMessage(error)}`} onRetry={() => refetch()} />;
+    return (
+      <>
+        <PageHeader back={BACK} title="Session" />
+        <ErrorBanner error={error} context={{ action: "load this session" }} onRetry={() => void refetch()} />
+      </>
+    );
   }
 
   return <SessionDetailContent session={session} tabs={tabsOverride ?? sessionTabs()} />;
@@ -91,17 +109,39 @@ export function SessionDetailView({
 function DetailSkeleton() {
   return (
     <LoadingRegion label="Loading session" className="flex flex-col gap-6">
-      <div className="space-y-3">
-        <Skeleton className="h-7 w-64" />
-        <div className="flex flex-wrap gap-2">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-6 w-24" />
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-7 w-36" />
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Skeleton className="h-7 w-64" />
+          <Skeleton className="h-[22px] w-16 rounded-pill" />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="flex min-w-0 flex-col gap-8">
+          <div className="grid grid-cols-3 gap-4 rounded-lg border border-border bg-card p-5 lg:grid-cols-6">
+            {[0, 1, 2, 3, 4, 5].map((index) => (
+              <div key={index} className="flex flex-col gap-1.5">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-4 w-10" />
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-4 border-b border-border pb-3">
+            {[0, 1, 2, 3].map((index) => (
+              <Skeleton key={index} className="h-4 w-20" />
+            ))}
+          </div>
+          <Skeleton className="h-64 w-full rounded-lg" />
+        </div>
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-5">
+          {[0, 1, 2, 3, 4, 5].map((index) => (
+            <div key={index} className="flex gap-4">
+              <Skeleton className="h-3.5 w-20" />
+              <Skeleton className="h-3.5 flex-1" />
+            </div>
           ))}
         </div>
       </div>
-      <Skeleton className="h-28 w-full" />
-      <Skeleton className="h-8 w-80" />
-      <Skeleton className="h-64 w-full" />
     </LoadingRegion>
   );
 }
@@ -110,6 +150,8 @@ function SessionDetailContent({ session, tabs }: { session: SessionDetailOut; ta
   const router = useRouter();
   const pathname = usePathname() ?? `/console/sessions/${session.id}`;
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+  const [refreshing, setRefreshing] = React.useState(false);
 
   const shown = React.useMemo(() => visibleTabs(tabs, { session }), [tabs, session]);
   const current = pickTab(shown, searchParams?.get("tab"), DEFAULT_SESSION_TAB_ID);
@@ -123,79 +165,91 @@ function SessionDetailContent({ session, tabs }: { session: SessionDetailOut; ta
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
 
+  // The session and every query under it (events, …) share the `["sessions", id]` prefix.
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await queryClient.invalidateQueries({ queryKey: ["sessions", session.id] });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const swept = sweptReason(session);
 
   return (
     <div data-slot="session-detail-view">
       <PageHeader
+        back={BACK}
         eyebrow="Session"
         title={
-          <Link
-            href={`/console/agents/${session.agent_id}`}
-            className="rounded-xs outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <Link href={`/console/agents/${session.agent_id}`} className="rounded-sm hover:underline">
             {session.agent_name || "Unknown agent"}
           </Link>
         }
-        className="mb-3"
+        badge={<SessionBadges session={session} />}
         actions={
-          headerActions.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {headerActions.map((Action, index) => (
-                <Action key={index} session={session} />
-              ))}
-            </div>
-          ) : undefined
+          <>
+            {headerActions.map((Action, index) => (
+              <Action key={index} session={session} />
+            ))}
+            <RefreshButton onRefresh={() => void refresh()} refreshing={refreshing} />
+          </>
         }
       />
 
-      <div className="mb-6">
-        <SessionHeaderMeta session={session} />
-      </div>
-
       {session.status === "failed" && session.error && !swept ? (
-        <Alert variant="danger" className="mb-6">
-          <Icon as={CircleAlertIcon} size="md" />
-          <AlertDescription>
-            <span className="font-medium">The call failed.</span> {session.error}
-          </AlertDescription>
+        <Alert tone="danger" title="The call failed." className="mb-6">
+          {session.error}
         </Alert>
       ) : null}
 
-      <SessionStats session={session} />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="flex min-w-0 flex-col gap-8">
+          <SessionStats session={session} />
 
-      {current ? (
-        <Tabs value={current.id} onValueChange={selectTab} className="mt-8 gap-4">
-          <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-            <TabsList variant="line" aria-label="Session views" className="w-max min-w-full justify-start border-b border-border">
+          {current ? (
+            <Tabs value={current.id} onValueChange={selectTab} className="gap-4">
+              <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+                <TabsList variant="line" aria-label="Session views" className="w-max min-w-full justify-start">
+                  {shown.map((tab) => (
+                    <TabsTrigger key={tab.id} value={tab.id} className="flex-none">
+                      <Icon as={tab.icon} size="sm" />
+                      {tab.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
               {shown.map((tab) => (
-                <TabsTrigger key={tab.id} value={tab.id} className="flex-none px-2.5">
-                  <Icon as={tab.icon} size="sm" />
-                  {tab.label}
-                </TabsTrigger>
+                <TabsContent key={tab.id} value={tab.id} className="min-w-0">
+                  <tab.Component session={session} />
+                </TabsContent>
               ))}
-            </TabsList>
-          </div>
-          {shown.map((tab) => (
-            <TabsContent key={tab.id} value={tab.id} className="min-w-0">
-              <tab.Component session={session} />
-            </TabsContent>
-          ))}
-        </Tabs>
-      ) : null}
+            </Tabs>
+          ) : null}
+        </div>
+
+        <aside aria-label="Session details" className="min-w-0">
+          <Section id="session-facts" title="Details">
+            <SectionRow>
+              <SessionHeaderMeta session={session} />
+            </SectionRow>
+          </Section>
+        </aside>
+      </div>
     </div>
   );
 }
 
-function recordingChip(session: SessionDetailOut): { tone: StatusTone; label: string } | null {
+function recordingStatus(session: SessionDetailOut): { tone: StatusTone; label: string } | null {
   switch (session.recording?.status) {
     case "requested":
     case "active":
-      return { tone: "info", label: "Recording…" };
+      return { tone: lifecycleStatus("in_progress").tone, label: "Recording…" };
     case "ready":
-      return { tone: "success", label: "Recording ready" };
+      return { tone: lifecycleStatus("ready").tone, label: "Recording ready" };
     case "failed":
-      return { tone: "danger", label: "Recording failed" };
+      return { tone: lifecycleStatus("failed").tone, label: "Recording failed" };
     default:
       return null;
   }
@@ -205,6 +259,21 @@ function qaTone(score: number): StatusTone {
   if (score >= 8) return "success";
   if (score >= 5) return "warning";
   return "danger";
+}
+
+/** The title's status pills: the session's state, a swept reason, the recording and the QA score. */
+function SessionBadges({ session }: { session: SessionDetailOut }) {
+  const swept = sweptReason(session);
+  const recording = recordingStatus(session);
+  const score = typeof session.qa?.score === "number" ? session.qa.score : null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <StatusPill tone={sessionStatusTone(session)}>{SESSION_STATUS_LABEL[session.status]}</StatusPill>
+      {swept ? <StatusPill tone="neutral">{sentenceCase(swept)}</StatusPill> : null}
+      {recording ? <StatusPill tone={recording.tone}>{recording.label}</StatusPill> : null}
+      {score !== null ? <StatusPill tone={qaTone(score)}>{`QA ${score}/10`}</StatusPill> : null}
+    </div>
+  );
 }
 
 /** Plain wording for `LocaleEvent.source` (R-V5-10) — never "participant metadata" or "IANA". */
@@ -236,62 +305,44 @@ export function callerTimezoneLabel(
   return session.caller_timezone ?? null;
 }
 
-function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-1 whitespace-nowrap">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-foreground">{children}</span>
-    </span>
-  );
-}
-
-/** Header meta row: status, channel, mode, time, duration, config version, connection, cost, QA, room. */
+/**
+ * The facts card: when, how long, channel, mode, config version,
+ * connection, cost, the caller's time zone and the room.
+ */
 export function SessionHeaderMeta({ session }: { session: SessionDetailOut }) {
   const connections = useConnectionNames();
-  // Same query key as `SessionStats`' own call below — React Query dedupes
-  // the request, so this doesn't add a second fetch.
+  // Same query key as `SessionStats`' own call — React Query dedupes the request.
   const eventsQuery = useAllSessionEvents(session.id);
-  const swept = sweptReason(session);
   const duration = sessionDurationMs(session);
   const channel = channelLabel(session.channel);
-  const recording = recordingChip(session);
   const cost = formatUsd(session.cost?.total_usd ?? session.cost_usd);
-  const score = typeof session.qa?.score === "number" ? session.qa.score : null;
   const connectionName = session.connection_id
     ? (connections.data?.get(session.connection_id) ?? session.connection_id)
     : null;
   const startedAt = session.started_at ?? null;
   const callerTimezone = callerTimezoneLabel(session, eventsQuery.data?.items ?? []);
 
-  return (
-    <div className="flex flex-col gap-2.5">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <StatusChip tone={sessionStatusTone(session)} dot={session.status === "failed" && !swept}>
-          {SESSION_STATUS_LABEL[session.status]}
-        </StatusChip>
-        {swept ? <StatusChip tone="neutral">{sentenceCase(swept)}</StatusChip> : null}
-        {channel ? <StatusChip tone="neutral">{channel}</StatusChip> : null}
-        <StatusChip tone="neutral">{pipelineModeLabel(session.pipeline_mode)}</StatusChip>
-        {recording ? <StatusChip tone={recording.tone}>{recording.label}</StatusChip> : null}
-        {score !== null ? <StatusChip tone={qaTone(score)}>{`QA ${score}/10`}</StatusChip> : null}
-        {callerTimezone ? <StatusChip tone="neutral">{`Caller time zone: ${callerTimezone}`}</StatusChip> : null}
-      </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[0.8125rem]">
-        <MetaItem label={startedAt ? "Started" : "Created"}>
-          <RelativeTime iso={startedAt ?? session.created_at} withExact />
-        </MetaItem>
-        <MetaItem label="Duration">{duration === null ? "—" : formatDuration(duration)}</MetaItem>
-        <MetaItem label="Config">{`v${session.config_version}`}</MetaItem>
-        {connectionName ? <MetaItem label="Connection">{connectionName}</MetaItem> : null}
-        {cost ? <MetaItem label="Cost">{cost}</MetaItem> : null}
-        <span className="inline-flex items-center gap-1">
-          <span className="text-muted-foreground">Room</span>
-          <span className="font-mono text-xs text-foreground">{session.room_name}</span>
+  const items: MetaItem[] = [
+    { term: startedAt ? "Started" : "Created", value: <RelativeTime iso={startedAt ?? session.created_at} withExact /> },
+    { term: "Duration", value: duration === null ? "—" : formatDuration(duration) },
+    ...(channel ? [{ term: "Channel", value: channel }] : []),
+    { term: "Mode", value: pipelineModeLabel(session.pipeline_mode) },
+    { term: "Config", value: `v${session.config_version}` },
+    ...(connectionName ? [{ term: "Connection", value: connectionName }] : []),
+    ...(cost ? [{ term: "Cost", value: cost }] : []),
+    ...(callerTimezone ? [{ term: "Caller time zone", value: callerTimezone }] : []),
+    {
+      term: "Room",
+      value: (
+        <span className="inline-flex max-w-full items-center gap-1">
+          <span className="min-w-0 truncate font-mono text-caption">{session.room_name}</span>
           <CopyButton value={session.room_name} label="Copy room name" size="xs" />
         </span>
-      </div>
-    </div>
-  );
+      ),
+    },
+  ];
+
+  return <MetaList items={items} />;
 }
 
 /**

@@ -301,7 +301,7 @@ describe("MemoryTab", () => {
     expect(await screen.findByText("Memory is not installed on this server.")).toBeTruthy();
   });
 
-  it("disables 'Forget this caller' for a non-admin, with a reason — never hidden", async () => {
+  it("replaces 'Forget this caller' with a read-only note naming an admin for a non-admin (D12)", async () => {
     stubApi("builder", (call) => {
       if (call.url.includes("/sessions/s-1/memory")) {
         return { status: 200, body: { enabled: true, subject_id: "ab12cd34", recall_status: "recalled", recalled: ["x"] } };
@@ -310,9 +310,8 @@ describe("MemoryTab", () => {
     });
     renderTab(sessionDetail());
 
-    const button = (await screen.findByRole("button", { name: "Forget this caller" })) as HTMLButtonElement;
-    await waitFor(() => expect(button.disabled).toBe(true));
-    expect(button.getAttribute("title")).toMatch(/admin/i);
+    expect(await screen.findByText("Ask an admin to forget this caller.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Forget this caller" })).toBeNull();
   });
 
   it("an admin confirms and forgets the caller, calling DELETE /v1/memory/subjects/{id}", async () => {

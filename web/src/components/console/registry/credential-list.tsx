@@ -174,7 +174,7 @@ export function CredentialList() {
     const spec = specs.get(row.provider_id);
     return spec ? [KIND_LABEL[spec.kind], ...credentialDisplay(spec, registry).usedBy].join(" ") : "";
   };
-  const search = useListSearch("keys", rows, (row) => [row.label, titleOf(row), kindsOf(row), row.fingerprint]);
+  const search = useListSearch("provider-keys", rows, (row) => [row.label, titleOf(row), kindsOf(row), row.fingerprint]);
   const query = search.query;
 
   // Credentials are admin writes server-side (`auth/roles.py::ROUTE_POLICY`):

@@ -1,40 +1,65 @@
 import * as React from "react";
 
-import { CircleAlertIcon } from "lucide-react";
-
-import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { friendlyError, type FriendlyErrorContext } from "@/components/console/lib/friendly-error";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Icon } from "@/components/shared/icon";
 
 /**
- * Section/page error (docs/UI_UX_SPEC.md §6, channel 2): a `danger-soft`
- * alert at the top of the affected region, with a retry when the action is
- * retryable. The console must degrade gracefully when the api isn't running,
- * so every data-driven page renders this instead of crashing.
+ * Section or page error (docs/ui/DESIGN-SYSTEM.md sections 6.5 and 8.4): a
+ * danger alert at the top of the affected region that says what happened and
+ * what to do next, with Retry when the action is retryable. Pass `error` (any
+ * thrown value, mapped through `friendlyError`) or a ready `message`.
+ *
+ * The console must degrade gracefully when the api isn't running, so every
+ * data-driven page renders this instead of crashing.
  */
 export function ErrorBanner({
   message,
+  error,
+  context,
+  title,
   onRetry,
+  retryLabel = "Retry",
+  className,
 }: {
-  message: string;
+  /** Ready-made copy. Prefer `error`, which is mapped to plain words. */
+  message?: string;
+  /** Any thrown value; mapped through `friendlyError`. */
+  error?: unknown;
+  context?: FriendlyErrorContext;
+  /** Optional bold title, e.g. "Couldn't load agents". Defaults from `context.action`. */
+  title?: string;
   onRetry?: () => void;
+  retryLabel?: string;
+  className?: string;
 }) {
+  const friendly = error !== undefined ? friendlyError(error, context) : null;
+  const text = message ?? friendly?.message ?? "Something went wrong. Try again in a moment.";
+  const heading = title ?? (context?.action && friendly ? friendly.title : undefined);
   return (
-    <Alert variant="danger" className={onRetry ? "items-center" : undefined}>
-      <Icon as={CircleAlertIcon} size="md" />
-      <AlertDescription>{message}</AlertDescription>
-      {onRetry ? (
-        <AlertAction className="top-1/2 -translate-y-1/2">
-          <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-            Try again
+    <Alert
+      tone="danger"
+      title={heading}
+      className={className}
+      actions={
+        onRetry ? (
+          <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
+            {retryLabel}
           </Button>
-        </AlertAction>
-      ) : null}
+        ) : undefined
+      }
+    >
+      {text}
     </Alert>
   );
 }
 
+/**
+ * The person-facing text for any thrown value: plain words plus a next step,
+ * never vendor text, status phrases, stack traces or ids (see
+ * `console/lib/friendly-error.ts`). The raw detail is on `friendlyError(e).raw`
+ * for logs and development only.
+ */
 export function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return "Something went wrong.";
+  return friendlyError(error).message;
 }

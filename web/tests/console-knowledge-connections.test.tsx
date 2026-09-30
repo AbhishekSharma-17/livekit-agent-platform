@@ -404,7 +404,8 @@ describe("KnowledgeConnectionsTab", () => {
 
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
-        'Couldn\'t delete "Prod Qdrant" — knowledge connection \'Prod Qdrant\' still stores 1 knowledge base(s): Policy handbook',
+        // friendlyError: the api's authored 409 sentence, capitalised and full-stopped.
+        'Couldn\'t delete "Prod Qdrant" — Knowledge connection \'Prod Qdrant\' still stores 1 knowledge base(s): Policy handbook.',
       ),
     );
   });

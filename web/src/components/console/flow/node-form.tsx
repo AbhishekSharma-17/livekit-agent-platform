@@ -591,13 +591,13 @@ function ProviderOverrides({
         const slotOptions = options.filter((option) => option.kind === slot);
         return (
           <div key={slot} className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-2">
-            <span className="text-xs font-medium uppercase text-text-secondary">{slot}</span>
+            <span className="text-caption font-medium text-text-secondary">{slot === "llm" ? "Model" : "Voice"}</span>
             <div className="flex min-w-0 flex-col gap-1.5">
               <Select
                 value={current?.provider_id ?? DEFAULT}
                 onValueChange={(next) => set(slot, next === DEFAULT ? null : { provider_id: next, model: null })}
               >
-                <SelectTrigger id={`${id}-${slot}`} aria-label={`${slot} provider`} className="w-full">
+                <SelectTrigger id={`${id}-${slot}`} aria-label={slot === "llm" ? "Language model provider" : "Voice provider"} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -614,7 +614,7 @@ function ProviderOverrides({
               </Select>
               {current ? (
                 <Input
-                  aria-label={`${slot} model`}
+                  aria-label={slot === "llm" ? "Language model" : "Voice model"}
                   placeholder={
                     slotOptions.find((option) => option.id === current.provider_id)?.defaultModel ?? "Default model"
                   }

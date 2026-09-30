@@ -93,7 +93,7 @@ export function MentionTextarea({ value, onValueChange, variables, className, id
           id={listId}
           role="listbox"
           aria-label="Flow variables"
-          className="absolute inset-x-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded border border-border bg-popover p-1 shadow-overlay"
+          className="absolute inset-x-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-overlay"
         >
           {matches.map((variable, index) => (
             <li

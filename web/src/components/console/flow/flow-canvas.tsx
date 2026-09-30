@@ -21,24 +21,26 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import {
-  AlertCircleIcon,
   BracesIcon,
+  CircleAlertIcon,
   FlagIcon,
   GlobeIcon,
   LayoutGridIcon,
-  type LucideIcon,
   MessageSquareIcon,
   PhoneForwardedIcon,
   PlayIcon,
   PlusIcon,
   StarIcon,
   Trash2Icon,
+  TriangleAlertIcon,
+  type LucideIcon,
   WrenchIcon,
   XIcon,
 } from "lucide-react";
 
 import { useSectionIssues } from "@/components/console/agents/editor/editor-context";
 import { Icon } from "@/components/shared/icon";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -181,13 +183,13 @@ function FlowNodeCard({ data, selected }: NodeProps<FlowRfNode>) {
       data-issue={errors ? "error" : warnings ? "warning" : undefined}
       style={{ width: NODE_WIDTH, minHeight: NODE_HEIGHT }}
       className={cn(
-        "relative flex flex-col gap-1 rounded border bg-card px-3 py-2 text-foreground shadow-raised",
+        "relative flex flex-col gap-1 rounded border bg-card px-3 py-2 text-foreground",
         kind === "global" || kind === "qa" ? "border-dashed border-border" : "border-border",
         selected && "ring-2 ring-ring ring-offset-1 ring-offset-background",
       )}
     >
       {canHaveIncoming(kind) ? <Handle type="target" position={Position.Top} className="!size-2.5" /> : null}
-      <div className="flex items-center gap-1.5 text-caption font-medium tracking-wide text-text-secondary uppercase">
+      <div className="flex items-center gap-1.5 text-caption font-medium tracking-[0.04em] text-text-tertiary uppercase">
         <Icon as={KIND_ICON[kind]} size="sm" />
         {NODE_KIND_LABEL[kind]}
         {kb ? (
@@ -632,7 +634,11 @@ function IssuesButton({
     <Popover>
       <PopoverTrigger asChild>
         <Button type="button" size="sm" variant="outline" aria-label={`Flow issues: ${label}`}>
-          <Icon as={AlertCircleIcon} className={errorCount ? "text-destructive-text" : "text-warning-text"} />
+          {errorCount ? (
+            <Icon as={CircleAlertIcon} className="text-destructive-text" />
+          ) : (
+            <Icon as={TriangleAlertIcon} className="text-warning-text" />
+          )}
           {label}
         </Button>
       </PopoverTrigger>
@@ -708,7 +714,7 @@ function InspectorFrame({
     if (docked) asideRef.current?.focus({ preventScroll: true });
   }, [docked, title]);
   const deleteButton = onDelete ? (
-    <Button type="button" variant="destructive" onClick={onDelete} className="text-destructive-text sm:mr-auto">
+    <Button type="button" variant="danger-outline" onClick={onDelete} className="sm:mr-auto">
       <Icon as={Trash2Icon} />
       {deleteLabel}
     </Button>
@@ -725,7 +731,7 @@ function InspectorFrame({
         <DialogFooter>
           {deleteButton}
           <DialogClose asChild>
-            <Button type="button" variant="outline">
+            <Button type="button" variant="primary">
               Done
             </Button>
           </DialogClose>
@@ -741,14 +747,14 @@ function InspectorFrame({
       data-slot="flow-inspector"
       aria-labelledby={`${uid}-title`}
       aria-describedby={`${uid}-description`}
-      className="flex w-[380px] shrink-0 flex-col border-l border-border bg-popover text-sm text-foreground outline-none"
+      className="flex w-[380px] shrink-0 flex-col border-l border-border bg-popover text-body text-foreground outline-none"
       onKeyDown={(event) => {
         // Radix popovers/selects inside the form handle (and prevent) their own Escape first.
         if (event.key === "Escape" && !event.defaultPrevented) onClose();
       }}
     >
       <header className="relative flex shrink-0 flex-col gap-1 border-b border-border px-4 py-3 pr-12">
-        <h2 id={`${uid}-title`} className="truncate text-dialog leading-6 font-semibold tracking-[-0.01em]">
+        <h2 id={`${uid}-title`} className="truncate text-dialog font-semibold tracking-[-0.012em]">
           {title}
         </h2>
         <p id={`${uid}-description`} className="text-text-secondary">
@@ -829,7 +835,9 @@ function NodeInspector({
           onManageVariables={onManageVariables}
         />
       ) : specs.isError ? (
-        <p className="text-sm text-destructive-text">Couldn&apos;t load the node form. Reload to try again.</p>
+        <Alert tone="danger" title="Couldn't load the node form">
+          Reload the page to try again.
+        </Alert>
       ) : (
         <SkeletonRows label="Loading the node form" rows={4} rowClassName="h-9" />
       )}

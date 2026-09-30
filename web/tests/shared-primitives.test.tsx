@@ -367,6 +367,12 @@ describe("Section, DescriptionList, VendorMark, CapabilityBadge, Kbd, RelativeTi
     const region = screen.getByRole("region", { name: "Voice" });
     expect(region.id).toBe("voice");
     expect(region.querySelector('[data-slot="section-body"]')?.className).toContain("divide-y");
+    // The action slot may shrink and wrap, so a row of buttons never overflows a phone.
+    const aside = region.querySelector('[data-slot="section-aside"]')?.className ?? "";
+    expect(aside).toContain("min-w-0");
+    expect(aside).toContain("max-w-full");
+    expect(aside).toContain("flex-wrap");
+    expect(aside).not.toContain("shrink-0");
   });
 
   it("DescriptionList renders term/detail pairs with mono details on request", () => {

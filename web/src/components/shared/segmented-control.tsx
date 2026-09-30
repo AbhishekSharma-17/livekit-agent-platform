@@ -29,6 +29,9 @@ export interface SegmentedControlProps<T extends string = string> {
  * the selected item gets the card fill, a hairline and the raised shadow.
  * A radio group underneath (arrow keys move and select). It scrolls
  * sideways on phones. For sections of one page use `Tabs`.
+ *
+ * A count keeps its own words in the accessible name ("Live (1)"), so it
+ * never runs into the label ("Live1"); the visible figure is decorative.
  */
 export function SegmentedControl<T extends string = string>({
   label,
@@ -54,12 +57,15 @@ export function SegmentedControl<T extends string = string>({
           key={option.value}
           value={option.value}
           data-slot="segmented-item"
+          aria-label={option.count !== undefined ? `${option.label} (${option.count})` : undefined}
           className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-sm border border-transparent px-2.5 text-control font-medium whitespace-nowrap text-text-secondary transition-colors duration-(--duration-fast) hover:text-foreground data-[state=checked]:border-border data-[state=checked]:bg-card data-[state=checked]:text-foreground data-[state=checked]:shadow-raised"
         >
           {option.icon ? <option.icon aria-hidden="true" className="size-[15px]" /> : null}
           {option.label}
           {option.count !== undefined ? (
-            <span className="text-caption text-text-tertiary tabular-nums">{option.count}</span>
+            <span aria-hidden="true" className="text-caption text-text-tertiary tabular-nums">
+              {option.count}
+            </span>
           ) : null}
         </RadioGroupPrimitive.Item>
       ))}

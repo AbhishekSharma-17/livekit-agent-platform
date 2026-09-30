@@ -301,12 +301,12 @@
   --info-subtle: oklch(25.5% 0.04 250);
   --info-border: oklch(39% 0.08 250);
   --info-foreground: oklch(19% 0.03 250);
-  --destructive-solid: oklch(70% 0.18 27); /* spec 64% -> 70%: legacy text-destructive on its /20 tint */
+  --destructive-solid: oklch(70% 0.18 27); /* spec 64% -> 70%: agents-ui text-destructive on its tint (docs/ui/TOKENS.md) */
   --destructive-text: oklch(77% 0.12 25);
   --destructive-subtle: oklch(25.5% 0.045 25);
   --destructive-border: oklch(41% 0.1 25);
   --destructive-foreground: oklch(17% 0.03 27);
-  --destructive-hover: oklch(65% 0.18 27); /* spec 59% -> 65%: follows the solid, 5 points darker */
+  --destructive-hover: oklch(65% 0.18 27); /* spec 59% -> 65%: near-black text on the hover fill needs it */
 
   /* charts: lightened for dark surfaces */
   --chart-1: oklch(72% 0.03 255);

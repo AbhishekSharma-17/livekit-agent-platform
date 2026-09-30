@@ -121,7 +121,9 @@ describe("Segmented control, tabs and theme switcher (spec 6.7)", () => {
     }
     render(<Harness />);
     expect(screen.getByRole("radiogroup", { name: "Filter by status" })).toBeTruthy();
-    const failed = screen.getByRole("radio", { name: "Failed 2" });
+    // The count keeps its own words in the name, never "Failed2".
+    const failed = screen.getByRole("radio", { name: "Failed (2)" });
+    expect(screen.getByRole("radio", { name: "All (12)" })).toBeTruthy();
     fireEvent.click(failed);
     expect(failed.getAttribute("aria-checked")).toBe("true");
   });

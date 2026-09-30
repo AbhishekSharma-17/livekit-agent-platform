@@ -29,7 +29,9 @@ export function Section({ id, title, description, aside, children, className }: 
       className={cn("scroll-mt-20 rounded-lg border border-border bg-card text-foreground", className)}
     >
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
-        <div className="min-w-0 flex-1">
+        {/* A 10rem basis: a short aside (a pill, one button) sits beside the title; a
+            row of buttons drops below it on phones instead of squeezing it. */}
+        <div className="min-w-0 flex-[1_1_10rem]">
           <h2 id={titleId} className="text-title font-semibold tracking-[-0.008em]">
             {title}
           </h2>
@@ -37,7 +39,11 @@ export function Section({ id, title, description, aside, children, className }: 
             <p className="mt-0.5 max-w-[72ch] text-label text-pretty text-text-secondary">{description}</p>
           ) : null}
         </div>
-        {aside ? <div className="flex shrink-0 items-center gap-2">{aside}</div> : null}
+        {aside ? (
+          <div data-slot="section-aside" className="flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2">
+            {aside}
+          </div>
+        ) : null}
       </div>
       <div data-slot="section-body" className="divide-y divide-border">
         {children}

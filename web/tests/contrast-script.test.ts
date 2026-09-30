@@ -37,6 +37,7 @@ describe("scripts/check-contrast.mjs", () => {
         expect(pairs).toContain(`${edge} on --card`);
       }
       expect(pairs).toContain("--brand-foreground on --brand");
+      expect(pairs).toContain("--foreground on --brand-subtle");
       for (const tone of ["success", "warning", "info", "destructive"]) {
         expect(pairs).toContain(`--${tone}-text on --${tone}-subtle`);
         expect(pairs).toContain(`--${tone}-text on --card`);

@@ -185,6 +185,9 @@ export const PAIRS = [
   // accent: its foreground in every button state, and the accent as link / active-icon ink
   ...["--brand", "--brand-hover", "--brand-active"].map((on) => ({ fg: "--brand-foreground", on, min: TEXT })),
   ...LINK_SURFACES.map((on) => ({ fg: "--brand", on, min: TEXT })),
+  // list search highlight: matched text keeps the foreground on the accent's subtle fill
+  // (`Highlight` in components/shared/list-search.tsx)
+  { fg: "--foreground", on: "--brand-subtle", min: TEXT },
   // status scales: text on card, page and its subtle fill; the dot (solid) at 3:1;
   // the solid under its own foreground
   ...STATUS.flatMap((t) => [
@@ -195,9 +198,10 @@ export const PAIRS = [
   { fg: "--destructive-foreground", on: "--destructive-hover", min: TEXT },
   // chart series read against the surfaces charts sit on
   ...CHARTS.flatMap((fg) => ["--card", "--background"].map((on) => ({ fg, on, min: UI, nonText: true }))),
-  // legacy guards: `text-destructive` (the solid used as text) alone and on the
-  // resting tint of the vendored destructive button, badge and menu item
-  // (`bg-destructive/10` light, `dark:bg-destructive/20` dark), and the stage
+  // legacy guards: `text-destructive` (the solid used as text) alone and on a
+  // resting tint (`bg-destructive/10` light, `/20` dark, stricter than the /10
+  // and /15 the leave-alone agents-ui toggles use on the caller page), and the
+  // stage. These keep the dark solid at 70% (docs/ui/TOKENS.md).
   ...["--card", "--background", "--popover"].map((on) => ({ fg: "--destructive", on, min: TEXT })),
   { fg: "--destructive", on: "--destructive", tint: 0.1, min: TEXT, theme: "light" },
   { fg: "--destructive", on: "--destructive", tint: 0.2, min: TEXT, theme: "dark" },

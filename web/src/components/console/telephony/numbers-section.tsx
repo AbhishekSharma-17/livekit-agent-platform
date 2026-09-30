@@ -127,8 +127,7 @@ export function NumbersSection({ agents }: { agents: AgentOut[] }) {
       title="Phone numbers"
       description="Which agent answers each number: numbers on your SIP trunks and numbers hosted by LiveKit."
       aside={
-        // The section's aside slot doesn't shrink; cap the row at the phone content width so it wraps at 390 px.
-        <div className="flex max-w-[calc(100vw-5rem)] flex-wrap items-center justify-end gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <Button type="button" size="sm" variant="ghost" onClick={() => setGettingNumber(true)}>
             <PhoneIncomingIcon aria-hidden="true" />
             Get a number

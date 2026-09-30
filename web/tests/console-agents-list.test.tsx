@@ -338,6 +338,8 @@ describe("AgentsTable", () => {
     expect(screen.getByRole("radio", { name: /^Live/ }).textContent).toBe("Live1");
     expect(screen.getByRole("radio", { name: /^Draft/ }).textContent).toBe("Draft1");
     expect(screen.getByRole("radio", { name: /^Archived/ }).textContent).toBe("Archived1");
+    // The count has its own words in the accessible name, not "Live1".
+    expect(screen.getByRole("radio", { name: "Live (1)" })).toBeTruthy();
   });
 
   it("filters by status (Live / Draft)", async () => {

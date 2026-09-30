@@ -48,8 +48,8 @@ is configured with this type scale, `shadow-raised|overlay|modal|focus` and `rou
 
 ## Deviations from the spec's literal values
 
-Every fix moves lightness only; chroma, hue and targets are unchanged. `pnpm check:contrast` checks 210
-pairs across both themes.
+Every fix moves lightness only; chroma, hue and targets are unchanged. `pnpm check:contrast` checks 212
+pairs across both themes (V added the list-search highlight, `--foreground` on `--brand-subtle`).
 
 | Theme | Token | Spec | Shipped | Pair it fixes | Before | After |
 |---|---|---|---|---|---|---|
@@ -63,11 +63,23 @@ pairs across both themes.
 | Dark | `--destructive-solid` | `64% .18 27` | `70% .18 27` | legacy `text-destructive` on its resting `bg-destructive/20` tint over card (4.5:1) | 3.87 | 4.63 |
 | Dark | `--destructive-hover` | `59% .18 27` | `65% .18 27` | foreground on the hover fill (4.5:1); keeps the spec's 5-point step below the solid | 4.49 (white) | 5.47 |
 
-The two dark destructive rows are **transitional**. The spec's own values fail only a legacy style: the
-vendored destructive button, badge and menu item still put `text-destructive` on a `bg-destructive/20`
-tint. Once UI-2 moves those to `--destructive-text` on card, and the verification package drops that
-guard pair, both tokens can return to the spec's 64% and 59%. The near-black foreground reads 5.25:1 on
-64%.
+The two dark destructive rows were meant to be **transitional**: the spec's values failed a legacy style
+(the vendored destructive button, badge and menu item put `text-destructive` on a `bg-destructive/20`
+tint), and the plan was to return both tokens to 64% and 59% once UI-2 moved those to
+`--destructive-text` on card.
+
+**Verification (V) re-checked and kept 70% / 65%.** `components/ui/**` no longer uses the legacy pair,
+but two things still fail at the spec values in dark (measured with the same culori pipeline):
+
+| Pair at the spec values (dark) | Ratio | Target | Where it is live |
+|---|---|---|---|
+| `text-destructive` on `bg-destructive/10` over card | 4.42 | 4.5 | leave-alone `components/agents-ui/agent-track-toggle.tsx` and `agent-control-bar.tsx`: the mic and camera "off" state on the always-dark caller page (`CONTROL_BAR_BRAND_ON` only restyles the on state and End call) |
+| `--destructive-foreground` (near-black) on `--destructive-hover` 59% | 4.28 | 4.5 | every danger button's hover fill |
+
+At the shipped 70% / 65% the same pairs read 5.46 and 5.47. Returning to the spec needs a product call
+(docs/ui/REPORT.md): either restyle the agents-ui off state from outside, as `session-controls.tsx`
+already does for End call, and move the hover step (for example 61%), or accept the shipped values as the
+dark palette.
 
 **Icon rule.** `globals.css` carries the spec's literal rule, `.lucide { width:16px; height:16px;
 stroke-width:1.75px; flex:none }`. The `Icon` wrapper sizes through `size-*` utilities, which beat the

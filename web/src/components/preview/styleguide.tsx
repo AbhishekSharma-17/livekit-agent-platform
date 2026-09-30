@@ -733,6 +733,50 @@ export function Styleguide() {
                 <Button onClick={() => toast.error("Couldn't save the agent. Try again in a moment.")}>Error</Button>
               </Row>
             </Specimen>
+
+            <Specimen
+              id="caller-page"
+              title="Caller page exception (D3)"
+              description="The public session page (/s/[slug] and its embed) uses these tokens, icons, primitives, states and copy, with three documented exceptions."
+            >
+              <Card>
+                <CardContent className="flex flex-col gap-4 md:flex-row md:items-start">
+                  <ul className="flex max-w-[52ch] list-disc flex-col gap-1.5 pl-5 text-body text-text-secondary">
+                    <li>
+                      <span className="font-medium text-foreground">Always dark.</span> It feels like a phone call and
+                      ignores the theme setting; the preview theme above does not change it.
+                    </li>
+                    <li>
+                      <span className="font-medium text-foreground">16 px body text,</span> not 14 px: callers read it at
+                      arm&rsquo;s length, often on a phone.
+                    </li>
+                    <li>
+                      <span className="font-medium text-foreground">A bottom sheet</span> for the transcript on phones:
+                      the one sheet in the product. Everywhere else uses dialogs.
+                    </li>
+                  </ul>
+                  {/* A static picture of the phone layout, inside a `.dark` subtree so every token re-resolves. */}
+                  <div
+                    aria-hidden="true"
+                    data-slot="caller-page-specimen"
+                    className="dark relative mx-auto flex h-[320px] w-[240px] max-w-full shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-background text-base text-foreground"
+                  >
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span className="font-medium">Ada</span>
+                      <StatusPill tone="live" size="sm">
+                        Live
+                      </StatusPill>
+                    </div>
+                    <div className="flex flex-1 items-center justify-center bg-stage text-text-secondary">Listening…</div>
+                    <div className="rounded-t-lg border-t border-border bg-card px-3 pt-2 pb-3 shadow-overlay">
+                      <div className="mx-auto mb-2 h-1 w-9 rounded-pill bg-muted-strong" />
+                      <p className="font-medium">Transcript</p>
+                      <p className="text-text-secondary">Hi, how can I help today?</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </Specimen>
           </div>
         </Page>
         <Toaster />

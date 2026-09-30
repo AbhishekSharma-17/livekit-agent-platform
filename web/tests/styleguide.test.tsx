@@ -52,11 +52,20 @@ describe("Styleguide", () => {
       "Stats, cards, list cards and tables",
       "Empty, no matches, loading and progress",
       "Dialogs, menus, popovers, tooltips and toasts",
+      "Caller page exception (D3)",
     ]) {
       expect(screen.getByRole("region", { name }), name).toBeTruthy();
     }
     expect(screen.getAllByRole("button", { name: /Primary|Secondary/ }).length).toBeGreaterThan(0);
     expect(screen.getByRole("table", { name: "Agent costs" })).toBeTruthy();
+    // D3: the caller page is always dark, 16 px body, with the one bottom sheet.
+    const caller = screen.getByRole("region", { name: "Caller page exception (D3)" });
+    expect(caller.textContent).toMatch(/Always dark/);
+    expect(caller.textContent).toMatch(/16 px body text/);
+    expect(caller.textContent).toMatch(/bottom sheet/);
+    const specimen = caller.querySelector('[data-slot="caller-page-specimen"]');
+    expect(specimen?.classList.contains("dark")).toBe(true);
+    expect(specimen?.classList.contains("text-base")).toBe(true);
   });
 
   it("previews dark mode on <html> and restores the original class on leave", () => {

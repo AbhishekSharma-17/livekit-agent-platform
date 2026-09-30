@@ -39,7 +39,8 @@ export function applyToastPolicy(target: typeof sonnerToast = sonnerToast): void
 }
 
 /** Give each toast its live-region role: `alert` for errors, `status` otherwise. */
-function assignRoles(root: ParentNode) {
+function assignRoles(root: ParentNode | null) {
+  if (!root) return
   root.querySelectorAll<HTMLElement>("[data-sonner-toast]").forEach((node) => {
     const role = node.getAttribute("data-type") === "error" ? "alert" : "status"
     if (node.getAttribute("role") !== role) node.setAttribute("role", role)
@@ -48,17 +49,22 @@ function assignRoles(root: ParentNode) {
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { resolvedTheme } = useTheme()
+  const sectionRef = React.useRef<HTMLElement>(null)
 
   React.useEffect(() => {
     applyToastPolicy()
-    assignRoles(document)
-    const observer = new MutationObserver(() => assignRoles(document))
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-type"] })
+    const section = sectionRef.current
+    if (!section) return
+    assignRoles(section)
+    // Watch only the toaster's own region, not the whole page.
+    const observer = new MutationObserver(() => assignRoles(section))
+    observer.observe(section, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-type"] })
     return () => observer.disconnect()
   }, [])
 
   return (
     <Sonner
+      ref={sectionRef}
       theme={(resolvedTheme as ToasterProps["theme"]) ?? "system"}
       position="bottom-right"
       duration={TOAST_DURATION_MS}

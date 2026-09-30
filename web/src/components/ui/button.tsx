@@ -31,27 +31,27 @@ import { cn } from "@/lib/utils"
  * spinner. Text buttons never show a spinner.
  */
 const SECONDARY =
-  "border-border bg-card text-foreground shadow-raised hover:bg-muted aria-expanded:bg-muted"
+  "border-border bg-card text-foreground shadow-raised not-disabled:hover:bg-muted aria-expanded:bg-muted"
 const PRIMARY =
-  "bg-brand text-brand-foreground hover:bg-brand-hover active:bg-brand-active aria-expanded:bg-brand-hover"
+  "bg-brand text-brand-foreground not-disabled:hover:bg-brand-hover not-disabled:active:bg-brand-active aria-expanded:bg-brand-hover"
 const DANGER_OUTLINE =
-  "border-destructive-border bg-card text-destructive-text hover:bg-destructive-subtle aria-expanded:bg-destructive-subtle"
+  "border-destructive-border bg-card text-destructive-text not-disabled:hover:bg-destructive-subtle aria-expanded:bg-destructive-subtle"
 const TEXT_BUTTON =
-  "h-auto rounded-sm border-0 px-0 text-label font-medium underline-offset-3 hover:underline active:scale-100"
+  "h-auto rounded-sm border-0 px-0 text-label font-medium underline-offset-3 not-disabled:hover:underline not-disabled:active:scale-100"
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center gap-1.5 rounded border border-transparent text-control leading-none font-medium whitespace-nowrap transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-(--duration-fast) ease-out select-none enabled:active:not-aria-[haspopup]:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-invalid:border-destructive-border [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center gap-1.5 rounded border border-transparent text-control leading-none font-medium whitespace-nowrap transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-(--duration-fast) ease-out select-none not-disabled:active:not-aria-[haspopup]:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-invalid:border-destructive-border [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         primary: PRIMARY,
         secondary: SECONDARY,
-        ghost: "text-text-secondary hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
-        danger: "bg-destructive-solid text-destructive-foreground hover:bg-destructive-hover aria-expanded:bg-destructive-hover",
+        ghost: "text-text-secondary not-disabled:hover:bg-muted not-disabled:hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
+        danger: "bg-destructive-solid text-destructive-foreground not-disabled:hover:bg-destructive-hover aria-expanded:bg-destructive-hover",
         "danger-outline": DANGER_OUTLINE,
-        link: cn(TEXT_BUTTON, "text-brand hover:text-brand-hover"),
+        link: cn(TEXT_BUTTON, "text-brand not-disabled:hover:text-brand-hover"),
         "link-destructive": cn(TEXT_BUTTON, "text-destructive-text"),
-        "link-neutral": cn(TEXT_BUTTON, "text-text-secondary hover:text-foreground"),
+        "link-neutral": cn(TEXT_BUTTON, "text-text-secondary not-disabled:hover:text-foreground"),
         /** @deprecated Renders as `secondary`; mark the one main action `primary`. */
         default: SECONDARY,
         /** @deprecated Use `secondary`. */

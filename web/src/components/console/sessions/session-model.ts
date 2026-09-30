@@ -1,4 +1,4 @@
-import type { StatusTone } from "@/components/shared/status-chip";
+import { lifecycleStatus, type StatusTone } from "@/components/shared/status-map";
 import type { SessionOut } from "@/contracts/lkap-contracts";
 import { toMillis } from "@/lib/format";
 
@@ -18,11 +18,12 @@ export const SESSION_STATUS_LABEL: Record<SessionStatus, string> = {
   failed: "Failed",
 };
 
+/** Tones come from the one shared lifecycle map (created → info, active → live, ended → neutral, failed → danger). */
 export const SESSION_STATUS_TONE: Record<SessionStatus, StatusTone> = {
-  created: "neutral",
-  active: "live",
-  ended: "neutral",
-  failed: "danger",
+  created: lifecycleStatus("created").tone,
+  active: lifecycleStatus("active").tone,
+  ended: lifecycleStatus("ended").tone,
+  failed: lifecycleStatus("failed").tone,
 };
 
 /** CONTRACTS-V2 `SessionOut.channel`, in the order the filter lists them. */

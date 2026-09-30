@@ -114,6 +114,15 @@ function stubFetch(fixtures: Fixtures) {
   return fetchMock;
 }
 
+/** A stat card's value, found by its label ("Agents", "Live" …). */
+function statValue(label: string): string | null | undefined {
+  const card = screen
+    .getAllByText(label)
+    .map((node) => node.closest('[data-slot="stat-card"]'))
+    .find(Boolean) as HTMLElement | undefined;
+  return card?.querySelector(".text-stat")?.textContent;
+}
+
 function renderOverview() {
   vi.stubGlobal("ResizeObserver", ResizeObserverStub);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -131,7 +140,8 @@ afterEach(() => {
 
 describe("Overview", () => {
   it("shows every checklist row not-done with its action, and the empty states, on a fresh workspace", async () => {
-    stubFetch({});
+    // A builder or admin sees the New agent actions (a viewer gets a read-only note, below).
+    stubFetch({ role: "admin" });
     renderOverview();
 
     expect(await screen.findByText("Create your first agent")).toBeTruthy();
@@ -139,16 +149,18 @@ describe("Overview", () => {
     // Sign-in is always "done" in this v1-admin-token phase (no login flow exists yet).
     expect(screen.getByText("Sign in")).toBeTruthy();
 
-    // "New agent" appears twice (the checklist row's action and Quick actions),
-    // both buttons that open the dialog — never links to /console/agents/new.
-    expect(screen.getAllByRole("button", { name: "New agent" }).length).toBe(2);
+    // "New agent" appears twice (the page header's primary action and the
+    // checklist row's action), both buttons that open the dialog — never
+    // links to /console/agents/new.
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "New agent" }).length).toBe(2));
     expect(screen.queryAllByRole("link", { name: "New agent" })).toHaveLength(0);
     expect(await screen.findByText("No calls yet")).toBeTruthy();
     expect(await screen.findByText("No agents are published")).toBeTruthy();
 
-    // Status line: 0 agents, 0 live, 0 sessions.
-    expect(screen.getByText(/0 agents/)).toBeTruthy();
-    expect(screen.getByText(/0 live/)).toBeTruthy();
+    // Stat grid: 0 agents, 0 live, 0 sessions.
+    await waitFor(() => expect(statValue("Agents")).toBe("0"));
+    expect(statValue("Live")).toBe("0");
+    expect(statValue("Sessions, last 7 days")).toBe("0");
   });
 
   it("flips rows to done and swaps the empty states for real data once the workspace has content", async () => {
@@ -191,12 +203,65 @@ describe("Overview", () => {
     // Recent sessions: one row, no more "No calls yet" empty state.
     expect(screen.queryByText("No calls yet")).toBeNull();
 
-    // Status line reflects the fixtures.
-    expect(screen.getByText(/2 agents/)).toBeTruthy();
-    expect(screen.getByText(/1 live/)).toBeTruthy();
+    // Stat grid reflects the fixtures.
+    expect(statValue("Agents")).toBe("2");
+    expect(statValue("Live")).toBe("1");
   });
 
-  it("links quick actions to the right destinations; New agent opens the dialog", async () => {
+  it("counts neither archived agents nor archived published ones as live", async () => {
+    const agents: AgentPage = {
+      total: 4,
+      items: [
+        agent({ id: "a-1", name: "Front desk", slug: "front-desk", published: true }),
+        agent({ id: "a-2", name: "Claims", slug: "claims" }),
+        agent({ id: "a-3", name: "Old desk", slug: "old-desk", published: true, archived_at: "2026-09-10T00:00:00Z" }),
+        agent({ id: "a-4", name: "Old claims", slug: "old-claims", archived_at: "2026-09-10T00:00:00Z" }),
+      ],
+    };
+    stubFetch({ agents });
+    renderOverview();
+
+    await waitFor(() => expect(statValue("Agents")).toBe("2"));
+    expect(statValue("Live")).toBe("1");
+    expect(screen.getByText("2 archived agents not counted")).toBeTruthy();
+    // Live now lists only the unarchived published agent.
+    const liveNow = screen.getByText("Live now").closest("section") as HTMLElement;
+    expect(within(liveNow).getByRole("link", { name: "Front desk" })).toBeTruthy();
+    expect(within(liveNow).queryByRole("link", { name: "Old desk" })).toBeNull();
+  });
+
+  it("says when the loaded page may not hold every session of the week", async () => {
+    const now = new Date().toISOString();
+    const sessions: SessionPage = {
+      total: 120,
+      items: Array.from({ length: 50 }, (_, index) => session({ id: `s-${index}`, created_at: now })),
+    };
+    stubFetch({ sessions });
+    renderOverview();
+    await waitFor(() => expect(statValue("Sessions, last 7 days")).toBe("50+"));
+  });
+
+  it("shows an error with Retry in each card when the api fails", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 500, json: async () => ({ error: { code: "internal", message: "boom" } }) }) as Response),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <Overview />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("Couldn't load the overview numbers")).toBeTruthy();
+    expect(await screen.findByText("Couldn't load recent sessions")).toBeTruthy();
+    expect(await screen.findByText("Couldn't load live agents")).toBeTruthy();
+    expect(await screen.findByText("Couldn't load the setup checklist")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Retry" }).length).toBeGreaterThanOrEqual(4);
+    expect(screen.queryByText(/boom/)).toBeNull();
+  });
+
+  it("links quick actions to the right destinations; the header's New agent opens the dialog", async () => {
     stubFetch({ role: "admin" });
     renderOverview();
     await waitFor(() => expect(screen.getByText("Quick actions")).toBeTruthy());
@@ -205,7 +270,8 @@ describe("Overview", () => {
       "/console/knowledge",
     );
 
-    const newAgent = within(quickActions).getByRole("button", { name: "New agent" }) as HTMLButtonElement;
+    const header = document.querySelector('[data-slot="page-header"]') as HTMLElement;
+    const newAgent = within(header).getByRole("button", { name: "New agent" }) as HTMLButtonElement;
     await waitFor(() => expect(newAgent.disabled).toBe(false));
     fireEvent.click(newAgent);
     expect(await screen.findByRole("dialog", { name: "New agent" })).toBeTruthy();
@@ -225,15 +291,12 @@ describe("Overview", () => {
     expect(await screen.findByRole("dialog", { name: "New agent" })).toBeTruthy();
   });
 
-  it("disables New agent for a viewer", async () => {
+  it("replaces New agent with a read-only note for a viewer (D12)", async () => {
     stubFetch({ role: "viewer" });
     renderOverview();
     await screen.findByText("Quick actions");
-    await waitFor(() => {
-      for (const button of screen.getAllByRole("button", { name: "New agent" })) {
-        expect((button as HTMLButtonElement).disabled).toBe(true);
-      }
-    });
+    await waitFor(() => expect(screen.queryAllByRole("button", { name: "New agent" })).toHaveLength(0));
+    expect(screen.getAllByText("Ask a builder or admin to create agents.").length).toBeGreaterThan(0);
   });
 });
 
@@ -242,10 +305,10 @@ describe("Setup checklist — connection row", () => {
     return { id, name: `Conn ${id}`, slug: id, url: "wss://example.test", status };
   }
 
-  /** The row's icon is a check only when done; the title row carries the state. */
+  /** The row carries its state (a check icon, and "Done:" for screen readers, when done). */
   function connectionRowDone(): boolean {
     const row = screen.getByText("A LiveKit connection is tested").closest('[data-slot="section-row"]') as HTMLElement;
-    return row.querySelector("svg.text-success") !== null;
+    return row.getAttribute("data-state") === "done";
   }
 
   it("is not ticked when the only connection is unverified", async () => {

@@ -1,70 +1,47 @@
 "use client";
 
-import Link from "next/link";
-
 import { PageHeader } from "@/components/shared/page-header";
-import { pluralize, toMillis } from "@/lib/format";
-import { useAgents, useSessions } from "@/components/console/lib/api-hooks";
+import { NewAgentButton } from "@/components/console/agents/create/new-agent-button";
+import { useMe } from "@/components/console/shell/use-me";
 import { LiveNow } from "./live-now";
+import { OverviewStats } from "./overview-stats";
 import { QuickActions } from "./quick-actions";
 import { RecentSessions } from "./recent-sessions";
 import { SetupChecklist } from "./setup-checklist";
 
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-
-function StatusLine() {
-  const { data: agents } = useAgents();
-  const { data: sessions } = useSessions();
-
-  const agentItems = agents?.items ?? [];
-  const liveCount = agentItems.filter((a) => a.published).length;
-
-  const now = Date.now();
-  const recentSessions = (sessions?.items ?? []).filter((s) => now - toMillis(s.created_at) <= SEVEN_DAYS_MS);
-  const failedCount = recentSessions.filter((s) => s.status === "failed").length;
-
-  return (
-    <>
-      <Link href="/console/agents" className="font-medium text-foreground hover:underline">
-        {pluralize(agentItems.length, "agent", "agents")}
-      </Link>
-      {" · "}
-      <Link href="/console/agents?status=live" className="font-medium text-foreground hover:underline">
-        {liveCount} live
-      </Link>
-      {" · "}
-      <Link href="/console/sessions" className="font-medium text-foreground hover:underline">
-        {pluralize(recentSessions.length, "session", "sessions")} in the last 7 days
-      </Link>
-      {failedCount > 0 ? (
-        <>
-          {" · "}
-          <Link href="/console/sessions?status=failed" className="font-medium text-danger-text hover:underline">
-            {failedCount} failed
-          </Link>
-        </>
-      ) : null}
-    </>
-  );
+/** "Welcome back, Ada": the first word of the signed-in person's name, when the api knows it. */
+function greeting(name: string | undefined): string {
+  const first = name?.trim().split(/\s+/)[0];
+  return first ? `Welcome back, ${first}` : "Welcome back";
 }
 
 /**
- * `/console` — first screen, no hero metrics (docs/UI_UX_SPEC.md §4.1).
- * Left column (2/3): Setup + Recent sessions. Right column (1/3): Live now +
- * Quick actions.
+ * `/console` — the Overview archetype (docs/ui/DESIGN-SYSTEM.md section 7.4,
+ * decision D6 in docs/ui/AUDIT.md): a greeting with a one-sentence purpose
+ * and the one primary action ("New agent"), a stat grid of counts with
+ * hints, then two columns — setup and recent sessions on the left, live
+ * agents and shortcuts in the aside.
  */
 export function Overview() {
+  const { me } = useMe();
   return (
-    <div>
-      <PageHeader title="Overview" description={<StatusLine />} />
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <SetupChecklist />
-          <RecentSessions />
-        </div>
-        <div className="space-y-6">
-          <LiveNow />
-          <QuickActions />
+    <div data-slot="overview">
+      <PageHeader
+        title={greeting(me?.user.name)}
+        description="Build, publish and keep an eye on your voice and video agents from one place."
+        actions={<NewAgentButton readOnlyNote="Ask a builder or admin to create agents." />}
+      />
+      <div className="flex flex-col gap-8">
+        <OverviewStats />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className="flex min-w-0 flex-col gap-8">
+            <SetupChecklist />
+            <RecentSessions />
+          </div>
+          <aside aria-label="Live agents and shortcuts" className="flex min-w-0 flex-col gap-4">
+            <LiveNow />
+            <QuickActions />
+          </aside>
         </div>
       </div>
     </div>

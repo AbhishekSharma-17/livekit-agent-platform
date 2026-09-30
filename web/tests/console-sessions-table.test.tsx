@@ -4,7 +4,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { exportCsvHref, SessionsTable } from "@/components/console/sessions/sessions-table";
+import {
+  exportCsvHref,
+  readStoredFilters,
+  SESSION_FILTERS_STORAGE_KEY,
+  SessionsTable,
+} from "@/components/console/sessions/sessions-table";
 import {
   filterSessions,
   EMPTY_FILTERS,
@@ -97,6 +102,23 @@ beforeEach(() => {
   searchParams = new URLSearchParams();
   routerReplace.mockReset();
   requested.length = 0;
+  // Filters and the search query are remembered in localStorage; each test gets
+  // a fresh in-memory one (Node's own experimental global shadows jsdom's).
+  const data = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    get length() {
+      return data.size;
+    },
+    clear: () => data.clear(),
+    getItem: (key: string) => data.get(key) ?? null,
+    key: (index: number) => Array.from(data.keys())[index] ?? null,
+    removeItem: (key: string) => {
+      data.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      data.set(key, String(value));
+    },
+  } satisfies Storage);
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -303,6 +325,36 @@ describe("SessionsTable — Cost column (docs/v4/COSTS.md §5 item 7)", () => {
   });
 });
 
+describe("SessionsTable — search", () => {
+  const rows = Array.from({ length: 6 }, (_, index) =>
+    session({ id: String(index), agent_id: `a-${index}`, agent_name: index === 3 ? "Zoë's front desk" : `Claims desk ${index}`, room_name: `room-${index}`, status: "ended" }),
+  );
+
+  it("searches from 6 sessions, accent-insensitively, and says when nothing matches", async () => {
+    stubApi(rows);
+    renderWithClient(<SessionsTable />);
+    await (await loadedTable()).findByText("room-0");
+    const search = screen.getByRole("searchbox", { name: "Search sessions" });
+
+    fireEvent.change(search, { target: { value: "zoe front" } });
+    expect(table().getByText("room-3")).toBeTruthy();
+    expect(table().queryByText("room-0")).toBeNull();
+    expect(document.querySelector("[data-slot=search-highlight]")).not.toBeNull();
+
+    fireEvent.change(search, { target: { value: "nothing like this" } });
+    expect(screen.getByText("No sessions match “nothing like this”")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(table().getByText("room-0")).toBeTruthy();
+  });
+
+  it("offers no search under 6 sessions", async () => {
+    stubApi(rows.slice(0, 5));
+    renderWithClient(<SessionsTable />);
+    await (await loadedTable()).findByText("room-0");
+    expect(screen.queryByRole("searchbox", { name: "Search sessions" })).toBeNull();
+  });
+});
+
 describe("SessionsTable — filters", () => {
   const rows = [
     session({ id: "1", agent_id: "a-1", agent_name: "Claims desk", room_name: "room-web", status: "ended", channel: "web", connection_id: "c-1" }),
@@ -314,18 +366,74 @@ describe("SessionsTable — filters", () => {
     renderWithClient(<SessionsTable />);
     await (await loadedTable()).findByText("room-web");
 
-    const group = within(screen.getByRole("group", { name: "Filter by status" }));
-    fireEvent.click(group.getByRole("button", { name: "Failed" }));
-    expect(group.getByRole("button", { name: "Failed" }).getAttribute("aria-pressed")).toBe("true");
+    const group = within(screen.getByRole("radiogroup", { name: "Filter by status" }));
+    fireEvent.click(group.getByRole("radio", { name: /^Failed/ }));
+    expect(group.getByRole("radio", { name: /^Failed/ }).getAttribute("aria-checked")).toBe("true");
     expect(table().queryByText("room-web")).toBeNull();
     expect(table().getByText("room-sip")).toBeTruthy();
     expect(routerReplace).toHaveBeenLastCalledWith("/console/sessions?status=failed", { scroll: false });
 
-    fireEvent.click(group.getByRole("button", { name: "Active" }));
+    fireEvent.click(group.getByRole("radio", { name: /^Active/ }));
     expect(screen.getByText("No sessions match these filters")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(table().getByText("room-web")).toBeTruthy();
     expect(routerReplace).toHaveBeenLastCalledWith("/console/sessions", { scroll: false });
+  });
+
+  it("counts each status beside its filter", async () => {
+    stubApi(rows);
+    renderWithClient(<SessionsTable />);
+    await (await loadedTable()).findByText("room-web");
+    const group = within(screen.getByRole("radiogroup", { name: "Filter by status" }));
+    expect(group.getByRole("radio", { name: /^All/ }).textContent).toBe("All2");
+    expect(group.getByRole("radio", { name: /^Failed/ }).textContent).toBe("Failed1");
+    expect(group.getByRole("radio", { name: /^Active/ }).textContent).toBe("Active0");
+  });
+
+  it("remembers the filters and restores them when the URL has none", async () => {
+    stubApi(rows);
+    const first = renderWithClient(<SessionsTable />);
+    await (await loadedTable()).findByText("room-web");
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Filter by status" })).getByRole("radio", { name: /^Failed/ }));
+    first.unmount();
+
+    routerReplace.mockReset();
+    renderWithClient(<SessionsTable />);
+    expect(await (await loadedTable()).findByText("room-sip")).toBeTruthy();
+    expect(table().queryByText("room-web")).toBeNull();
+    expect(routerReplace).toHaveBeenCalledWith("/console/sessions?status=failed", { scroll: false });
+  });
+
+  it("lets the URL win over remembered filters", async () => {
+    window.localStorage.setItem(SESSION_FILTERS_STORAGE_KEY, JSON.stringify({ status: "failed" }));
+    searchParams = new URLSearchParams("channel=web");
+    stubApi(rows);
+    renderWithClient(<SessionsTable />);
+    expect(await (await loadedTable()).findByText("room-web")).toBeTruthy();
+    expect(table().queryByText("room-sip")).toBeNull();
+  });
+
+  it("drops a remembered agent that no longer exists", async () => {
+    window.localStorage.setItem(SESSION_FILTERS_STORAGE_KEY, JSON.stringify({ agentId: "a-gone" }));
+    stubApi(rows);
+    renderWithClient(<SessionsTable />);
+    expect(await (await loadedTable()).findByText("room-web")).toBeTruthy();
+    expect(table().getByText("room-sip")).toBeTruthy();
+  });
+
+  it("validates remembered filters on read", () => {
+    expect(readStoredFilters(null)).toEqual(EMPTY_FILTERS);
+    expect(readStoredFilters("not json")).toEqual(EMPTY_FILTERS);
+    expect(readStoredFilters(JSON.stringify({ status: "exploded", channel: "fax", range: "90d", agentId: "<script>" }))).toEqual(
+      EMPTY_FILTERS,
+    );
+    expect(readStoredFilters(JSON.stringify({ status: "failed", channel: "sip_in", range: "7d", agentId: "a-1" }))).toEqual({
+      ...EMPTY_FILTERS,
+      status: "failed",
+      channel: "sip_in",
+      range: "7d",
+      agentId: "a-1",
+    });
   });
 
   it("restores channel, connection and agent filters from the URL", async () => {

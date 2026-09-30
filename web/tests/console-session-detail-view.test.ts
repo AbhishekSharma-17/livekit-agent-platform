@@ -314,7 +314,9 @@ describe("SessionDetailView — caller time zone chip (R-V5-10, V5-52)", () => {
     });
     renderView();
 
-    expect(await screen.findByText("Caller time zone: America/New_York (from the phone number)")).toBeTruthy();
+    // The facts card's "Caller time zone" row carries the zone and where it came from.
+    const term = await screen.findByText("Caller time zone");
+    expect(term.nextElementSibling?.textContent).toBe("America/New_York (from the phone number)");
   });
 
   it("shows nothing before the locale event or summary have landed", async () => {

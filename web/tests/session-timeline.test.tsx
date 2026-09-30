@@ -286,7 +286,7 @@ describe("<TimelineView />", () => {
     expect(screen.getByText("Done")).toBeTruthy();
     expect(screen.getByText("10 ms")).toBeTruthy();
     expect(screen.getByText("LLM timeout")).toBeTruthy();
-    expect(container.querySelector(".bg-danger-soft")).toBeTruthy();
+    expect(container.querySelector(".bg-destructive-subtle")).toBeTruthy();
     // Wall-clock time lives in the row title; the row shows mm:ss.
     const firstTime = container.querySelector("li[data-row] time");
     expect(firstTime?.textContent).toBe("00:00");

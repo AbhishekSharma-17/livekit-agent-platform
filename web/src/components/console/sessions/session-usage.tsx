@@ -147,27 +147,27 @@ export function UsageGroups({ groups }: { groups: UsageGroup[] }) {
     <div className="space-y-4">
       {groups.map((group) => (
         <div key={group.key}>
-          <h2 className="mb-2 text-xs font-medium text-muted-foreground">{group.label}</h2>
-          <ul className="divide-y divide-border rounded-md border border-border">
+          <h2 className="mb-2 text-caption font-medium text-text-secondary">{group.label}</h2>
+          <ul className="divide-y divide-border rounded border border-border">
             {group.rows.map((row) => (
               <li key={row.key} className="px-3 py-2.5">
                 <div className="flex flex-wrap items-baseline gap-x-2">
                   {row.kind ? (
-                    <span className="text-[0.6875rem] font-medium tracking-[0.02em] text-muted-foreground">{row.kind}</span>
+                    <span className="text-caption font-medium tracking-[0.02em] text-text-secondary">{row.kind}</span>
                   ) : null}
-                  <span className="min-w-0 font-mono text-[0.8125rem] break-all text-foreground">{row.title}</span>
+                  <span className="min-w-0 font-mono text-label break-all text-foreground">{row.title}</span>
                 </div>
                 {row.pairs.length > 0 ? (
                   <dl className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1">
                     {row.pairs.map((pair) => (
                       <div key={pair.key} className="flex items-baseline gap-1.5">
-                        <dt className="text-xs text-muted-foreground">{pair.label}</dt>
-                        <dd className="font-mono text-xs tabular-nums text-foreground">{pair.value}</dd>
+                        <dt className="text-caption text-text-secondary">{pair.label}</dt>
+                        <dd className="font-mono text-caption tabular-nums text-foreground">{pair.value}</dd>
                       </div>
                     ))}
                   </dl>
                 ) : (
-                  <p className="mt-1 text-xs text-muted-foreground">No usage counted.</p>
+                  <p className="mt-1 text-caption text-text-secondary">No usage counted.</p>
                 )}
               </li>
             ))}

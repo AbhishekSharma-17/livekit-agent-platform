@@ -7,7 +7,7 @@ import { AudioLinesIcon, DownloadIcon, RefreshCwIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Icon } from "@/components/shared/icon";
-import { StatusChip, type StatusTone } from "@/components/shared/status-chip";
+import { StatusPill, type StatusTone } from "@/components/shared/status-chip";
 import type { SessionTabProps } from "@/components/console/sessions/detail/types";
 import { formatDuration } from "@/lib/format";
 
@@ -66,7 +66,7 @@ export function RecordingTab({ session }: SessionTabProps) {
         }
         action={
           status === "requested" || status === "active" ? (
-            <Button type="button" variant="outline" size="sm" onClick={refresh}>
+            <Button type="button" variant="secondary" size="sm" onClick={refresh}>
               <Icon as={RefreshCwIcon} size="sm" />
               Refresh
             </Button>
@@ -79,9 +79,9 @@ export function RecordingTab({ session }: SessionTabProps) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <StatusChip tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</StatusChip>
+        <StatusPill tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</StatusPill>
         {typeof recording.duration_s === "number" ? (
-          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+          <span className="font-mono text-caption tabular-nums text-text-secondary">
             {formatDuration(recording.duration_s * 1000)}
           </span>
         ) : null}
@@ -92,7 +92,7 @@ export function RecordingTab({ session }: SessionTabProps) {
           compact
           title="This link expired"
           action={
-            <Button type="button" variant="outline" size="sm" onClick={refresh}>
+            <Button type="button" variant="secondary" size="sm" onClick={refresh}>
               <Icon as={RefreshCwIcon} size="sm" />
               Get a fresh link
             </Button>
@@ -104,7 +104,7 @@ export function RecordingTab({ session }: SessionTabProps) {
         </audio>
       )}
       <div>
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="secondary" size="sm">
           <a href={recording.url} download>
             <Icon as={DownloadIcon} size="sm" />
             Download

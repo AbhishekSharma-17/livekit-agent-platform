@@ -27,10 +27,7 @@ allow colour-literal   1  src/components/shared/vendor-mark.tsx   # keep: per-ve
 
 # S4 build library (cleared: 21 in 13 files taken to zero)
 
-# S5 observe (3 in 3 files)
-allow opacity-colour   1  src/components/console/sessions-v2/cost-tab.tsx
-allow opacity-colour   1  src/components/console/sessions-v2/memory-tab.tsx
-allow opacity-colour   1  src/components/console/sessions/details-disclosure.tsx
+# S5 observe (0: cleared)
 
 # S6 settings (0 in 0 files)
 

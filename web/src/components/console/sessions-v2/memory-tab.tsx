@@ -28,11 +28,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Icon } from "@/components/shared/icon";
+import { ReadOnlyNote } from "@/components/shared/read-only-note";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { SkeletonRows } from "@/components/shared/loading-state";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { useWriteAccess } from "@/components/console/lib/roles";
+import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { readOnlyCopy } from "@/components/console/shared/permission";
 import type { SessionTabProps } from "@/components/console/sessions/detail/types";
 import { ApiError, api } from "@/lib/api";
 import type { MemoryForgetOut, SessionMemoryOut } from "@/contracts/lkap-contracts";
@@ -68,16 +71,16 @@ function UntrustedList({
   empty: React.ReactNode;
 }) {
   if (items.length === 0) {
-    return <p className="text-[0.8125rem] text-muted-foreground">{empty}</p>;
+    return <p className="text-label text-text-secondary">{empty}</p>;
   }
   return (
     <ul
       data-slot="untrusted-text"
       aria-label={label}
-      className="flex flex-col gap-1 rounded-md border border-border bg-muted/50 p-2"
+      className="flex flex-col gap-1 rounded border border-border bg-muted p-2"
     >
       {items.map((item, index) => (
-        <li key={index} className="font-mono text-xs break-words whitespace-pre-wrap text-foreground">
+        <li key={index} className="font-mono text-caption break-words whitespace-pre-wrap text-foreground">
           {item}
         </li>
       ))}
@@ -91,7 +94,7 @@ function memoryUnavailableFrom(err: unknown): boolean {
 
 export function MemoryTab({ session }: SessionTabProps) {
   const queryClient = useQueryClient();
-  const { canWrite: canForget } = useWriteAccess("admin");
+  const { canWrite: canForget, isLoading: roleLoading } = useWriteAccess("admin");
 
   const memoryQuery = useQuery({
     queryKey: ["sessions", session.id, "memory"] as const,
@@ -113,7 +116,7 @@ export function MemoryTab({ session }: SessionTabProps) {
       void queryClient.invalidateQueries({ queryKey: ["sessions", session.id] });
     },
     onError: (err: unknown) => {
-      toast.error(memoryUnavailableFrom(err) ? MEMORY_UNAVAILABLE_NOTICE : err instanceof ApiError ? err.message : "Couldn't forget this caller");
+      toast.error(memoryUnavailableFrom(err) ? MEMORY_UNAVAILABLE_NOTICE : `Couldn't forget this caller. ${errorMessage(err)}`);
     },
   });
 
@@ -126,10 +129,10 @@ export function MemoryTab({ session }: SessionTabProps) {
       return <EmptyState icon={BrainIcon} title="Memory isn't installed" description={MEMORY_UNAVAILABLE_NOTICE} />;
     }
     return (
-      <EmptyState
-        icon={BrainIcon}
-        title="Couldn't load memory"
-        description={memoryQuery.error instanceof ApiError ? memoryQuery.error.message : "Something went wrong."}
+      <ErrorBanner
+        error={memoryQuery.error}
+        context={{ action: "load memory" }}
+        onRetry={() => void memoryQuery.refetch()}
       />
     );
   }
@@ -154,19 +157,19 @@ export function MemoryTab({ session }: SessionTabProps) {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-3">
-        <StatusChip tone="neutral" size="sm">
+        <StatusPill tone="neutral" size="sm">
           {memory.subject_id ? "Pseudonymous caller id known" : "No caller id for this session"}
-        </StatusChip>
+        </StatusPill>
         {forgotten ? (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-caption text-text-secondary">
             Forgotten <RelativeTime iso={memory.forgotten_at as string} />
           </span>
         ) : null}
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <h3 className="text-sm font-semibold text-foreground">What the agent recalled at the start of the call</h3>
-        {recallStatus ? <p className="text-[0.8125rem] text-muted-foreground">{RECALL_TEXT[recallStatus]}</p> : null}
+        <h3 className="text-body font-semibold text-foreground">What the agent recalled at the start of the call</h3>
+        {recallStatus ? <p className="text-label text-text-secondary">{RECALL_TEXT[recallStatus]}</p> : null}
         <UntrustedList
           label="Recalled memories"
           items={memory.recalled ?? []}
@@ -175,34 +178,39 @@ export function MemoryTab({ session }: SessionTabProps) {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <h3 className="text-sm font-semibold text-foreground">What was stored after the call</h3>
+        <h3 className="text-body font-semibold text-foreground">What was stored after the call</h3>
         {storeStatus ? (
-          <p className="text-[0.8125rem] text-muted-foreground">
+          <p className="text-label text-text-secondary">
             {STORE_TEXT[storeStatus]}
             {memory.store_reason ? ` — ${memory.store_reason}.` : ""}
           </p>
         ) : (
-          <p className="text-[0.8125rem] text-muted-foreground">Nothing has been stored for this call yet.</p>
+          <p className="text-label text-text-secondary">Nothing has been stored for this call yet.</p>
         )}
         <UntrustedList label="Stored memories" items={memory.stored ?? []} empty="Nothing was stored." />
       </div>
 
       {memory.subject_id && !forgotten ? (
         <div>
-          <ConfirmDialog
-            trigger={
-              <Button type="button" variant="outline" size="sm" disabled={!canForget} title={canForget ? undefined : writeAccessReason("admin")}>
-                <Icon as={UserXIcon} size="sm" />
-                Forget this caller
-              </Button>
-            }
-            title="Forget this caller?"
-            description="Deletes everything remembered about this caller everywhere it's shared, and blanks the memories recorded on their past sessions. This can't be undone."
-            confirmLabel="Forget caller"
-            onConfirm={async () => {
-              await forget.mutateAsync(memory.subject_id as string);
-            }}
-          />
+          {roleLoading ? null : canForget ? (
+            <ConfirmDialog
+              trigger={
+                <Button type="button" variant="danger-outline" size="sm">
+                  <Icon as={UserXIcon} size="sm" />
+                  Forget this caller
+                </Button>
+              }
+              title="Forget this caller?"
+              description="Deletes everything remembered about this caller everywhere it's shared, and blanks the memories recorded on their past sessions. This can't be undone."
+              confirmLabel="Forget caller"
+              onConfirm={async () => {
+                await forget.mutateAsync(memory.subject_id as string);
+              }}
+            />
+          ) : (
+            // D12: a person who can't forget callers reads the next step instead of a disabled button.
+            <ReadOnlyNote>{readOnlyCopy("admin", "forget this caller")}</ReadOnlyNote>
+          )}
         </div>
       ) : null}
     </div>

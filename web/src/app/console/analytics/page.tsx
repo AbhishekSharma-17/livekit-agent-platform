@@ -1,19 +1,23 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 
-import { PageHeader } from "@/components/shared/page-header";
-import { AnalyticsView } from "@/components/console/analytics/analytics-view";
+import { Page } from "@/components/shared/page-header";
+import { AnalyticsFallback, AnalyticsView } from "@/components/console/analytics/analytics-view";
 
 export const metadata: Metadata = { title: "Analytics" };
 
-/** `/console/analytics?range=` (docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §1, §2.6). */
+/**
+ * `/console/analytics?range=&tab=` — the analytics archetype on a wide page
+ * (docs/ui/DESIGN-SYSTEM.md section 7.4). The header lives in `AnalyticsView`
+ * (the date range and Refresh read the query string); while that suspends,
+ * the fallback mirrors the header and the stat grid instead of a blank area.
+ */
 export default function AnalyticsPage() {
   return (
-    <div>
-      <PageHeader title="Analytics" description="Usage and cost across every agent in this workspace." />
-      <Suspense>
+    <Page width="wide">
+      <Suspense fallback={<AnalyticsFallback />}>
         <AnalyticsView />
       </Suspense>
-    </div>
+    </Page>
   );
 }

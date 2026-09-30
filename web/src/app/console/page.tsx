@@ -1,14 +1,18 @@
 import type { Metadata } from "next";
 
+import { Page } from "@/components/shared/page-header";
 import { Overview } from "@/components/console/overview/overview";
 
 export const metadata: Metadata = { title: "Overview" };
 
 /**
- * `/console` — the console's first screen (docs/UI_UX_SPEC.md §3.4, §4.1).
- * Route move per §7.2 item 3: this used to render the agents list (a WP-2
- * stopgap, now `app/console/agents/page.tsx`); it renders the real Overview.
+ * `/console` — the console's first screen: the Overview archetype
+ * (docs/ui/DESIGN-SYSTEM.md section 7.4, decision D6 in docs/ui/AUDIT.md).
  */
 export default function ConsoleOverviewPage() {
-  return <Overview />;
+  return (
+    <Page>
+      <Overview />
+    </Page>
+  );
 }

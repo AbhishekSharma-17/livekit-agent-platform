@@ -79,7 +79,7 @@ describe("CostTab — estimate vs actual (V4-16)", () => {
       },
     });
     renderTab(session);
-    expect(screen.getByText("$0.2000", { selector: "p" })).toBeTruthy();
+    expect(screen.getByText("$0.2000", { selector: '[data-slot="stat-card"] *' })).toBeTruthy();
     expect(screen.getByText(/\+\$0\.0200 \(\+10%\)/)).toBeTruthy();
     expect(screen.getByText("Why it differs")).toBeTruthy();
     expect(screen.getByText(/Agent's thinking: more turns/)).toBeTruthy();
@@ -123,6 +123,6 @@ describe("CostTab — estimate vs actual (V4-16)", () => {
     const session = baseSession({ cost: { lines: [], estimated_usd: "0.04" } });
     renderTab(session);
     expect(screen.queryByText("No cost data")).toBeNull();
-    expect(screen.getByText("$0.0400", { selector: "p" })).toBeTruthy();
+    expect(screen.getByText("$0.0400", { selector: '[data-slot="stat-card"] *' })).toBeTruthy();
   });
 });

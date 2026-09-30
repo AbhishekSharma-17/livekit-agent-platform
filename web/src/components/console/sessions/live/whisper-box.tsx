@@ -63,8 +63,8 @@ export function WhisperBox({ sessionId }: { sessionId: string }) {
   return (
     <div data-slot="live-whisper-box" className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
       <div>
-        <h3 className="text-sm font-medium text-foreground">Guide the agent</h3>
-        <p className="text-muted-foreground text-xs">
+        <h3 className="text-body font-medium text-foreground">Guide the agent</h3>
+        <p className="text-text-secondary text-caption">
           Written guidance only the agent sees — the caller never hears or sees it. Every message is logged.
         </p>
       </div>
@@ -78,7 +78,7 @@ export function WhisperBox({ sessionId }: { sessionId: string }) {
           disabled={whisper.isPending}
         />
       </Field>
-      <label className="flex items-center gap-2 text-sm text-foreground">
+      <label className="flex items-center gap-2 text-body text-foreground">
         <Checkbox
           checked={replyNow}
           onCheckedChange={(checked) => setReplyNow(checked === true)}
@@ -87,19 +87,19 @@ export function WhisperBox({ sessionId }: { sessionId: string }) {
         Have the agent say this right now
       </label>
       {/* One persistent live region — a conditionally-mounted one announces nothing on change. */}
-      <div role="status" aria-live="polite" className="min-h-[1.25rem] text-xs">
+      <div role="status" aria-live="polite" className="min-h-[1.25rem] text-caption">
         {notice?.tone === "success" ? <span className="text-success-text">{notice.message}</span> : null}
       </div>
       {notice?.tone === "danger" ? <ErrorBanner message={notice.message} /> : null}
       <div className="flex justify-end">
         {hasConfirmed ? (
-          <Button type="button" onClick={() => void send()} disabled={!canSend}>
+          <Button type="button" variant="primary" onClick={() => void send()} disabled={!canSend}>
             {whisper.isPending ? "Sending…" : "Send"}
           </Button>
         ) : (
           <ConfirmDialog
             trigger={
-              <Button type="button" disabled={!canSend}>
+              <Button type="button" variant="primary" disabled={!canSend}>
                 Send
               </Button>
             }

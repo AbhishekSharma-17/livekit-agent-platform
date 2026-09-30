@@ -3,83 +3,101 @@
 import Link from "next/link";
 import { HistoryIcon } from "lucide-react";
 
+import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar } from "@/components/shared/data-display";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ListCard, ListCardRow } from "@/components/shared/list-card";
+import { LoadingRegion } from "@/components/shared/loading-state";
 import { RelativeTime } from "@/components/shared/relative-time";
-import { Section, SectionRow } from "@/components/shared/section";
-import { StatusChip, type StatusTone } from "@/components/shared/status-chip";
-import { formatDuration, toMillis } from "@/lib/format";
+import { StatusPill } from "@/components/shared/status-chip";
 import { useSessions } from "@/components/console/lib/api-hooks";
-import type { SessionOut } from "@/contracts/lkap-contracts";
-import { SkeletonRows } from "@/components/shared/loading-state";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
+import { SESSION_STATUS_LABEL, sessionDurationMs, sessionStatusTone } from "@/components/console/sessions/session-model";
+import { formatDuration } from "@/lib/format";
 
-const STATUS_TONE: Record<SessionOut["status"], StatusTone> = {
-  created: "neutral",
-  active: "live",
-  ended: "neutral",
-  failed: "danger",
-};
+const ROWS = 8;
 
-const STATUS_LABEL: Record<SessionOut["status"], string> = {
-  created: "Created",
-  active: "Live",
-  ended: "Ended",
-  failed: "Failed",
-};
-
-function sessionDuration(session: SessionOut): string {
-  if (!session.started_at) return "—";
-  const end = session.ended_at ?? new Date().toISOString();
-  return formatDuration(toMillis(end) - toMillis(session.started_at));
+function RowsSkeleton() {
+  return (
+    <LoadingRegion label="Loading recent sessions">
+      <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+        {[0, 1, 2].map((index) => (
+          <li key={index} className="flex min-h-14 items-center gap-3 px-4 py-3">
+            <Skeleton className="size-7 rounded-pill" />
+            <div className="flex flex-1 flex-col gap-1.5">
+              <Skeleton className="h-3.5 w-40" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            <Skeleton className="h-5 w-14 rounded-pill" />
+          </li>
+        ))}
+      </ul>
+    </LoadingRegion>
+  );
 }
 
-/** docs/UI_UX_SPEC.md §4.1: "Recent sessions": 8 rows, "View all". */
+/**
+ * The Overview's recent-items list (docs/ui/DESIGN-SYSTEM.md section 7.4):
+ * the newest sessions as list-card rows (agent, duration, when, status),
+ * each opening the session, with "See all" to the sessions list.
+ */
 export function RecentSessions() {
-  const { data, isLoading } = useSessions(undefined, undefined, 8);
+  const { data, isLoading, isError, error, refetch } = useSessions(undefined, undefined, ROWS);
   const items = data?.items ?? [];
 
   return (
-    <Section
-      id="recent-sessions"
-      title="Recent sessions"
-      aside={
-        <Link href="/console/sessions" className="text-sm font-medium text-brand-text hover:underline">
-          View all
+    <section id="recent-sessions" aria-labelledby="recent-sessions-title" className="flex flex-col gap-3.5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="recent-sessions-title" className="text-title font-semibold tracking-[-0.008em] text-foreground">
+          Recent sessions
+        </h2>
+        <Link href="/console/sessions" className="text-label font-medium text-brand hover:underline hover:underline-offset-[3px]">
+          See all
         </Link>
-      }
-    >
+      </div>
       {isLoading ? (
-        <SectionRow>
-          <SkeletonRows label="Loading recent sessions" rows={3} rowClassName="h-8" />
-        </SectionRow>
+        <RowsSkeleton />
+      ) : isError ? (
+        <ErrorBanner error={error} context={{ action: "load recent sessions" }} onRetry={() => void refetch()} />
       ) : items.length === 0 ? (
-        <SectionRow>
-          <EmptyState
-            compact
-            icon={HistoryIcon}
-            title="No calls yet"
-            description="Every test call and public call is recorded here with its transcript."
-            action={
-              <Link href="/console/agents" className="text-sm font-medium text-brand-text hover:underline">
-                Open an agent
-              </Link>
-            }
-          />
-        </SectionRow>
+        <EmptyState
+          icon={HistoryIcon}
+          title="No calls yet"
+          description="Every test call and public call is recorded here with its transcript."
+          action={
+            <Link href="/console/agents" className="text-label font-medium text-brand hover:underline hover:underline-offset-[3px]">
+              Open an agent
+            </Link>
+          }
+        />
       ) : (
-        items.map((session) => (
-          <SectionRow key={session.id} className="flex items-center justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <Link href={`/console/sessions/${session.id}`} className="text-sm font-medium hover:underline">
-                {session.agent_name}
-              </Link>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {sessionDuration(session)} · <RelativeTime iso={session.created_at} />
-              </p>
-            </div>
-            <StatusChip tone={STATUS_TONE[session.status]}>{STATUS_LABEL[session.status]}</StatusChip>
-          </SectionRow>
-        ))
+        <ListCard label="Recent sessions">
+          {items.map((session) => {
+            const duration = sessionDurationMs(session);
+            const name = session.agent_name || "Unknown agent";
+            return (
+              <ListCardRow
+                key={session.id}
+                href={`/console/sessions/${session.id}`}
+                leading={<Avatar name={name} />}
+                title={name}
+                meta={
+                  <>
+                    {duration === null ? "Not started" : formatDuration(duration)}
+                    {" · "}
+                    <RelativeTime iso={session.started_at ?? session.created_at} />
+                  </>
+                }
+                trailing={
+                  <StatusPill tone={sessionStatusTone(session)} size="sm">
+                    {SESSION_STATUS_LABEL[session.status]}
+                  </StatusPill>
+                }
+              />
+            );
+          })}
+        </ListCard>
       )}
-    </Section>
+    </section>
   );
 }

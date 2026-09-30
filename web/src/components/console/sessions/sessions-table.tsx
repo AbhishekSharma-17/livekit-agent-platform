@@ -3,30 +3,30 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, HeadphonesIcon, HistoryIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, DownloadIcon, HeadphonesIcon, HistoryIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { EmptyState } from "@/components/shared/empty-state";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EmptyState, NoMatches } from "@/components/shared/empty-state";
 import { Icon } from "@/components/shared/icon";
+import { Highlight, matchesQuery, SEARCH_THRESHOLD, useRememberedQuery } from "@/components/shared/list-search";
+import { LoadingRegion } from "@/components/shared/loading-state";
+import { PageHeader } from "@/components/shared/page-header";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
-import { StatusChip } from "@/components/shared/status-chip";
+import { SearchField } from "@/components/shared/search-field";
+import { SegmentedControl } from "@/components/shared/segmented-control";
+import { StatusPill } from "@/components/shared/status-chip";
 import { useAgents } from "@/components/console/lib/api-hooks";
 import { formatUsd } from "@/components/console/lib/cost-hooks";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import type { AgentOut, QaField, SessionOut } from "@/contracts/lkap-contracts";
 import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+import { RefreshButton } from "./refresh-button";
 import {
   CHANNELS,
   channelLabel,
@@ -46,19 +46,13 @@ import {
   usageTurns,
   type SessionFilters,
   type SessionRange,
+  type SessionStatus,
 } from "./session-model";
 import { SESSION_LIST_FETCH_LIMIT, useConnectionNames, useSessionList } from "./use-session-queries";
-import { LoadingRegion } from "@/components/shared/loading-state";
 
 const ALL = "__all__";
 
-const STATUS_FILTERS: { value: string; label: string }[] = [
-  { value: "", label: "All" },
-  { value: "active", label: SESSION_STATUS_LABEL.active },
-  { value: "ended", label: SESSION_STATUS_LABEL.ended },
-  { value: "failed", label: SESSION_STATUS_LABEL.failed },
-  { value: "created", label: SESSION_STATUS_LABEL.created },
-];
+const STATUS_ORDER: SessionStatus[] = ["active", "ended", "failed", "created"];
 
 const FILTER_PARAMS: Record<keyof SessionFilters, string> = {
   agentId: "agent",
@@ -67,6 +61,11 @@ const FILTER_PARAMS: Record<keyof SessionFilters, string> = {
   connectionId: "connection",
   range: "range",
 };
+
+/** Where the list's filters are remembered between visits (spec section 9). */
+export const SESSION_FILTERS_STORAGE_KEY = "lkap:sessions:filters";
+const SEARCH_LIST_ID = "sessions";
+const ID_PATTERN = /^[\w-]{1,80}$/;
 
 function readFilters(params: URLSearchParams | null): SessionFilters {
   const range = params?.get(FILTER_PARAMS.range) ?? "";
@@ -80,9 +79,58 @@ function readFilters(params: URLSearchParams | null): SessionFilters {
 }
 
 /**
+ * Remembered filters, validated on read: a status, channel or range outside
+ * the fixed sets and an id that isn't id-shaped are dropped, so a stale or
+ * hand-edited entry can never break the list. Ids that no longer exist are
+ * dropped later, once the agent and connection lists have loaded.
+ */
+export function readStoredFilters(raw: string | null): SessionFilters {
+  if (!raw || raw.length > 1000) return EMPTY_FILTERS;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return EMPTY_FILTERS;
+  }
+  if (!value || typeof value !== "object") return EMPTY_FILTERS;
+  const stored = value as Record<string, unknown>;
+  const text = (key: string) => (typeof stored[key] === "string" ? (stored[key] as string) : "");
+  const id = (key: string) => (ID_PATTERN.test(text(key)) ? text(key) : "");
+  return {
+    agentId: id("agentId"),
+    status: (STATUS_ORDER as string[]).includes(text("status")) ? text("status") : "",
+    channel: (CHANNELS as string[]).includes(text("channel")) ? text("channel") : "",
+    connectionId: id("connectionId"),
+    range: RANGE_OPTIONS.some((option) => option.value && option.value === text("range")) ? (text("range") as SessionRange) : "",
+  };
+}
+
+function loadStoredFilters(): SessionFilters {
+  try {
+    return readStoredFilters(window.localStorage.getItem(SESSION_FILTERS_STORAGE_KEY));
+  } catch {
+    return EMPTY_FILTERS;
+  }
+}
+
+function storeFilters(filters: SessionFilters) {
+  try {
+    if (Object.values(filters).some(Boolean)) {
+      window.localStorage.setItem(SESSION_FILTERS_STORAGE_KEY, JSON.stringify(filters));
+    } else {
+      window.localStorage.removeItem(SESSION_FILTERS_STORAGE_KEY);
+    }
+  } catch {
+    // Private mode or blocked storage: the filters still work, they just aren't remembered.
+  }
+}
+
+/**
  * Filters and page live in the query string (docs/UI_UX_SPEC.md §3.5) so a
  * filtered list is shareable and survives the back button; the list reacts to
- * local state, not to a router round trip.
+ * local state, not to a router round trip. They are also remembered per
+ * person (spec section 9): a visit with no filters in the URL picks up the
+ * last ones used, read after mount so server and client markup agree.
  */
 function useListState() {
   const router = useRouter();
@@ -90,6 +138,8 @@ function useListState() {
   const searchParams = useSearchParams();
   const [filters, setFilters] = React.useState<SessionFilters>(() => readFilters(searchParams));
   const [page, setPage] = React.useState<number>(() => Math.max(1, Number(searchParams?.get("page")) || 1));
+  // Filters that came from storage rather than the URL: ids among them are checked against the loaded lists.
+  const [restored, setRestored] = React.useState<ReadonlyArray<keyof SessionFilters>>([]);
 
   const write = React.useCallback(
     (nextFilters: SessionFilters, nextPage: number) => {
@@ -106,21 +156,45 @@ function useListState() {
     [pathname, router, searchParams],
   );
 
-  const setFilter = React.useCallback(
-    (key: keyof SessionFilters, value: string) => {
-      const next = { ...filters, [key]: value } as SessionFilters;
+  // Once, after mount: an empty URL restores the remembered filters.
+  const writeRef = React.useRef(write);
+  writeRef.current = write;
+  React.useEffect(() => {
+    const fromUrl = Object.values(FILTER_PARAMS).some((param) => searchParams?.get(param));
+    if (fromUrl) return;
+    const stored = loadStoredFilters();
+    const keys = (Object.keys(stored) as (keyof SessionFilters)[]).filter((key) => stored[key]);
+    if (keys.length === 0) return;
+    setFilters(stored);
+    setPage(1);
+    setRestored(keys);
+    writeRef.current(stored, 1);
+    // Runs once: later URL changes are this hook's own writes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const apply = React.useCallback(
+    (next: SessionFilters) => {
       setFilters(next);
       setPage(1);
+      storeFilters(next);
       write(next, 1);
     },
-    [filters, write],
+    [write],
+  );
+
+  const setFilter = React.useCallback(
+    (key: keyof SessionFilters, value: string) => {
+      setRestored((prev) => prev.filter((restoredKey) => restoredKey !== key));
+      apply({ ...filters, [key]: value } as SessionFilters);
+    },
+    [apply, filters],
   );
 
   const clear = React.useCallback(() => {
-    setFilters(EMPTY_FILTERS);
-    setPage(1);
-    write(EMPTY_FILTERS, 1);
-  }, [write]);
+    setRestored([]);
+    apply(EMPTY_FILTERS);
+  }, [apply]);
 
   const goTo = React.useCallback(
     (nextPage: number) => {
@@ -130,14 +204,53 @@ function useListState() {
     [filters, write],
   );
 
-  return { filters, page, setFilter, clear, goTo };
+  return { filters, page, restored, setFilter, clear, goTo };
 }
 
+function TableSkeleton() {
+  return (
+    <LoadingRegion label="Loading sessions" className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Skeleton className="h-[34px] w-72 rounded" />
+        <Skeleton className="h-9 w-56 rounded" />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {[0, 1, 2, 3].map((index) => (
+          <Skeleton key={index} className="h-9 w-40 rounded" />
+        ))}
+      </div>
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="h-9 border-b border-border bg-muted" />
+        {[0, 1, 2, 3, 4].map((index) => (
+          <div key={index} className="flex items-center gap-6 border-b border-border px-3.5 py-3 last:border-b-0">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <Skeleton className="h-3.5 w-40" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+            <Skeleton className="h-5 w-16 rounded-pill" />
+            <Skeleton className="h-3.5 w-14" />
+            <Skeleton className="h-3.5 w-20" />
+          </div>
+        ))}
+      </div>
+    </LoadingRegion>
+  );
+}
+
+/**
+ * `/console/sessions` (docs/ui/DESIGN-SYSTEM.md section 7.4, list archetype):
+ * the header with Refresh and Export CSV, a segmented status filter with
+ * counts, search (6+ sessions, remembered) and the agent / date / channel /
+ * connection filters (remembered, validated), then the table — cards on
+ * phones — with distinct "nothing yet" and "no matches" states. There is no
+ * page-level primary: sessions are made by calls, not here.
+ */
 export function SessionsTable() {
-  const { data, isLoading, isError, error, refetch } = useSessionList();
+  const { data, isLoading, isError, error, refetch, isFetching } = useSessionList();
   const agentsQuery = useAgents();
   const connectionsQuery = useConnectionNames();
-  const { filters, page, setFilter, clear, goTo } = useListState();
+  const { filters, page, restored, setFilter, clear, goTo } = useListState();
+  const [query, setQuery] = useRememberedQuery(SEARCH_LIST_ID);
   // V5-34: optional post-call field columns (a single filtered agent's own fields).
   const [fieldColumns, setFieldColumns] = React.useState<string[]>([]);
 
@@ -167,34 +280,103 @@ export function SessionsTable() {
     return [...names.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [connectionsQuery.data, sessions]);
 
-  const filtered = React.useMemo(() => filterSessions(sessions, filters), [sessions, filters]);
+  // A remembered agent or connection that no longer exists is dropped once the lists are in.
+  React.useEffect(() => {
+    if (!data) return;
+    if (restored.includes("agentId") && filters.agentId && agentsQuery.isFetched) {
+      if (!agentOptions.some(([id]) => id === filters.agentId)) setFilter("agentId", "");
+    }
+    if (restored.includes("connectionId") && filters.connectionId && connectionsQuery.isFetched) {
+      if (!connectionOptions.some(([id]) => id === filters.connectionId)) setFilter("connectionId", "");
+    }
+  }, [data, restored, filters, agentOptions, connectionOptions, agentsQuery.isFetched, connectionsQuery.isFetched, setFilter]);
+
+  const searched = React.useMemo(
+    () =>
+      query.trim() === ""
+        ? sessions
+        : sessions.filter((session) =>
+            matchesQuery(
+              [
+                session.agent_name,
+                session.room_name,
+                channelLabel(session.channel),
+                SESSION_STATUS_LABEL[session.status],
+                pipelineModeLabel(session.pipeline_mode),
+              ],
+              query,
+            ),
+          ),
+    [sessions, query],
+  );
+  const filtered = React.useMemo(() => filterSessions(searched, filters), [searched, filters]);
+  const statusCounts = React.useMemo(() => {
+    const others = filterSessions(searched, { ...filters, status: "" });
+    const counts: Record<string, number> = { "": others.length };
+    for (const session of others) counts[session.status] = (counts[session.status] ?? 0) + 1;
+    return counts;
+  }, [searched, filters]);
+
   const pages = pageCount(filtered.length);
   const currentPage = Math.min(page, pages);
   const rows = paginate(filtered, currentPage);
-  const hasFilters = Object.values(filters).some(Boolean);
+  const hasFilters = Object.values(filters).some(Boolean) || query.trim() !== "";
+  const clearAll = () => {
+    setQuery("");
+    clear();
+  };
+
+  const header = (
+    <PageHeader
+      title="Sessions"
+      description="Every call across your agents, with its timeline, transcript and final panel."
+      actions={
+        <>
+          <RefreshButton onRefresh={() => void refetch()} refreshing={isFetching && !isLoading} />
+          <Button asChild variant="secondary">
+            <a href={exportCsvHref(filters)} download="sessions.csv">
+              <DownloadIcon aria-hidden="true" />
+              Export CSV
+            </a>
+          </Button>
+        </>
+      }
+    />
+  );
 
   if (isLoading) {
     return (
-      <LoadingRegion label="Loading sessions" className="flex flex-col gap-2">
-        <Skeleton className="h-9 w-full max-w-2xl" />
-        {[0, 1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </LoadingRegion>
+      <>
+        {header}
+        <TableSkeleton />
+      </>
     );
   }
 
   if (isError) {
-    return <ErrorBanner message={`Couldn't load sessions — ${errorMessage(error)}`} onRetry={() => refetch()} />;
+    return (
+      <>
+        {header}
+        <ErrorBanner error={error} context={{ action: "load sessions" }} onRetry={() => void refetch()} />
+      </>
+    );
   }
 
   if (sessions.length === 0) {
     return (
-      <EmptyState
-        icon={HistoryIcon}
-        title="No sessions yet"
-        description="Sessions appear here once someone opens a test call or the public session page."
-      />
+      <>
+        {header}
+        <EmptyState
+          icon={HistoryIcon}
+          title="No sessions yet"
+          description="Sessions appear here once someone opens a test call or the public session page."
+          action={
+            <Button asChild variant="secondary">
+              <Link href="/console/agents">Open an agent</Link>
+            </Button>
+          }
+        />
+      </>
     );
   }
 
@@ -204,28 +386,32 @@ export function SessionsTable() {
       header: "Agent",
       cell: (session) => (
         <div className="min-w-0">
-          <div className="truncate font-medium text-foreground">{session.agent_name || "Unknown agent"}</div>
-          <div className="truncate font-mono text-xs text-muted-foreground">{session.room_name}</div>
+          <div className="truncate font-medium text-foreground">
+            <Highlight text={session.agent_name || "Unknown agent"} query={query} />
+          </div>
+          <div className="truncate font-mono text-caption text-text-secondary">
+            <Highlight text={session.room_name} query={query} />
+          </div>
         </div>
       ),
     },
     {
       id: "status",
       header: "Status",
-      // V5-38: the "Live" link needs to stay clickable over the row's own link overlay.
+      // V5-38: the "Listen in" link needs to stay clickable over the row's own link overlay.
       interactive: true,
       cell: (session) => <SessionStatusChips session={session} />,
     },
     {
       id: "channel",
       header: "Channel",
-      cell: (session) => <span className="text-muted-foreground">{channelLabel(session.channel) ?? "—"}</span>,
+      cell: (session) => <span className="text-text-secondary">{channelLabel(session.channel) ?? "—"}</span>,
     },
     {
       id: "duration",
       header: "Duration",
       align: "end",
-      cell: (session) => <span className="font-mono tabular-nums text-foreground">{durationText(session)}</span>,
+      cell: (session) => <span className="tabular-nums text-foreground">{durationText(session)}</span>,
     },
     {
       id: "started",
@@ -235,13 +421,13 @@ export function SessionsTable() {
     {
       id: "mode",
       header: "Mode",
-      cell: (session) => <span className="text-muted-foreground">{pipelineModeLabel(session.pipeline_mode)}</span>,
+      cell: (session) => <span className="text-text-secondary">{pipelineModeLabel(session.pipeline_mode)}</span>,
     },
     {
       id: "turns",
       header: "Turns",
       align: "end",
-      cell: (session) => <span className="font-mono tabular-nums text-muted-foreground">{usageTurns(session.usage) ?? "—"}</span>,
+      cell: (session) => <span className="tabular-nums text-text-secondary">{usageTurns(session.usage) ?? "—"}</span>,
     },
     {
       id: "cost",
@@ -253,7 +439,7 @@ export function SessionsTable() {
       (name): ResponsiveTableColumn<SessionOut> => ({
         id: `field-${name}`,
         header: fieldLabel(name),
-        cell: (session) => <span className="text-muted-foreground">{fieldCellText(fieldCellValue(session, name))}</span>,
+        cell: (session) => <span className="text-text-secondary">{fieldCellText(fieldCellValue(session, name))}</span>,
       }),
     ),
   ];
@@ -261,137 +447,128 @@ export function SessionsTable() {
   const first = filtered.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
   const last = Math.min(currentPage * PAGE_SIZE, filtered.length);
   const truncated = (data?.total ?? 0) > sessions.length;
+  const showSearch = sessions.length >= SEARCH_THRESHOLD || query.trim() !== "";
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Filter by status">
-          {STATUS_FILTERS.map((filter) => (
-            <Button
-              key={filter.value || "all"}
-              type="button"
-              size="sm"
-              variant={filters.status === filter.value ? "secondary" : "ghost"}
-              aria-pressed={filters.status === filter.value}
-              onClick={() => setFilter("status", filter.value)}
-            >
-              {filter.label}
-            </Button>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-          <FilterSelect
-            label="Filter by agent"
-            value={filters.agentId}
-            allLabel="All agents"
-            options={agentOptions}
-            onChange={(value) => setFilter("agentId", value)}
-            className="sm:w-48"
-          />
-          <FilterSelect
-            label="Filter by date"
-            value={filters.range}
-            allLabel={RANGE_OPTIONS[0].label}
-            options={RANGE_OPTIONS.filter((option) => option.value).map((option) => [option.value, option.label])}
-            onChange={(value) => setFilter("range", value)}
-            className="sm:w-36"
-          />
-          <FilterSelect
-            label="Filter by channel"
-            value={filters.channel}
-            allLabel="All channels"
-            options={CHANNELS.map((channel) => [channel, channelLabel(channel) ?? channel])}
-            onChange={(value) => setFilter("channel", value)}
-            className="sm:w-40"
-          />
-          <FilterSelect
-            label="Filter by connection"
-            value={filters.connectionId}
-            allLabel="All connections"
-            options={connectionOptions}
-            onChange={(value) => setFilter("connectionId", value)}
-            className="sm:w-44"
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
-          {availableFields.length > 0 ? (
-            <SearchableSelect
-              aria-label="Columns"
-              multiple
-              values={fieldColumns}
-              onValuesChange={setFieldColumns}
-              options={availableFields.map((f) => ({ value: f.name, label: fieldLabel(f.name) }))}
-              placeholder="Columns"
-              triggerClassName="w-auto sm:w-40"
-              value={null}
-              onValueChange={() => {}}
+    <>
+      {header}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <SegmentedControl
+              label="Filter by status"
+              value={filters.status}
+              onValueChange={(value) => setFilter("status", value)}
+              options={[
+                { value: "", label: "All", count: statusCounts[""] ?? 0 },
+                ...STATUS_ORDER.map((status) => ({
+                  value: status,
+                  label: SESSION_STATUS_LABEL[status],
+                  count: statusCounts[status] ?? 0,
+                })),
+              ]}
             />
-          ) : null}
-          <Button asChild variant="outline" size="sm">
-            <a href={exportCsvHref(filters)} download="sessions.csv">
-              <Icon as={DownloadIcon} size="sm" />
-              Export CSV
-            </a>
-          </Button>
-        </div>
-      </div>
-
-      <ResponsiveTable<SessionOut>
-        columns={columns}
-        rows={rows}
-        label="Sessions"
-        getRowKey={(session) => session.id}
-        rowHref={(session) => `/console/sessions/${session.id}`}
-        renderCard={(session) => <SessionCard session={session} />}
-        empty={
-          <EmptyState
-            icon={HistoryIcon}
-            title="No sessions match these filters"
-            compact
-            action={
-              <Button type="button" variant="ghost" size="sm" onClick={clear}>
-                Clear filters
-              </Button>
-            }
-          />
-        }
-      />
-
-      {filtered.length > 0 ? (
-        <nav aria-label="Pagination" className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-          <p aria-live="polite">
-            {`${first}–${last} of ${filtered.length}`}
-            {hasFilters ? ` (filtered from ${sessions.length})` : null}
-            {truncated ? ` · newest ${SESSION_LIST_FETCH_LIMIT} of ${data?.total} loaded` : null}
-          </p>
-          {pages > 1 ? (
-            <div className="flex items-center gap-1">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={currentPage <= 1}
-                onClick={() => goTo(currentPage - 1)}
-              >
-                <Icon as={ChevronLeftIcon} size="sm" />
-                Previous
-              </Button>
-              <span className="px-2 tabular-nums">{`Page ${currentPage} of ${pages}`}</span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={currentPage >= pages}
-                onClick={() => goTo(currentPage + 1)}
-              >
-                Next
-                <Icon as={ChevronRightIcon} size="sm" />
-              </Button>
+            {showSearch ? (
+              <SearchField
+                value={query}
+                onValueChange={setQuery}
+                aria-label="Search sessions"
+                placeholder="Search by agent, room or channel…"
+                wrapperClassName="sm:w-72"
+              />
+            ) : null}
+          </div>
+          <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+              <FilterSelect
+                label="Filter by agent"
+                value={filters.agentId}
+                allLabel="All agents"
+                options={agentOptions}
+                onChange={(value) => setFilter("agentId", value)}
+                className="sm:w-48"
+              />
+              <FilterSelect
+                label="Filter by date"
+                value={filters.range}
+                allLabel={RANGE_OPTIONS[0].label}
+                options={RANGE_OPTIONS.filter((option) => option.value).map((option) => [option.value, option.label])}
+                onChange={(value) => setFilter("range", value)}
+                className="sm:w-36"
+              />
+              <FilterSelect
+                label="Filter by channel"
+                value={filters.channel}
+                allLabel="All channels"
+                options={CHANNELS.map((channel) => [channel, channelLabel(channel) ?? channel])}
+                onChange={(value) => setFilter("channel", value)}
+                className="sm:w-40"
+              />
+              <FilterSelect
+                label="Filter by connection"
+                value={filters.connectionId}
+                allLabel="All connections"
+                options={connectionOptions}
+                onChange={(value) => setFilter("connectionId", value)}
+                className="sm:w-44"
+              />
             </div>
-          ) : null}
-        </nav>
-      ) : null}
-    </div>
+            {availableFields.length > 0 ? (
+              <SearchableSelect
+                aria-label="Columns"
+                multiple
+                values={fieldColumns}
+                onValuesChange={setFieldColumns}
+                options={availableFields.map((f) => ({ value: f.name, label: fieldLabel(f.name) }))}
+                placeholder="Columns"
+                triggerClassName="w-auto sm:w-40"
+                value={null}
+                onValueChange={() => {}}
+              />
+            ) : null}
+          </div>
+        </div>
+
+        {filtered.length === 0 ? (
+          <NoMatches items="sessions" query={query} onClear={clearAll} />
+        ) : (
+          // The table's frame (spec 6.7): a bordered, rounded wrapper; phones get the card list.
+          <div className="md:overflow-hidden md:rounded-lg md:border md:border-border md:bg-card">
+            <ResponsiveTable<SessionOut>
+              columns={columns}
+              rows={rows}
+              label="Sessions"
+              getRowKey={(session) => session.id}
+              rowHref={(session) => `/console/sessions/${session.id}`}
+              renderCard={(session) => <SessionCard session={session} query={query} />}
+            />
+          </div>
+        )}
+
+        {filtered.length > 0 ? (
+          <nav aria-label="Pagination" className="flex flex-wrap items-center justify-between gap-2 text-caption text-text-secondary">
+            <p aria-live="polite" className="tabular-nums">
+              {`${first}–${last} of ${filtered.length}`}
+              {hasFilters ? ` (filtered from ${sessions.length})` : null}
+              {truncated ? ` · newest ${SESSION_LIST_FETCH_LIMIT} of ${data?.total} loaded` : null}
+            </p>
+            {pages > 1 ? (
+              <div className="flex items-center gap-1">
+                <Button type="button" variant="secondary" size="sm" disabled={currentPage <= 1} onClick={() => goTo(currentPage - 1)}>
+                  <Icon as={ArrowLeftIcon} size="sm" />
+                  Previous
+                </Button>
+                <span className="px-2 tabular-nums">{`Page ${currentPage} of ${pages}`}</span>
+                <Button type="button" variant="secondary" size="sm" disabled={currentPage >= pages} onClick={() => goTo(currentPage + 1)}>
+                  Next
+                  <Icon as={ArrowRightIcon} size="sm" />
+                </Button>
+              </div>
+            ) : null}
+          </nav>
+        ) : null}
+      </div>
+    </>
   );
 }
 
@@ -468,45 +645,43 @@ export function CostCell({ session }: { session: SessionOut }) {
   const estimate = formatUsd(session.estimated_usd);
   if (actual && estimate) {
     return (
-      <span className="font-mono tabular-nums text-foreground">
-        {actual} <span className="text-muted-foreground">(≈ {estimate})</span>
+      <span className="tabular-nums text-foreground">
+        {actual} <span className="text-text-secondary">(≈ {estimate})</span>
       </span>
     );
   }
-  if (actual) return <span className="font-mono tabular-nums text-foreground">{actual}</span>;
-  if (estimate) return <span className="font-mono tabular-nums text-muted-foreground">≈ {estimate} · estimate</span>;
-  return <span className="text-muted-foreground">—</span>;
+  if (actual) return <span className="tabular-nums text-foreground">{actual}</span>;
+  if (estimate) return <span className="tabular-nums text-text-secondary">≈ {estimate} · estimate</span>;
+  return <span className="text-text-secondary">—</span>;
 }
 
 function StartedCell({ session }: { session: SessionOut }) {
-  if (session.started_at) return <RelativeTime iso={session.started_at} className="text-muted-foreground" />;
+  if (session.started_at) return <RelativeTime iso={session.started_at} className="text-text-secondary" />;
   return (
-    <span className="text-muted-foreground">
+    <span className="text-text-tertiary">
       <span className="sr-only">Not started; created </span>
-      <RelativeTime iso={session.created_at} className="text-muted-foreground italic" />
+      <RelativeTime iso={session.created_at} className="text-text-tertiary" />
     </span>
   );
 }
 
-/** Status chip plus, for sweep-failed rows, the muted reason chip (§4.10). */
+/** Status pill plus, for sweep-failed rows, the muted reason pill (§4.10). */
 export function SessionStatusChips({ session }: { session: SessionOut }) {
   const swept = sweptReason(session);
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <StatusChip tone={sessionStatusTone(session)} size="sm" dot={session.status === "failed" && !swept}>
+      <StatusPill tone={sessionStatusTone(session)} size="sm">
         {SESSION_STATUS_LABEL[session.status]}
-      </StatusChip>
+      </StatusPill>
       {swept ? (
-        <StatusChip tone="neutral" size="sm">
+        <StatusPill tone="neutral" size="sm">
           {sentenceCase(swept)}
-        </StatusChip>
+        </StatusPill>
       ) : null}
       {session.recording_status === "failed" ? (
-        <span title="Recording failed — see the Recording tab for details">
-          <StatusChip tone="danger" size="sm">
-            Recording failed
-          </StatusChip>
-        </span>
+        <StatusPill tone="danger" size="sm">
+          Recording failed
+        </StatusPill>
       ) : null}
       {session.status === "active" ? <LiveIndicatorLink sessionId={session.id} /> : null}
     </div>
@@ -514,37 +689,41 @@ export function SessionStatusChips({ session }: { session: SessionOut }) {
 }
 
 /**
- * V5-38: a link straight to the session's Live tab, next to the plain
- * "Active" status chip. The status column is `interactive`, which lifts it
- * above the row's own stretched link overlay (`ResponsiveTable`), so this
- * stays independently clickable.
+ * V5-38: a link straight to the session's Live tab, next to the "Active"
+ * status pill. The status column is `interactive`, which lifts it above the
+ * row's own stretched link overlay (`ResponsiveTable`), so this stays
+ * independently clickable.
  */
 function LiveIndicatorLink({ sessionId }: { sessionId: string }) {
   return (
     <Link
       href={`/console/sessions/${sessionId}?tab=live`}
-      className="focus-visible:ring-ring inline-flex items-center gap-1 rounded-xs bg-brand-soft px-1.5 py-0.5 text-[0.6875rem] font-medium text-brand-text outline-none hover:underline focus-visible:ring-2"
+      className="inline-flex h-5 items-center gap-1 rounded-sm border border-brand-border bg-brand-subtle px-1.5 text-caption font-medium text-brand hover:underline"
     >
-      <Icon as={HeadphonesIcon} size="sm" />
+      <Icon as={HeadphonesIcon} size="xs" />
       Listen in
     </Link>
   );
 }
 
-function SessionCard({ session }: { session: SessionOut }) {
+function SessionCard({ session, query }: { session: SessionOut; query: string }) {
   const channel = channelLabel(session.channel);
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="truncate font-medium text-foreground">{session.agent_name || "Unknown agent"}</div>
-          <div className="truncate font-mono text-xs text-muted-foreground">{session.room_name}</div>
+          <div className="truncate font-medium text-foreground">
+            <Highlight text={session.agent_name || "Unknown agent"} query={query} />
+          </div>
+          <div className="truncate font-mono text-caption text-text-secondary">
+            <Highlight text={session.room_name} query={query} />
+          </div>
         </div>
         <SessionStatusChips session={session} />
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-secondary">
         <StartedCell session={session} />
-        <span className="font-mono tabular-nums text-foreground">{durationText(session)}</span>
+        <span className="tabular-nums text-foreground">{durationText(session)}</span>
         {channel ? <span>{channel}</span> : null}
         <span>{pipelineModeLabel(session.pipeline_mode)}</span>
         <CostCell session={session} />

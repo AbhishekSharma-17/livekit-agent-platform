@@ -2,13 +2,15 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CheckCircle2Icon, CircleIcon } from "lucide-react";
+import { CircleCheckIcon, CircleIcon } from "lucide-react";
 
 import { Icon } from "@/components/shared/icon";
+import { SkeletonRows } from "@/components/shared/loading-state";
 import { Section, SectionRow } from "@/components/shared/section";
 import { Button } from "@/components/ui/button";
 import { useAgents, useCredentials, useHealth, useSessions } from "@/components/console/lib/api-hooks";
 import { useWriteAccess } from "@/components/console/lib/roles";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useMe } from "@/components/console/shell/use-me";
 import { useActiveWorkspace, useAgentKeys } from "@/components/console/settings/use-settings-queries";
 import { NewAgentButton } from "@/components/console/agents/create/new-agent-button";
@@ -38,9 +40,12 @@ interface ChecklistRow {
 export function SetupChecklist() {
   const { unavailable: authUnavailable } = useMe();
   const { data: health } = useHealth();
-  const { data: agents } = useAgents();
-  const { data: credentials } = useCredentials();
-  const { data: sessions } = useSessions();
+  const agentsQuery = useAgents();
+  const credentialsQuery = useCredentials();
+  const sessionsQuery = useSessions();
+  const { data: agents } = agentsQuery;
+  const { data: credentials } = credentialsQuery;
+  const { data: sessions } = sessionsQuery;
   const connections = useConnectionsProbe();
   const webhooks = useWebhooksProbe();
   // `GET /v1/api-keys` needs `admin` regardless of scope (`auth/deps.py::require`),
@@ -85,7 +90,7 @@ export function SetupChecklist() {
       // it as "Unverified" (UI audit, v4).
       done: connections.available && connections.verified > 0,
       action: connections.available ? (
-        <Button asChild size="sm" variant="outline">
+        <Button asChild size="sm" variant="secondary">
           <Link href="/console/connections">Open connections</Link>
         </Button>
       ) : undefined,
@@ -96,7 +101,7 @@ export function SetupChecklist() {
       help: "LiveKit Inference needs no key. Add one to use Gemini Live, OpenAI, Deepgram, ElevenLabs…",
       done: (credentials?.total ?? 0) > 0,
       action: (
-        <Button asChild size="sm" variant="outline">
+        <Button asChild size="sm" variant="secondary">
           <Link href="/console/providers">Add credential</Link>
         </Button>
       ),
@@ -106,7 +111,7 @@ export function SetupChecklist() {
       title: "Create your first agent",
       help: "An agent is a voice or video assistant with its own providers, instructions and tools.",
       done: agentItems.length > 0,
-      action: <NewAgentButton size="sm" />,
+      action: <NewAgentButton size="sm" variant="secondary" readOnlyNote="Ask a builder or admin to create agents." />,
     },
     {
       id: "test-call",
@@ -114,7 +119,7 @@ export function SetupChecklist() {
       help: "Open an agent and start a call in test mode.",
       done: (sessions?.total ?? 0) > 0,
       action: mostRecentAgent ? (
-        <Button asChild size="sm" variant="outline">
+        <Button asChild size="sm" variant="secondary">
           <Link href={`/console/agents/${mostRecentAgent.id}`}>Test call</Link>
         </Button>
       ) : undefined,
@@ -125,7 +130,7 @@ export function SetupChecklist() {
       help: "Give callers something to look at: notes, a checklist, a document.",
       done: panelAdded,
       action: mostRecentAgent ? (
-        <Button asChild size="sm" variant="outline">
+        <Button asChild size="sm" variant="secondary">
           <Link href={`/console/agents/${mostRecentAgent.id}?section=panel`}>Open panel</Link>
         </Button>
       ) : undefined,
@@ -136,7 +141,7 @@ export function SetupChecklist() {
       help: "Keep an audio recording of every call for review.",
       done: recordingOn,
       action: mostRecentAgent ? (
-        <Button asChild size="sm" variant="outline">
+        <Button asChild size="sm" variant="secondary">
           <Link href={`/console/agents/${mostRecentAgent.id}?section=recording`}>Open recording</Link>
         </Button>
       ) : undefined,
@@ -149,7 +154,7 @@ export function SetupChecklist() {
         : "Webhooks aren't available yet.",
       done: webhooks.available && webhooks.total > 0,
       action: webhooks.available ? (
-        <Button asChild size="sm" variant="outline">
+        <Button asChild size="sm" variant="secondary">
           <Link href="/console/settings?tab=webhooks">Add webhook</Link>
         </Button>
       ) : undefined,
@@ -164,7 +169,7 @@ export function SetupChecklist() {
       help: "Publishing makes an agent's link answer calls from anyone who has it.",
       done: anyPublished,
       action: mostRecentAgent ? (
-        <Button asChild size="sm" variant="outline">
+        <Button asChild size="sm" variant="secondary">
           <Link href={`/console/agents/${mostRecentAgent.id}`}>Open agent</Link>
         </Button>
       ) : undefined,
@@ -178,7 +183,7 @@ export function SetupChecklist() {
       help: "Give Claude Code, Codex or Cursor a scoped key to build and test on this workspace through MCP.",
       done: hasAgentKey,
       action: (
-        <Button asChild size="sm" variant="outline">
+        <Button asChild size="sm" variant="secondary">
           <Link href="/console/settings?tab=ai-agents">Connect an agent</Link>
         </Button>
       ),
@@ -188,11 +193,36 @@ export function SetupChecklist() {
   const allDone = rows.every((row) => row.done);
   const [collapsed, setCollapsed] = React.useState(false);
 
+  // Every row reads these three lists; until they answer, "not done" would be a guess.
+  const loading = agentsQuery.isLoading || credentialsQuery.isLoading || sessionsQuery.isLoading;
+  const failed = [agentsQuery, credentialsQuery, sessionsQuery].filter((query) => query.isError);
+
+  if (loading || failed.length > 0) {
+    return (
+      <Section id="setup" title="Set up LKAP">
+        <SectionRow>
+          {loading ? (
+            <SkeletonRows label="Loading the setup checklist" rows={4} rowClassName="h-11" />
+          ) : (
+            <ErrorBanner
+              error={failed[0].error}
+              context={{ action: "load the setup checklist" }}
+              onRetry={() => failed.forEach((query) => void query.refetch())}
+            />
+          )}
+        </SectionRow>
+      </Section>
+    );
+  }
+
   if (allDone && collapsed) {
     return (
       <Section id="setup" title="Set up LKAP">
         <SectionRow className="flex items-center justify-between gap-3">
-          <p className="text-sm text-success-text">Setup complete</p>
+          <p className="flex items-center gap-2 text-body text-success-text">
+            <Icon as={CircleCheckIcon} size="md" />
+            Setup complete
+          </p>
           <Button size="sm" variant="ghost" onClick={() => setCollapsed(false)}>
             Show
           </Button>
@@ -201,10 +231,13 @@ export function SetupChecklist() {
     );
   }
 
+  const doneCount = rows.filter((row) => row.done).length;
+
   return (
     <Section
       id="setup"
       title="Set up LKAP"
+      description={allDone ? "Everything is in place." : `${doneCount} of ${rows.length} done.`}
       aside={
         allDone ? (
           <Button size="sm" variant="ghost" onClick={() => setCollapsed(true)}>
@@ -214,18 +247,23 @@ export function SetupChecklist() {
       }
     >
       {rows.map((row) => (
-        <SectionRow key={row.id} className="flex flex-wrap items-start gap-x-3 gap-y-2">
+        <SectionRow
+          key={row.id}
+          data-state={row.done ? "done" : "todo"}
+          className="flex flex-wrap items-start gap-x-3 gap-y-2"
+        >
           <Icon
-            as={row.done ? CheckCircle2Icon : CircleIcon}
+            as={row.done ? CircleCheckIcon : CircleIcon}
             size="md"
-            className={row.done ? "mt-0.5 text-success" : "mt-0.5 text-muted-foreground"}
+            className={row.done ? "mt-0.5 text-success-solid" : "mt-0.5 text-text-tertiary"}
           />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-foreground">{row.title}</p>
-            <p className="mt-0.5 text-sm text-muted-foreground">{row.help}</p>
+            <span className="sr-only">{row.done ? "Done: " : "Not done yet: "}</span>
+            <p className="text-body font-medium text-foreground">{row.title}</p>
+            <p className="mt-0.5 text-label text-text-secondary">{row.help}</p>
           </div>
           {/* Phones: the action drops under the text instead of squeezing it into a narrow column. */}
-          {!row.done && row.action ? <div className="shrink-0 max-sm:basis-full max-sm:pl-8">{row.action}</div> : null}
+          {!row.done && row.action ? <div className="shrink-0 max-sm:basis-full max-sm:pl-7">{row.action}</div> : null}
         </SectionRow>
       ))}
     </Section>

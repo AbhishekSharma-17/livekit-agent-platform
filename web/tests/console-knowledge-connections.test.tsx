@@ -402,12 +402,13 @@ describe("KnowledgeConnectionsTab", () => {
     fireEvent.click(table.getByRole("button", { name: "Delete" }));
     fireEvent.click(await screen.findByRole("button", { name: "Delete connection" }));
 
-    await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith(
-        // friendlyError: the api's authored 409 sentence, capitalised and full-stopped.
-        'Couldn\'t delete "Prod Qdrant" — Knowledge connection \'Prod Qdrant\' still stores 1 knowledge base(s): Policy handbook.',
-      ),
-    );
+    // The confirm dialog stays open and says why, in place: friendlyError keeps
+    // the api's authored 409 sentence, capitalised and full-stopped.
+    const dialog = within(await screen.findByRole("alertdialog", { name: 'Delete "Prod Qdrant"?' }));
+    expect(
+      await dialog.findByText(/Knowledge connection 'Prod Qdrant' still stores 1 knowledge base\(s\): Policy handbook\./),
+    ).toBeTruthy();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it("hides write actions for a builder (server needs admin for add/edit/delete/test)", async () => {
@@ -415,9 +416,11 @@ describe("KnowledgeConnectionsTab", () => {
     await screen.findAllByText("Prod Qdrant");
     const table = within(await screen.findByRole("table", { name: "Knowledge connections" }));
 
-    expect(screen.getByRole("button", { name: "Add connection" }).hasAttribute("disabled")).toBe(true);
-    expect(table.getByRole("button", { name: "Test" }).hasAttribute("disabled")).toBe(true);
-    expect(table.getByRole("button", { name: "Edit" }).hasAttribute("disabled")).toBe(true);
-    expect(table.getByRole("button", { name: "Delete" }).hasAttribute("disabled")).toBe(true);
+    // D12: controls a builder can't use aren't rendered; a note names who can act instead.
+    expect(await screen.findByText("Ask an admin to add or change connections.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add connection" })).toBeNull();
+    expect(table.queryByRole("button", { name: "Test" })).toBeNull();
+    expect(table.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(table.queryByRole("button", { name: "Delete" })).toBeNull();
   });
 });

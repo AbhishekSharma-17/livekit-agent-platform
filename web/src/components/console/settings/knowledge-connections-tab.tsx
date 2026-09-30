@@ -14,14 +14,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/shared/empty-state";
+import { LoadingRow } from "@/components/shared/loading-state";
+import { ReadOnlyNote } from "@/components/shared/read-only-note";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { Section, SectionRow } from "@/components/shared/section";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
-import { SkeletonRows } from "@/components/shared/loading-state";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
+import { IfCan, readOnlyCopy } from "@/components/console/shared/permission";
 import { RequireWrite } from "@/components/shared/require-write";
 import {
   useDeleteKnowledgeConnection,
@@ -29,7 +31,6 @@ import {
   useProviders,
   useTestKnowledgeConnection,
 } from "@/components/console/lib/api-hooks";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import {
   KNOWLEDGE_CONNECTION_PROVIDER_ID,
   KnowledgeConnectionDialog,
@@ -39,7 +40,9 @@ import {
   MANAGED_SEARCH_CONNECTION_KINDS,
   RERANKER_CONNECTION_KINDS,
 } from "./knowledge-connection-dialog";
-import type { KnowledgeConnectionOut, KnowledgeConnectionTestOut } from "@/contracts/lkap-contracts";
+import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "./list-search";
+import { RowsSkeleton } from "./settings-card";
+import type { KnowledgeConnectionOut, KnowledgeConnectionTestOut, ProviderSpec } from "@/contracts/lkap-contracts";
 
 /**
  * Settings → **Knowledge connections** (V5-24, K §5.3): the workspace's Qdrant
@@ -50,7 +53,8 @@ import type { KnowledgeConnectionOut, KnowledgeConnectionTestOut } from "@/contr
  * re-ranker row for the search tool (`agents/tabs/knowledge-tab.tsx`).
  *
  * Reads need `builder`; every write (add, edit, delete, test) needs `admin`,
- * like the vault keys they use (`knowledge_connections/router.py`).
+ * like the vault keys they use (`knowledge_connections/router.py`). Builders
+ * see the list read-only (D12): no write actions, and a note naming who can.
  */
 export function KnowledgeConnectionsTab() {
   return (
@@ -60,28 +64,52 @@ export function KnowledgeConnectionsTab() {
   );
 }
 
+function connectionKindText(connection: KnowledgeConnectionOut, providers: ProviderSpec[]): string {
+  const suffix = RERANKER_CONNECTION_KINDS.includes(connection.kind)
+    ? " · re-ranker"
+    : MANAGED_SEARCH_CONNECTION_KINDS.includes(connection.kind)
+      ? " · managed search"
+      : "";
+  return `${knowledgeConnectionKindLabel(connection.kind, providers)}${suffix}`;
+}
+
+function ConnectionStatus({ connection }: { connection: KnowledgeConnectionOut }) {
+  const meta = knowledgeConnectionStatusMeta(connection.status);
+  return (
+    <StatusPill tone={meta.tone} size="sm">
+      {meta.label}
+    </StatusPill>
+  );
+}
+
 function KnowledgeConnectionsTabInner() {
   const query = useKnowledgeConnections();
   const providersQuery = useProviders();
-  const providers = providersQuery.data?.providers ?? [];
+  const providers = React.useMemo(() => providersQuery.data?.providers ?? [], [providersQuery.data]);
   const deleteMutation = useDeleteKnowledgeConnection();
-  const { canWrite } = useWriteAccess("admin");
-  const writeReason = writeAccessReason("admin");
 
   const [adding, setAdding] = React.useState(false);
   const [editing, setEditing] = React.useState<KnowledgeConnectionOut | null>(null);
   const [testing, setTesting] = React.useState<KnowledgeConnectionOut | null>(null);
 
-  const connections = query.data?.items ?? [];
+  const connections = React.useMemo(() => query.data?.items ?? [], [query.data]);
+  const search = useListSearch("knowledge-connections", connections, (connection) => [
+    connection.name,
+    connectionKindText(connection, providers),
+  ]);
+  const searchQuery = search.query;
 
   async function onDelete(connection: KnowledgeConnectionOut) {
-    try {
-      await deleteMutation.mutateAsync(connection.id);
-      toast.success(`Deleted "${connection.name}".`);
-    } catch (error) {
-      toast.error(`Couldn't delete "${connection.name}" — ${errorMessage(error)}`);
-    }
+    // A failure throws: the confirm dialog stays open and says why in plain words.
+    await deleteMutation.mutateAsync(connection.id);
+    toast.success(`Deleted "${connection.name}"`);
   }
+
+  const rowActions = (connection: KnowledgeConnectionOut) => (
+    <IfCan min="admin">
+      <RowActions connection={connection} onTest={setTesting} onEdit={setEditing} onDelete={onDelete} />
+    </IfCan>
+  );
 
   const columns: ResponsiveTableColumn<KnowledgeConnectionOut>[] = [
     {
@@ -93,14 +121,11 @@ function KnowledgeConnectionsTabInner() {
           <div className="flex min-w-0 items-center gap-2.5">
             <VendorMark vendor={spec?.vendor ?? connection.kind} size="sm" />
             <div className="min-w-0">
-              <div className="truncate font-medium text-foreground">{connection.name}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                {knowledgeConnectionKindLabel(connection.kind, providers)}
-                {RERANKER_CONNECTION_KINDS.includes(connection.kind)
-                  ? " · re-ranker"
-                  : MANAGED_SEARCH_CONNECTION_KINDS.includes(connection.kind)
-                    ? " · managed search"
-                    : ""}
+              <div className="truncate font-medium text-foreground">
+                <Highlight text={connection.name} query={searchQuery} />
+              </div>
+              <div className="truncate text-caption text-text-secondary">
+                <Highlight text={connectionKindText(connection, providers)} query={searchQuery} />
               </div>
             </div>
           </div>
@@ -110,33 +135,27 @@ function KnowledgeConnectionsTabInner() {
     {
       id: "status",
       header: "Status",
-      cell: (connection) => {
-        const meta = knowledgeConnectionStatusMeta(connection.status);
-        return (
-          <span title={connection.last_error ?? undefined}>
-            <StatusChip tone={meta.tone} size="sm">
-              {meta.label}
-            </StatusChip>
-          </span>
-        );
-      },
+      cell: (connection) => (
+        <span title={connection.last_error ?? undefined}>
+          <ConnectionStatus connection={connection} />
+        </span>
+      ),
     },
     {
       id: "key",
       header: "Key",
       cell: (connection) =>
         connection.credential_fingerprint ? (
-          <span className="font-mono text-xs text-muted-foreground">{connection.credential_fingerprint}</span>
+          <span className="font-mono text-caption text-text-secondary">{connection.credential_fingerprint}</span>
         ) : (
-          <span className="text-xs text-muted-foreground">No key</span>
+          <span className="text-caption text-text-secondary">No key</span>
         ),
     },
     {
       id: "kbs",
       header: "Knowledge bases",
-      cell: (connection) => (
-        <span className="tabular-nums text-muted-foreground">{connection.knowledge_base_count}</span>
-      ),
+      align: "end",
+      cell: (connection) => <span className="tabular-nums text-text-secondary">{connection.knowledge_base_count}</span>,
     },
     {
       id: "checked",
@@ -145,18 +164,10 @@ function KnowledgeConnectionsTabInner() {
         connection.last_checked_at ? (
           <RelativeTime iso={connection.last_checked_at} />
         ) : (
-          <span className="text-muted-foreground">Never</span>
+          <span className="text-text-secondary">Never</span>
         ),
     },
-    {
-      id: "actions",
-      header: <span className="sr-only">Actions</span>,
-      align: "end",
-      interactive: true,
-      cell: (connection) => (
-        <RowActions connection={connection} canWrite={canWrite} writeReason={writeReason} onTest={setTesting} onEdit={setEditing} onDelete={onDelete} />
-      ),
-    },
+    { id: "actions", header: <span className="sr-only">Actions</span>, align: "end", interactive: true, cell: rowActions },
   ];
 
   return (
@@ -165,57 +176,60 @@ function KnowledgeConnectionsTabInner() {
       title="Knowledge connections"
       description="Keep a knowledge base's vectors in your own Qdrant, Pinecone or Weaviate account, search documents kept in Ragie, or re-rank search results with a hosted service."
       aside={
-        <Button type="button" size="sm" onClick={() => canWrite && setAdding(true)} disabled={!canWrite} title={canWrite ? undefined : writeReason}>
-          <PlusIcon />
-          Add connection
-        </Button>
+        <IfCan min="admin" fallback={<ReadOnlyNote>{readOnlyCopy("admin", "add or change connections")}</ReadOnlyNote>}>
+          <Button type="button" variant="primary" size="sm" onClick={() => setAdding(true)}>
+            <PlusIcon aria-hidden="true" />
+            Add connection
+          </Button>
+        </IfCan>
       }
     >
       <SectionRow>
         {query.isLoading ? (
-          <SkeletonRows label="Loading knowledge connections" rowClassName="h-12" />
+          <RowsSkeleton label="Loading knowledge connections" />
         ) : query.isError ? (
-          <ErrorBanner message={`Couldn't load knowledge connections — ${errorMessage(query.error)}`} onRetry={() => query.refetch()} />
+          <ErrorBanner
+            error={query.error}
+            context={{ action: "load knowledge connections" }}
+            onRetry={() => void query.refetch()}
+          />
         ) : connections.length === 0 ? (
           <EmptyState
+            variant="plain"
             icon={DatabaseIcon}
             title="No knowledge connections yet"
             description="Every knowledge base keeps its vectors on this platform until you add one."
-            compact
           />
         ) : (
-          <ResponsiveTable<KnowledgeConnectionOut>
-            columns={columns}
-            rows={connections}
-            label="Knowledge connections"
-            getRowKey={(connection) => connection.id}
-            renderCard={(connection) => {
-              const meta = knowledgeConnectionStatusMeta(connection.status);
-              return (
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate font-medium text-foreground">{connection.name}</div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {knowledgeConnectionKindLabel(connection.kind, providers)}
+          <>
+            <ListSearchField search={search} label="Search connections" total={connections.length} />
+            {search.noMatches ? (
+              <ListNoMatches search={search} items="connections" />
+            ) : (
+              <ResponsiveTable<KnowledgeConnectionOut>
+                columns={columns}
+                rows={search.filtered}
+                label="Knowledge connections"
+                getRowKey={(connection) => connection.id}
+                renderCard={(connection) => (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-foreground">
+                          <Highlight text={connection.name} query={searchQuery} />
+                        </div>
+                        <div className="truncate text-caption text-text-secondary">
+                          {knowledgeConnectionKindLabel(connection.kind, providers)}
+                        </div>
                       </div>
+                      <ConnectionStatus connection={connection} />
                     </div>
-                    <StatusChip tone={meta.tone} size="sm">
-                      {meta.label}
-                    </StatusChip>
+                    <div className="-mx-2">{rowActions(connection)}</div>
                   </div>
-                  <RowActions
-                    connection={connection}
-                    canWrite={canWrite}
-                    writeReason={writeReason}
-                    onTest={setTesting}
-                    onEdit={setEditing}
-                    onDelete={onDelete}
-                  />
-                </div>
-              );
-            }}
-          />
+                )}
+              />
+            )}
+          </>
         )}
       </SectionRow>
 
@@ -231,59 +245,39 @@ function KnowledgeConnectionsTabInner() {
 /**
  * Test / Edit / Delete, shared by the desktop table's actions column and the
  * mobile card (both are in the DOM — `ResponsiveTable` switches by CSS — so
- * the phone-width view stays actionable, not read-only). `Test` needs
- * `admin` server-side too (`knowledge_connections/router.py::test_connection`
- * uses the same `WriteCtx` as create/update/delete), so it is gated exactly
- * like the other two rather than left open to a builder who would only get
- * a 403.
+ * the phone-width view stays actionable). All three need `admin` server-side
+ * (`knowledge_connections/router.py` uses the same `WriteCtx` for test as for
+ * create/update/delete), so callers render this only for admins.
  */
 function RowActions({
   connection,
-  canWrite,
-  writeReason,
   onTest,
   onEdit,
   onDelete,
 }: {
   connection: KnowledgeConnectionOut;
-  canWrite: boolean;
-  writeReason: string;
   onTest: (connection: KnowledgeConnectionOut) => void;
   onEdit: (connection: KnowledgeConnectionOut) => void;
-  onDelete: (connection: KnowledgeConnectionOut) => void;
+  onDelete: (connection: KnowledgeConnectionOut) => Promise<void>;
 }) {
   return (
-    <div className="flex items-center gap-1">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={() => canWrite && onTest(connection)}
-        disabled={!canWrite}
-        title={canWrite ? undefined : writeReason}
-      >
+    <div className="flex items-center justify-end gap-1">
+      <Button type="button" variant="ghost" size="sm" onClick={() => onTest(connection)}>
         Test
       </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={() => canWrite && onEdit(connection)}
-        disabled={!canWrite}
-        title={canWrite ? undefined : writeReason}
-      >
+      <Button type="button" variant="ghost" size="sm" onClick={() => onEdit(connection)}>
         Edit
       </Button>
       <ConfirmDialog
         trigger={
-          <Button type="button" variant="ghost" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeReason}>
+          <Button type="button" variant="ghost" size="sm">
             Delete
           </Button>
         }
         title={`Delete "${connection.name}"?`}
         description={
           (connection.knowledge_base_count ?? 0) > 0
-            ? `${connection.knowledge_base_count} knowledge base(s) still store their vectors here — delete those first, or move them.`
+            ? `${connection.knowledge_base_count} knowledge base(s) still store their vectors here. Delete or move those first.`
             : "The data stays in your own account; only the connection is removed here."
         }
         confirmLabel="Delete connection"
@@ -297,16 +291,13 @@ function RowActions({
 function TestConnectionDialog({ connection, onClose }: { connection: KnowledgeConnectionOut; onClose: () => void }) {
   const testMutation = useTestKnowledgeConnection();
   const [result, setResult] = React.useState<KnowledgeConnectionTestOut | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<unknown>(null);
   const ranRef = React.useRef(false);
 
   React.useEffect(() => {
     if (ranRef.current) return;
     ranRef.current = true;
-    testMutation
-      .mutateAsync(connection.id)
-      .then(setResult)
-      .catch((err: unknown) => setError(errorMessage(err)));
+    testMutation.mutateAsync(connection.id).then(setResult).catch(setError);
     // Runs once per mount (one dialog instance per test).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -319,9 +310,9 @@ function TestConnectionDialog({ connection, onClose }: { connection: KnowledgeCo
         </DialogHeader>
         <DialogBody>
           {testMutation.isPending ? (
-            <p className="text-sm text-muted-foreground">Testing…</p>
+            <LoadingRow label="Testing the connection…" />
           ) : error ? (
-            <ErrorBanner message={error} />
+            <ErrorBanner error={error} context={{ action: "test the connection" }} />
           ) : (
             <KnowledgeConnectionTestResultView result={result} kind={connection.kind} />
           )}

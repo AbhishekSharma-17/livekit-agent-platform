@@ -9,10 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmptyState } from "@/components/shared/empty-state";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
-import { SkeletonRows } from "@/components/shared/loading-state";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 
 import type { AuditOut } from "./api-types";
+import { useRememberedChoice } from "./list-search";
+import { RowsSkeleton } from "./settings-card";
 import { isAgentActivityRow, useActiveWorkspace, useAgentActivityPage, useAgentKeys } from "./use-settings-queries";
 
 const PAGE_SIZE = 100;
@@ -66,7 +67,11 @@ export function AgentActivityTable() {
 
   const [offset, setOffset] = React.useState(0);
   const [rows, setRows] = React.useState<AuditOut[]>([]);
-  const [keyFilter, setKeyFilter] = React.useState<string>("all");
+  // Remembered per person; a key id that no longer exists falls back to "all".
+  const keyIds = React.useMemo(() => agentKeys.map((key) => key.id), [agentKeys]);
+  const [rememberedKey, setKeyFilter] = useRememberedChoice("agent-activity-key", "all", keyIds);
+  // The filter only applies while its control is shown (two or more keys).
+  const keyFilter = agentKeys.length > 1 ? rememberedKey : "all";
   const page = useAgentActivityPage(workspace?.id, PAGE_SIZE, offset);
 
   React.useEffect(() => {
@@ -92,24 +97,24 @@ export function AgentActivityTable() {
       header: "Key",
       cell: (row) => {
         const key = agentKeys.find((k) => k.id === row.actor_id);
-        return <span className="truncate text-sm text-foreground">{key?.name ?? row.actor_id ?? "—"}</span>;
+        return <span className="truncate text-label text-foreground">{key?.name ?? row.actor_id ?? "—"}</span>;
       },
     },
     {
       id: "client",
       header: "Client",
-      cell: (row) => <span className="text-xs text-muted-foreground">{clientPayload(row).name ?? "—"}</span>,
+      cell: (row) => <span className="text-caption text-text-secondary">{clientPayload(row).name ?? "—"}</span>,
     },
     {
       id: "tool",
       header: "Tool",
-      cell: (row) => <span className="font-mono text-xs text-muted-foreground">{clientPayload(row).tool ?? "—"}</span>,
+      cell: (row) => <span className="font-mono text-caption text-text-secondary">{clientPayload(row).tool ?? "—"}</span>,
     },
     {
       id: "action",
       header: "Action",
       cell: (row) => (
-        <span className="font-mono text-xs text-muted-foreground" title={row.action}>
+        <span className="font-mono text-caption text-text-secondary" title={row.action}>
           {row.action}
         </span>
       ),
@@ -121,9 +126,9 @@ export function AgentActivityTable() {
       cell: (row) => {
         const href = targetHref(row);
         const label = row.target_id ? `${row.target_type} ${row.target_id.slice(0, 8)}` : row.target_type || "—";
-        if (!href) return <span className="text-xs text-muted-foreground">{label}</span>;
+        if (!href) return <span className="text-caption text-text-secondary">{label}</span>;
         return (
-          <Link href={href} className="text-xs text-brand-text underline underline-offset-2 hover:text-foreground">
+          <Link href={href} className="text-caption text-brand underline-offset-[3px] hover:underline">
             {label}
           </Link>
         );
@@ -131,14 +136,21 @@ export function AgentActivityTable() {
     },
   ];
 
-  if (page.isLoading && offset === 0) {
-    return <SkeletonRows label="Loading agent activity" rowClassName="h-12" />;
+  if ((page.isLoading && offset === 0) || !workspace) {
+    return <RowsSkeleton label="Loading agent activity" />;
   }
   if (page.isError) {
-    return <ErrorBanner message={`Couldn't load agent activity — ${errorMessage(page.error)}`} onRetry={() => page.refetch()} />;
+    return <ErrorBanner error={page.error} context={{ action: "load agent activity" }} onRetry={() => void page.refetch()} />;
   }
   if (agentRows.length === 0) {
-    return <EmptyState icon={ActivityIcon} title="No agent changes yet" compact />;
+    return (
+      <EmptyState
+        variant="plain"
+        icon={ActivityIcon}
+        title="No agent changes yet"
+        description="Changes an AI agent makes through its key show up here."
+      />
+    );
   }
 
   return (
@@ -146,7 +158,7 @@ export function AgentActivityTable() {
       {agentKeys.length > 1 ? (
         <div className="flex items-center gap-2">
           <Select value={keyFilter} onValueChange={setKeyFilter}>
-            <SelectTrigger aria-label="Filter by agent key" className="w-56">
+            <SelectTrigger aria-label="Filter by agent key" className="w-full max-w-56">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -162,7 +174,16 @@ export function AgentActivityTable() {
       ) : null}
 
       {filteredRows.length === 0 ? (
-        <EmptyState icon={ActivityIcon} title="No activity for this key yet" compact />
+        <EmptyState
+          variant="plain"
+          icon={ActivityIcon}
+          title="No activity for this key yet"
+          action={
+            <Button type="button" size="sm" onClick={() => setKeyFilter("all")}>
+              Show all agent keys
+            </Button>
+          }
+        />
       ) : (
         <ResponsiveTable<AuditOut>
           columns={columns}
@@ -174,10 +195,10 @@ export function AgentActivityTable() {
             return (
               <div className="space-y-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm font-medium text-foreground">{key?.name ?? row.actor_id ?? "—"}</span>
-                  <RelativeTime iso={row.ts} className="shrink-0 text-xs text-muted-foreground" />
+                  <span className="truncate text-label font-medium text-foreground">{key?.name ?? row.actor_id ?? "—"}</span>
+                  <RelativeTime iso={row.ts} className="shrink-0 text-caption text-text-secondary" />
                 </div>
-                <div className="truncate font-mono text-xs text-muted-foreground">{clientPayload(row).tool ?? row.action}</div>
+                <div className="truncate font-mono text-caption text-text-secondary">{clientPayload(row).tool ?? row.action}</div>
               </div>
             );
           }}
@@ -185,8 +206,15 @@ export function AgentActivityTable() {
       )}
 
       {hasMore ? (
-        <Button type="button" variant="outline" size="sm" onClick={() => setOffset((prev) => prev + PAGE_SIZE)} disabled={page.isFetching}>
-          {page.isFetching ? "Loading…" : "Load more"}
+        <Button
+          type="button"
+          size="sm"
+          className="self-start"
+          onClick={() => setOffset((prev) => prev + PAGE_SIZE)}
+          busy={page.isFetching}
+          busyLabel="Loading…"
+        >
+          Load more
         </Button>
       ) : null}
     </div>

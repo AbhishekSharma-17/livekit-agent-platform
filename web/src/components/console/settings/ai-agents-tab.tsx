@@ -36,14 +36,14 @@ function AiAgentsTabInner() {
         aside={<ConnectAgentDialog onCreated={() => invalidate(workspace?.id)} />}
       >
         <SectionRow>
-          <p className="text-sm text-muted-foreground">
-            Every agent key is scoped, expires and is fully revocable — the agent never sees your admin credentials, and
-            every change it makes is attributed and auditable below.
+          <p className="max-w-[72ch] text-label text-text-secondary">
+            Every agent key is scoped, expires and can be revoked. The agent never sees your admin sign-in, and every
+            change it makes is attributed and listed below.
           </p>
         </SectionRow>
       </Section>
 
-      <Section id="agent-keys" title="Agent keys" description="Keys minted for AI coding agents (kind=agent).">
+      <Section id="agent-keys" title="Agent keys" description="Keys created for AI coding agents.">
         <SectionRow>
           <AgentKeysTable />
         </SectionRow>

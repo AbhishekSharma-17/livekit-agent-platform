@@ -6,7 +6,6 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogBody,
@@ -18,92 +17,131 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { CheckboxRow } from "@/components/shared/choice";
 import { CopyButton } from "@/components/shared/copy-button";
 import { EmptyState } from "@/components/shared/empty-state";
-import { Field } from "@/components/shared/field";
+import { Field, FormError } from "@/components/shared/field";
 import { RelativeTime } from "@/components/shared/relative-time";
+import { RequireWrite } from "@/components/shared/require-write";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
+import { lifecycleStatus, type LifecycleStatus } from "@/components/shared/status-map";
+import { Tag } from "@/components/shared/tag";
 import { Section, SectionRow } from "@/components/shared/section";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
-import { api, ApiError } from "@/lib/api";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
+import { api } from "@/lib/api";
 import type { ApiKeyCreated, ApiKeyOut, Scope } from "./api-types";
 import { SCOPE_LABEL, SCOPES } from "./api-types";
+import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "./list-search";
+import { RowsSkeleton } from "./settings-card";
 import { useActiveWorkspace, useApiKeys, useInvalidateSettings } from "./use-settings-queries";
-import { SkeletonRows } from "@/components/shared/loading-state";
 
-/** Shared with `agent-keys-table.tsx` (v3): both tables show the same key rows. */
-export function keyStatus(key: ApiKeyOut): { tone: "success" | "danger" | "warning"; label: string } {
-  if (key.revoked_at) return { tone: "danger", label: "Revoked" };
-  if (key.expires_at && new Date(key.expires_at).getTime() < Date.now()) return { tone: "warning", label: "Expired" };
-  return { tone: "success", label: "Active" };
+/** Shared with `agent-keys-table.tsx` (v3): a key's status, tone from the shared lifecycle map. */
+export function keyStatus(key: ApiKeyOut): LifecycleStatus {
+  if (key.revoked_at) return lifecycleStatus("revoked");
+  if (key.expires_at && new Date(key.expires_at).getTime() < Date.now()) return lifecycleStatus("expired");
+  return { tone: lifecycleStatus("ready").tone, label: "Active" };
 }
 
-/** Revoke through `api.delete`, shared by the plain and agent keys tables. */
-export function RevokeKeyButton({ apiKey, onRevoked }: { apiKey: ApiKeyOut; onRevoked: () => void }) {
-  return <RevokeButton apiKey={apiKey} onRevoked={onRevoked} />;
+export function KeyStatus({ apiKey }: { apiKey: ApiKeyOut }) {
+  const status = keyStatus(apiKey);
+  return (
+    <StatusPill tone={status.tone} size="sm">
+      {status.label}
+    </StatusPill>
+  );
 }
 
+/**
+ * Revoke behind a confirm dialog, shared by the plain and agent keys tables.
+ * A failure throws inside `onConfirm`, so the dialog stays open and says why.
+ * Callers render it only for people who can revoke (admins, D12).
+ */
+export function RevokeKeyButton({
+  apiKey,
+  onRevoked,
+  description = "Anything using this key stops working right away. Revoking can't be undone.",
+  confirmLabel = "Revoke key",
+}: {
+  apiKey: ApiKeyOut;
+  onRevoked: () => void;
+  description?: string;
+  confirmLabel?: string;
+}) {
+  return (
+    <ConfirmDialog
+      trigger={
+        <Button type="button" variant="ghost" size="sm">
+          Revoke
+        </Button>
+      }
+      title={`Revoke "${apiKey.name}"?`}
+      description={description}
+      confirmLabel={confirmLabel}
+      busyLabel="Revoking…"
+      onConfirm={async () => {
+        await api.delete(`api-keys/${apiKey.id}`);
+        toast.success(`Revoked "${apiKey.name}"`);
+        onRevoked();
+      }}
+    />
+  );
+}
+
+/**
+ * `GET /v1/api-keys` needs `admin` server-side for reads as well as writes
+ * (`routers/api_keys.py::KeyAdminDep`), so the whole tab is gated like the
+ * Webhooks and AI agents tabs: a clear locked state instead of a query that
+ * only ever 403s.
+ */
 export function ApiKeysTab() {
+  return (
+    <RequireWrite min="admin" title="Only admins and owners can see API keys">
+      <ApiKeysTabInner />
+    </RequireWrite>
+  );
+}
+
+function ApiKeysTabInner() {
   const { workspace: membership } = useActiveWorkspace();
   const keysQuery = useApiKeys(membership?.id);
   const invalidate = useInvalidateSettings();
-  const keys = keysQuery.data?.items ?? [];
+  const keys = React.useMemo(() => keysQuery.data?.items ?? [], [keysQuery.data]);
+  const search = useListSearch("api-keys", keys, (key) => [key.name, key.prefix, ...key.scopes]);
+  const query = search.query;
+
+  const identity = (key: ApiKeyOut) => (
+    <div className="min-w-0">
+      <div className="flex items-center gap-1.5">
+        <span className="truncate font-medium text-foreground">
+          <Highlight text={key.name} query={query} />
+        </span>
+        {key.kind === "agent" ? <Tag>Agent</Tag> : null}
+      </div>
+      <div className="truncate font-mono text-caption text-text-secondary">{key.prefix}…</div>
+    </div>
+  );
+
+  const revoke = (key: ApiKeyOut) =>
+    key.revoked_at ? null : <RevokeKeyButton apiKey={key} onRevoked={() => invalidate(membership?.id)} />;
 
   const columns: ResponsiveTableColumn<ApiKeyOut>[] = [
-    {
-      id: "name",
-      header: "Name",
-      cell: (key) => (
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate font-medium text-foreground">{key.name}</span>
-            {key.kind === "agent" ? (
-              <StatusChip tone="info" size="sm">
-                Agent
-              </StatusChip>
-            ) : null}
-          </div>
-          <div className="truncate font-mono text-xs text-muted-foreground">{key.prefix}…</div>
-        </div>
-      ),
-    },
+    { id: "name", header: "Name", cell: identity },
     {
       id: "scopes",
       header: "Scopes",
       // Scope lists run long (an agent key has a dozen): wrap instead of widening the page.
       className: "min-w-48 whitespace-normal",
-      cell: (key) => <span className="text-xs text-muted-foreground">{key.scopes.join(", ")}</span>,
+      cell: (key) => <span className="text-caption text-text-secondary">{key.scopes.join(", ")}</span>,
     },
-    {
-      id: "status",
-      header: "Status",
-      cell: (key) => {
-        const status = keyStatus(key);
-        return (
-          <StatusChip tone={status.tone} size="sm">
-            {status.label}
-          </StatusChip>
-        );
-      },
-    },
+    { id: "status", header: "Status", cell: (key) => <KeyStatus apiKey={key} /> },
     {
       id: "last_used",
       header: "Last used",
-      cell: (key) => (key.last_used_at ? <RelativeTime iso={key.last_used_at} /> : <span className="text-muted-foreground">Never</span>),
-    },
-    {
-      id: "actions",
-      header: <span className="sr-only">Actions</span>,
-      align: "end",
-      interactive: true,
       cell: (key) =>
-        key.revoked_at ? null : (
-          <RevokeButton apiKey={key} onRevoked={() => invalidate(membership?.id)} />
-        ),
+        key.last_used_at ? <RelativeTime iso={key.last_used_at} /> : <span className="text-text-secondary">Never</span>,
     },
+    { id: "actions", header: <span className="sr-only">Actions</span>, align: "end", interactive: true, cell: revoke },
   ];
 
   return (
@@ -114,95 +152,59 @@ export function ApiKeysTab() {
       aside={membership ? <CreateKeyDialog onCreated={() => invalidate(membership.id)} /> : null}
     >
       <SectionRow>
-        {keysQuery.isLoading ? (
-          <SkeletonRows label="Loading API keys" rowClassName="h-12" />
+        {keysQuery.isLoading || !membership ? (
+          <RowsSkeleton label="Loading API keys" />
         ) : keysQuery.isError ? (
-          <ErrorBanner message={`Couldn't load API keys — ${errorMessage(keysQuery.error)}`} onRetry={() => keysQuery.refetch()} />
+          <ErrorBanner error={keysQuery.error} context={{ action: "load API keys" }} onRetry={() => void keysQuery.refetch()} />
         ) : keys.length === 0 ? (
-          <EmptyState icon={KeyRoundIcon} title="No API keys yet" compact />
-        ) : (
-          <ResponsiveTable<ApiKeyOut>
-            columns={columns}
-            rows={keys}
-            label="API keys"
-            getRowKey={(key) => key.id}
-            renderCard={(key) => {
-              const status = keyStatus(key);
-              return (
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium text-foreground">{key.name}</div>
-                    <div className="truncate font-mono text-xs text-muted-foreground">{key.prefix}…</div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <StatusChip tone={status.tone} size="sm">
-                      {status.label}
-                    </StatusChip>
-                    {key.revoked_at ? null : (
-                      <RevokeButton apiKey={key} onRevoked={() => invalidate(membership?.id)} />
-                    )}
-                  </div>
-                </div>
-              );
-            }}
+          <EmptyState
+            variant="plain"
+            icon={KeyRoundIcon}
+            title="No API keys yet"
+            description="Create a key to call the API from a script or integration."
           />
+        ) : (
+          <>
+            <ListSearchField search={search} label="Search API keys" total={keys.length} />
+            {search.noMatches ? (
+              <ListNoMatches search={search} items="keys" />
+            ) : (
+              <ResponsiveTable<ApiKeyOut>
+                columns={columns}
+                rows={search.filtered}
+                label="API keys"
+                getRowKey={(key) => key.id}
+                renderCard={(key) => (
+                  <div className="flex items-center justify-between gap-2">
+                    {identity(key)}
+                    <div className="flex shrink-0 items-center gap-1">
+                      <KeyStatus apiKey={key} />
+                      {revoke(key)}
+                    </div>
+                  </div>
+                )}
+              />
+            )}
+          </>
         )}
       </SectionRow>
     </Section>
   );
 }
 
-function RevokeButton({ apiKey, onRevoked }: { apiKey: ApiKeyOut; onRevoked: () => void }) {
-  const [busy, setBusy] = React.useState(false);
-  const { canWrite } = useWriteAccess("admin");
-
-  async function onClick() {
-    setBusy(true);
-    try {
-      await api.delete(`api-keys/${apiKey.id}`);
-      toast.success(`Revoked "${apiKey.name}"`);
-      onRevoked();
-    } catch (err) {
-      toast.error(`Couldn't revoke "${apiKey.name}" — ${errorMessage(err)}`);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <ConfirmDialog
-      trigger={
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={!canWrite || busy}
-          title={canWrite ? undefined : writeAccessReason("admin")}
-        >
-          Revoke
-        </Button>
-      }
-      title={`Revoke "${apiKey.name}"?`}
-      description="Anything using this key stops working right away. Revoking can't be undone."
-      confirmLabel="Revoke key"
-      onConfirm={onClick}
-    />
-  );
-}
-
 function CreateKeyDialog({ onCreated }: { onCreated: () => void }) {
-  // API keys need `admin` server-side (`routers/api_keys.py::KeyAdminDep`).
-  const { canWrite } = useWriteAccess("admin");
   const [open, setOpen] = React.useState(false);
   const [name, setName] = React.useState("");
   const [scopes, setScopes] = React.useState<Set<Scope>>(new Set());
   const [creating, setCreating] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [scopeError, setScopeError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<unknown>(null);
   const [created, setCreated] = React.useState<ApiKeyCreated | null>(null);
 
   function reset() {
     setName("");
     setScopes(new Set());
+    setScopeError(null);
     setError(null);
     setCreated(null);
   }
@@ -219,17 +221,18 @@ function CreateKeyDialog({ onCreated }: { onCreated: () => void }) {
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (scopes.size === 0) {
-      setError("Choose at least one scope.");
+      setScopeError("Choose at least one scope.");
       return;
     }
     setCreating(true);
+    setScopeError(null);
     setError(null);
     try {
       const key = await api.post<ApiKeyCreated>("api-keys", { name, scopes: [...scopes] });
       setCreated(key);
       onCreated();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : errorMessage(err));
+      setError(err);
     } finally {
       setCreating(false);
     }
@@ -237,59 +240,69 @@ function CreateKeyDialog({ onCreated }: { onCreated: () => void }) {
 
   return (
     <Dialog
-      open={canWrite && open}
+      open={open}
       onOpenChange={(next) => {
-        if (!canWrite) return;
         setOpen(next);
         if (!next) reset();
       }}
     >
       <DialogTrigger asChild>
-        <Button type="button" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeAccessReason("admin")}>
-          <PlusIcon />
+        <Button type="button" variant="primary" size="sm">
+          <PlusIcon aria-hidden="true" />
           Create key
         </Button>
       </DialogTrigger>
       <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Create an API key</DialogTitle>
-          <DialogDescription>The raw key is shown once, right after creation — copy it now.</DialogDescription>
+          <DialogDescription>The raw key is shown once, right after creation. Copy it now.</DialogDescription>
         </DialogHeader>
         {created ? (
           <>
             <DialogBody className="gap-3">
-              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 p-2">
-                <code className="min-w-0 flex-1 font-mono text-xs break-all">{created.key}</code>
+              <div className="flex items-center gap-2 rounded border border-border bg-muted p-2">
+                <code className="min-w-0 flex-1 font-mono text-caption break-all">{created.key}</code>
                 <CopyButton value={created.key} label="Copy API key" />
               </div>
-              <p className="text-xs text-muted-foreground">This key won&apos;t be shown again.</p>
+              <p className="text-caption text-text-secondary">This key won&apos;t be shown again.</p>
             </DialogBody>
             <DialogFooter showCloseButton />
           </>
         ) : (
           <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
             <DialogBody className="gap-4">
-              {error ? <ErrorBanner message={error} /> : null}
-              <Field label="Name" htmlFor="api-key-name" required hint="What is this key for?">
+              {error ? <ErrorBanner error={error} context={{ action: "create the key" }} /> : null}
+              <Field label="Name" htmlFor="api-key-name" hint="What is this key for?">
                 <Input id="api-key-name" required value={name} onChange={(event) => setName(event.target.value)} disabled={creating} />
               </Field>
-              <div className="space-y-2">
-                <Label>Scopes</Label>
-                <div className="grid grid-cols-2 gap-2">
+              <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
+                <legend className="mb-1.5 text-label font-medium text-foreground">Scopes</legend>
+                <div className="grid gap-2 sm:grid-cols-2">
                   {SCOPES.map((scope) => (
-                    <label key={scope} className="flex items-center gap-2 text-sm">
-                      <Checkbox checked={scopes.has(scope)} onCheckedChange={() => toggleScope(scope)} disabled={creating} />
-                      <span className="font-mono text-xs">{scope}</span>
-                      {SCOPE_LABEL[scope] ? (
-                        <span className="text-muted-foreground text-xs">({SCOPE_LABEL[scope]})</span>
-                      ) : null}
-                    </label>
+                    <CheckboxRow
+                      key={scope}
+                      checked={scopes.has(scope)}
+                      onChange={() => toggleScope(scope)}
+                      disabled={creating}
+                      label={
+                        <span className="flex flex-wrap items-baseline gap-x-1.5">
+                          <span className="font-mono text-caption">{scope}</span>
+                          {SCOPE_LABEL[scope] ? (
+                            <span className="text-caption text-text-secondary">({SCOPE_LABEL[scope]})</span>
+                          ) : null}
+                        </span>
+                      }
+                    />
                   ))}
                 </div>
-              </div>
+                <FormError>{scopeError}</FormError>
+              </fieldset>
             </DialogBody>
             <DialogFooter>
-              <Button type="submit" disabled={creating}>
+              <Button type="button" onClick={() => setOpen(false)} disabled={creating}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" busy={creating} busyLabel="Creating…">
                 Create
               </Button>
             </DialogFooter>
@@ -299,3 +312,4 @@ function CreateKeyDialog({ onCreated }: { onCreated: () => void }) {
     </Dialog>
   );
 }
+

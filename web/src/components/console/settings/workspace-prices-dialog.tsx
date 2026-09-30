@@ -16,11 +16,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { GatedButton } from "@/components/shared/gated-button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Icon } from "@/components/shared/icon";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { LoadingRegion } from "@/components/shared/loading-state";
+import { IfCan } from "@/components/console/shared/permission";
 import { useUpdateWorkspacePrices, useWorkspacePrices } from "@/components/console/lib/cost-hooks";
-import { errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import type { WorkspacePrice } from "@/contracts/lkap-contracts";
 
 /**
@@ -141,10 +142,11 @@ export interface WorkspacePricesDialogProps {
 }
 
 export function WorkspacePricesDialog({ open, onOpenChange, prefill }: WorkspacePricesDialogProps) {
-  const { data, isLoading, isError, refetch } = useWorkspacePrices();
+  const { data, isLoading, isError, error, refetch } = useWorkspacePrices();
   const update = useUpdateWorkspacePrices();
   const [rows, setRows] = React.useState<DraftRow[]>([]);
   const [errors, setErrors] = React.useState<Record<string, RowError>>({});
+  const [saveError, setSaveError] = React.useState<unknown>(null);
   const seededFor = React.useRef<string | null>(null);
 
   // Seed the draft once per open, from the stored prices plus an optional prefilled blank row.
@@ -161,6 +163,7 @@ export function WorkspacePricesDialog({ open, onOpenChange, prefill }: Workspace
       : undefined;
     setRows(prefillMatch ? stored : prefill ? [...stored, blankDraft(prefill)] : stored);
     setErrors({});
+    setSaveError(null);
   }, [open, data, prefill]);
 
   function updateRow(key: string, patch: Partial<DraftRow>) {
@@ -189,12 +192,14 @@ export function WorkspacePricesDialog({ open, onOpenChange, prefill }: Workspace
     }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
+    setSaveError(null);
     try {
       await update.mutateAsync(rows.map(toWorkspacePrice));
       toast.success("Your prices were saved");
       onOpenChange(false);
     } catch (err) {
-      toast.error(`Couldn't save your prices — ${errorMessage(err)}`);
+      // Keep every edited row; say what happened above the table.
+      setSaveError(err);
     }
   }
 
@@ -210,20 +215,21 @@ export function WorkspacePricesDialog({ open, onOpenChange, prefill }: Workspace
         </DialogHeader>
         <DialogBody>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading your prices…</p>
+            <LoadingRegion label="Loading your prices" className="flex flex-col gap-2">
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-11 w-full" />
+              <Skeleton className="h-11 w-full" />
+            </LoadingRegion>
           ) : isError ? (
-            <p className="text-sm text-danger-text">
-              Couldn&apos;t load your prices.{" "}
-              <button type="button" className="underline underline-offset-2" onClick={() => refetch()}>
-                Try again
-              </button>
-            </p>
+            <ErrorBanner error={error} context={{ action: "load your prices" }} onRetry={() => void refetch()} />
           ) : (
             <form id="workspace-prices-form" onSubmit={onSave} className="flex flex-col gap-3">
-              <div className="overflow-x-auto rounded-md border border-border">
-                <table className="w-full min-w-[640px] border-collapse text-[0.8125rem]">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/40 text-left text-xs font-medium text-muted-foreground">
+              {saveError ? <ErrorBanner error={saveError} context={{ action: "save your prices" }} /> : null}
+              {/* A table from 640 px; below that each row stacks into a small card (one DOM, CSS only). */}
+              <div className="rounded border border-border sm:overflow-x-auto">
+                <table className="w-full border-collapse text-label max-sm:block sm:min-w-[640px]">
+                  <thead className="max-sm:sr-only">
+                    <tr className="h-9 border-b border-border bg-muted text-left text-caption font-medium text-text-secondary">
                       <th className="px-2 py-2">Provider</th>
                       <th className="px-2 py-2">Model</th>
                       <th className="px-2 py-2">Unit</th>
@@ -235,43 +241,49 @@ export function WorkspacePricesDialog({ open, onOpenChange, prefill }: Workspace
                       </th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="max-sm:block">
                     {rows.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="px-2 py-4 text-center text-muted-foreground">
-                          No prices set yet.
+                      <tr className="max-sm:block">
+                        <td colSpan={7} className="px-2 py-4 text-center text-text-secondary max-sm:block">
+                          No prices set yet. Add one for each plan-billed vendor.
                         </td>
                       </tr>
                     ) : (
                       rows.map((row) => {
                         const rowError = errors[row.key];
                         return (
-                          <tr key={row.key} className="border-b border-border last:border-0 align-top">
-                            <td className="px-2 py-2">
+                          <tr
+                            key={row.key}
+                            className="border-b border-border align-top last:border-0 max-sm:grid max-sm:grid-cols-2 max-sm:gap-x-3 max-sm:gap-y-2 max-sm:p-3"
+                          >
+                            <td className="px-2 py-2 max-sm:col-span-2 max-sm:p-0">
+                              <MobileLabel>Provider</MobileLabel>
                               <Input
                                 aria-label="Provider id"
                                 value={row.provider_id}
                                 onChange={(e) => updateRow(row.key, { provider_id: e.target.value })}
                                 placeholder="bey-avatar"
-                                className="h-8 font-mono text-xs"
+                                className="font-mono"
                                 aria-invalid={Boolean(rowError?.provider_id)}
                               />
-                              {rowError?.provider_id ? <p className="mt-1 text-xs text-danger-text">{rowError.provider_id}</p> : null}
+                              <CellError>{rowError?.provider_id}</CellError>
                             </td>
-                            <td className="px-2 py-2">
+                            <td className="px-2 py-2 max-sm:col-span-2 max-sm:p-0">
+                              <MobileLabel>Model</MobileLabel>
                               <Input
                                 aria-label="Model"
                                 value={row.model}
                                 onChange={(e) => updateRow(row.key, { model: e.target.value })}
                                 placeholder="Optional"
-                                className="h-8 font-mono text-xs"
+                                className="font-mono"
                                 aria-invalid={Boolean(rowError?.model)}
                               />
-                              {rowError?.model ? <p className="mt-1 text-xs text-danger-text">{rowError.model}</p> : null}
+                              <CellError>{rowError?.model}</CellError>
                             </td>
-                            <td className="px-2 py-2">
+                            <td className="px-2 py-2 max-sm:p-0">
+                              <MobileLabel>Unit</MobileLabel>
                               <Select value={row.unit} onValueChange={(value) => updateRow(row.key, { unit: value as Unit })}>
-                                <SelectTrigger aria-label="Unit" className="h-8 w-full text-xs">
+                                <SelectTrigger aria-label="Unit" className="w-full">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -283,30 +295,35 @@ export function WorkspacePricesDialog({ open, onOpenChange, prefill }: Workspace
                                 </SelectContent>
                               </Select>
                             </td>
-                            <td className="px-2 py-2">
+                            <td className="px-2 py-2 max-sm:p-0">
+                              <MobileLabel>USD per unit</MobileLabel>
                               <Input
                                 aria-label="USD per unit"
                                 value={row.usdPerUnit}
                                 onChange={(e) => updateRow(row.key, { usdPerUnit: e.target.value })}
                                 inputMode="decimal"
                                 placeholder="0.10"
-                                className="h-8 w-24 font-mono text-xs"
+                                className="font-mono tabular-nums sm:w-24"
                                 aria-invalid={Boolean(rowError?.usdPerUnit)}
                               />
-                              {rowError?.usdPerUnit ? <p className="mt-1 text-xs text-danger-text">{rowError.usdPerUnit}</p> : null}
+                              <CellError>{rowError?.usdPerUnit}</CellError>
                             </td>
-                            <td className="px-2 py-2">
+                            <td className="px-2 py-2 max-sm:col-span-2 max-sm:p-0">
+                              <MobileLabel>Note</MobileLabel>
                               <Input
                                 aria-label="Note"
                                 value={row.note}
                                 onChange={(e) => updateRow(row.key, { note: e.target.value })}
                                 placeholder="Starter plan"
-                                className="h-8 text-xs"
                                 aria-invalid={Boolean(rowError?.note)}
                               />
+                              <CellError>{rowError?.note}</CellError>
                             </td>
-                            <td className="px-2 py-2 text-xs text-muted-foreground whitespace-nowrap">{row.as_of}</td>
-                            <td className="px-2 py-2">
+                            <td className="px-2 py-2 whitespace-nowrap text-caption text-text-secondary tabular-nums max-sm:flex max-sm:items-center max-sm:p-0 sm:pt-4">
+                              <span className="sm:hidden">As of&nbsp;</span>
+                              {row.as_of}
+                            </td>
+                            <td className="px-2 py-2 max-sm:flex max-sm:justify-end max-sm:p-0">
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -324,7 +341,7 @@ export function WorkspacePricesDialog({ open, onOpenChange, prefill }: Workspace
                   </tbody>
                 </table>
               </div>
-              <Button type="button" variant="outline" size="sm" className="self-start" onClick={addRow}>
+              <Button type="button" size="sm" className="self-start" onClick={addRow}>
                 <Icon as={PlusIcon} size="sm" />
                 Add a price
               </Button>
@@ -332,11 +349,18 @@ export function WorkspacePricesDialog({ open, onOpenChange, prefill }: Workspace
           )}
         </DialogBody>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" onClick={() => onOpenChange(false)} disabled={update.isPending}>
             Cancel
           </Button>
-          <Button type="submit" form="workspace-prices-form" disabled={update.isPending || isLoading}>
-            {update.isPending ? "Saving…" : "Save prices"}
+          <Button
+            type="submit"
+            form="workspace-prices-form"
+            variant="primary"
+            disabled={isLoading || isError}
+            busy={update.isPending}
+            busyLabel="Saving prices…"
+          >
+            Save prices
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -347,18 +371,32 @@ export function WorkspacePricesDialog({ open, onOpenChange, prefill }: Workspace
 /**
  * The Providers page's entry point (docs/v4/COSTS.md §5 item 2): a plain
  * button that owns its own dialog state, so the (server-component) page just
- * drops this in — admin-gated with the console's usual pattern (R-V2-20-5),
- * never a security boundary on its own.
+ * drops this in. Admin-only, and — per the permission pattern (D12) — not
+ * rendered at all for anyone else, rather than shown disabled. Never a
+ * security boundary on its own: the route checks the role too.
  */
 export function WorkspacePricesButton() {
   const [open, setOpen] = React.useState(false);
-  const { canWrite } = useWriteAccess("admin");
   return (
-    <>
-      <GatedButton allowed={canWrite} reason={writeAccessReason("admin")} variant="outline" onClick={() => setOpen(true)}>
+    <IfCan min="admin">
+      <Button type="button" onClick={() => setOpen(true)}>
         Your prices
-      </GatedButton>
+      </Button>
       <WorkspacePricesDialog open={open} onOpenChange={setOpen} />
-    </>
+    </IfCan>
   );
+}
+
+/** A cell's field name, shown only while the row is stacked on a phone (the input keeps its own `aria-label`). */
+function MobileLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span aria-hidden="true" className="mb-1 block text-caption font-medium text-text-secondary sm:hidden">
+      {children}
+    </span>
+  );
+}
+
+function CellError({ children }: { children?: string }) {
+  if (!children) return null;
+  return <p className="mt-1 text-caption text-destructive-text">{children}</p>;
 }

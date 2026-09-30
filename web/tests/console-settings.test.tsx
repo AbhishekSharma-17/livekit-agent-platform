@@ -178,6 +178,12 @@ describe("SettingsTabs", () => {
     expect(screen.getByRole("tab", { name: "Workspace" }).getAttribute("aria-selected")).toBe("true");
   });
 
+  it("lays the sections out as a vertical nav on desktop (D5), mounting only the active section", () => {
+    renderSettings();
+    expect(screen.getByRole("tablist", { name: "Settings sections" }).getAttribute("aria-orientation")).toBe("vertical");
+    expect(screen.getAllByRole("tabpanel")).toHaveLength(1);
+  });
+
   it("renders the real Workspace tab content, not a placeholder", async () => {
     renderSettings();
     expect(await screen.findByDisplayValue("Default")).toBeTruthy();

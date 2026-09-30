@@ -351,12 +351,11 @@ function renderDanger() {
 }
 
 describe("Settings → Danger zone — Delete all caller memories", () => {
-  it("disables the purge button for a non-admin, with a reason", async () => {
+  it("doesn't offer the purge to a non-admin, and names who can instead (D12)", async () => {
     stubApi("builder", () => undefined);
     renderDanger();
-    const button = (await screen.findByRole("button", { name: "Delete all caller memories" })) as HTMLButtonElement;
-    expect(button.disabled).toBe(true);
-    expect(button.getAttribute("title")).toMatch(/admin/i);
+    expect(await screen.findByText("Ask an admin to delete caller memories.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Delete all caller memories" })).toBeNull();
   });
 
   it("an admin must type the workspace name before the confirm button enables, then it posts /v1/memory/purge", async () => {
@@ -372,7 +371,8 @@ describe("Settings → Danger zone — Delete all caller memories", () => {
     await waitFor(() => expect(trigger.disabled).toBe(false));
     fireEvent.click(trigger);
 
-    const dialog = await screen.findByRole("dialog", { name: "Delete all caller memories?" });
+    // A typed confirmation is a destructive confirm: role="alertdialog".
+    const dialog = await screen.findByRole("alertdialog", { name: "Delete all caller memories?" });
     const confirmButton = within(dialog).getByRole("button", { name: "Delete all caller memories" }) as HTMLButtonElement;
     expect(confirmButton.disabled).toBe(true);
 

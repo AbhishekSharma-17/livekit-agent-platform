@@ -14,8 +14,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Field } from "@/components/shared/field";
-import { StatusChip, type StatusTone } from "@/components/shared/status-chip";
+import { Alert } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { OptionCard } from "@/components/shared/choice";
+import { Field, FormError } from "@/components/shared/field";
+import { StatusPill, type StatusTone } from "@/components/shared/status-chip";
+import { lifecycleStatus } from "@/components/shared/status-map";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { useProviders } from "@/components/console/lib/api-hooks";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
@@ -30,7 +34,6 @@ import {
   useUpdateKnowledgeConnection,
 } from "@/components/console/lib/api-hooks";
 import { errorMessage } from "@/components/console/shared/error-banner";
-import { cn } from "@/lib/utils";
 import type {
   KnowledgeConnectionCreate,
   KnowledgeConnectionOut,
@@ -88,12 +91,13 @@ export function knowledgeConnectionStatusMeta(
   status: KnowledgeConnectionOut["status"],
 ): { tone: StatusTone; label: string } {
   switch (status) {
+    // Tones from the shared lifecycle map; the labels are this screen's words.
     case "ok":
-      return { tone: "success", label: "Working" };
+      return { tone: lifecycleStatus("ok").tone, label: "Working" };
     case "error":
-      return { tone: "danger", label: "Problem" };
+      return { tone: lifecycleStatus("error").tone, label: "Problem" };
     default:
-      return { tone: "neutral", label: "Not tested yet" };
+      return { tone: lifecycleStatus("unverified").tone, label: "Not tested yet" };
   }
 }
 
@@ -250,7 +254,7 @@ export function KnowledgeConnectionDialog({ open, onOpenChange, connection = nul
       const result = await testMutation.mutateAsync(id);
       setTestResult(result);
     } catch (error) {
-      toast.error(`Couldn't test the connection — ${errorMessage(error)}`);
+      toast.error("Couldn't test the connection", { description: errorMessage(error) });
     }
   }
 
@@ -278,7 +282,7 @@ export function KnowledgeConnectionDialog({ open, onOpenChange, connection = nul
               <SavedView connection={saved} result={testResult} testing={testMutation.isPending} onTest={() => void runTest(saved.id)} />
             ) : (
               <>
-                {formError ? <p className="text-[0.8125rem] text-danger-text">{formError}</p> : null}
+                <FormError>{formError}</FormError>
 
                 {mode === "create" ? (
                   <>
@@ -289,14 +293,14 @@ export function KnowledgeConnectionDialog({ open, onOpenChange, connection = nul
                       value={kind}
                       onChange={chooseKind}
                     />
-                    {errors.kind ? <p className="text-[0.8125rem] text-danger-text">{errors.kind}</p> : null}
+                    {errors.kind ? <p className="text-label text-destructive-text">{errors.kind}</p> : null}
                   </>
                 ) : spec ? (
                   <div className="flex items-center gap-2.5">
                     <VendorMark vendor={spec.vendor} size="md" />
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground">{spec.label}</p>
-                      <p className="text-xs text-muted-foreground">{connectionCategoryLabel(kind)}</p>
+                      <p className="text-control font-medium text-foreground">{spec.label}</p>
+                      <p className="text-caption text-text-secondary">{connectionCategoryLabel(kind)}</p>
                     </div>
                   </div>
                 ) : null}
@@ -328,10 +332,10 @@ export function KnowledgeConnectionDialog({ open, onOpenChange, connection = nul
                 ) : null}
 
                 {nativeHybridTurningOn ? (
-                  <p className="text-[0.8125rem] text-pretty text-warning-text">
-                    Existing documents were indexed before keyword search was on — re-index this connection&apos;s
+                  <Alert tone="warning">
+                    Existing documents were indexed before keyword search was on. Re-index this connection&apos;s
                     knowledge bases so their keyword search is complete (RUNBOOK §9.4, <code>reindex --to-connection</code>).
-                  </p>
+                  </Alert>
                 ) : null}
 
                 {spec ? (
@@ -346,7 +350,7 @@ export function KnowledgeConnectionDialog({ open, onOpenChange, connection = nul
                   />
                 ) : null}
                 {spec && !keyRequired ? (
-                  <p className="-mt-2 text-[0.8125rem] text-muted-foreground">
+                  <p className="-mt-2 text-caption text-text-secondary">
                     Leave this without a key for a local or private cluster.
                   </p>
                 ) : null}
@@ -356,14 +360,21 @@ export function KnowledgeConnectionDialog({ open, onOpenChange, connection = nul
 
           <DialogFooter>
             {saved ? (
-              <Button type="submit">Done</Button>
+              <Button type="submit" variant="primary">
+                Done
+              </Button>
             ) : (
               <>
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                <Button type="button" onClick={() => setOpen(false)} disabled={pending}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={pending}>
-                  {pending ? "Saving…" : mode === "edit" ? "Save" : "Add connection"}
+                <Button
+                  type="submit"
+                  variant="primary"
+                  busy={pending}
+                  busyLabel={mode === "edit" ? "Saving…" : "Adding connection…"}
+                >
+                  {mode === "edit" ? "Save" : "Add connection"}
                 </Button>
               </>
             )}
@@ -396,43 +407,31 @@ function KindPicker({
   return (
     <div className="flex flex-col gap-4">
       {groups.map((group) => (
-        <fieldset key={group.heading} className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className="mb-1 text-sm font-medium text-foreground">{group.heading}</legend>
+        <fieldset key={group.heading} className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
+          <legend className="mb-1 text-label font-medium text-foreground">{group.heading}</legend>
           {loading ? (
-            <p className="text-[0.8125rem] text-muted-foreground">Loading…</p>
+            <div className="grid gap-2 sm:grid-cols-2" aria-hidden="true">
+              {group.kinds.map((kind) => (
+                <Skeleton key={kind} className="h-14 w-full rounded-lg" />
+              ))}
+            </div>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
               {group.kinds.map((kind) => {
                 const spec = knowledgeProviders.find((p) => p.id === KNOWLEDGE_CONNECTION_PROVIDER_ID[kind]);
                 if (!spec) return null;
-                const checked = value === kind;
-                const inputId = `${name}-${kind}`;
                 return (
-                  <label
+                  <OptionCard
                     key={kind}
-                    htmlFor={inputId}
-                    className={cn(
-                      "relative flex cursor-pointer items-start gap-2.5 rounded-md border border-border bg-background px-3 py-2.5",
-                      "transition-colors duration-(--dur-2) hover:bg-accent",
-                      "has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft",
-                      "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background",
-                    )}
-                  >
-                    <input
-                      type="radio"
-                      id={inputId}
-                      name={name}
-                      value={kind}
-                      checked={checked}
-                      onChange={() => onChange(kind)}
-                      className="sr-only"
-                    />
-                    <VendorMark vendor={spec.vendor} size="sm" className="mt-0.5" />
-                    <span className="flex min-w-0 flex-col gap-0.5">
-                      <span className="text-sm font-medium text-foreground">{spec.label}</span>
-                      {spec.notes ? <span className="text-xs text-pretty text-muted-foreground">{spec.notes}</span> : null}
-                    </span>
-                  </label>
+                    id={`${name}-${kind}`}
+                    name={name}
+                    value={kind}
+                    checked={value === kind}
+                    onChange={() => onChange(kind)}
+                    title={spec.label}
+                    description={spec.notes || undefined}
+                    aside={<VendorMark vendor={spec.vendor} size="sm" />}
+                  />
                 );
               })}
             </div>
@@ -458,16 +457,16 @@ function SavedView({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-foreground">{connection.name}</span>
+        <span className="text-control font-medium text-foreground">{connection.name}</span>
         {connection.credential_fingerprint ? (
-          <span className="font-mono text-xs text-muted-foreground">{connection.credential_fingerprint}</span>
+          <span className="font-mono text-caption text-text-secondary">{connection.credential_fingerprint}</span>
         ) : (
-          <span className="text-xs text-muted-foreground">No key</span>
+          <span className="text-caption text-text-secondary">No key</span>
         )}
       </div>
       <div>
-        <Button type="button" variant="outline" size="sm" onClick={onTest} disabled={testing}>
-          {testing ? "Testing…" : result ? "Test again" : "Test connection"}
+        <Button type="button" size="sm" onClick={onTest} busy={testing} busyLabel="Testing…">
+          {result ? "Test again" : "Test connection"}
         </Button>
       </div>
       {testing || result ? <KnowledgeConnectionTestResultView result={result} kind={connection.kind} /> : null}
@@ -489,27 +488,27 @@ export function KnowledgeConnectionTestResultView({
   kind?: KnowledgeConnectionKind;
 }) {
   if (!result) return null;
-  const tone: StatusTone = result.ok ? "success" : "danger";
+  const tone: StatusTone = lifecycleStatus(result.ok ? "ok" : "error").tone;
   const collections = result.collections ?? [];
   const noun = kind && MANAGED_SEARCH_CONNECTION_KINDS.includes(kind) ? "partition" : "collection or index";
   const pluralNoun = kind && MANAGED_SEARCH_CONNECTION_KINDS.includes(kind) ? "partitions" : "collections or indexes";
   return (
-    <div className="flex flex-col gap-1.5 rounded-md border border-border bg-muted/30 p-2.5">
-      <div className="flex items-center gap-2">
-        <StatusChip tone={tone} size="sm">
+    <div className="flex flex-col gap-1.5 rounded border border-border bg-muted px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusPill tone={tone} size="sm">
           {result.ok ? "Working" : "Problem"}
-        </StatusChip>
-        <span className="text-[0.8125rem] text-pretty text-foreground">{result.message}</span>
+        </StatusPill>
+        <span className="text-label text-pretty text-foreground">{result.message}</span>
       </div>
       {collections.length > 0 ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-caption text-text-secondary">
           Sees {collections.length === 1 ? `1 ${noun}` : `${collections.length} ${pluralNoun}`}:{" "}
           <span className="font-mono">{collections.slice(0, 8).join(", ")}</span>
           {collections.length > 8 ? "…" : ""}
         </p>
       ) : null}
       {result.dimension_expected !== null && result.dimension_expected !== undefined ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-caption text-text-secondary">
           Vector width: knowledge bases here use {result.dimension_expected}
           {result.dimension_found !== null && result.dimension_found !== undefined
             ? `, this target holds ${result.dimension_found}`

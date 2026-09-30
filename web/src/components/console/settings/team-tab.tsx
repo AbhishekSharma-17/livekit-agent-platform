@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { MailPlusIcon, UsersIcon } from "lucide-react";
+import { UserPlusIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -21,20 +21,41 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CopyButton } from "@/components/shared/copy-button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Field } from "@/components/shared/field";
+import { ReadOnlyNote } from "@/components/shared/read-only-note";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { Section, SectionRow } from "@/components/shared/section";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
+import { lifecycleStatus, type LifecycleStatus } from "@/components/shared/status-map";
+import { Tag } from "@/components/shared/tag";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
-import { api, ApiError } from "@/lib/api";
+import { readOnlyCopy } from "@/components/console/shared/permission";
+import { api } from "@/lib/api";
 import type { InviteOut, MemberOut, Role } from "./api-types";
 import { ROLE_LABEL } from "./api-types";
+import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "./list-search";
+import { RowsSkeleton } from "./settings-card";
 import { useActiveWorkspace, useInvalidateSettings, useMembers } from "./use-settings-queries";
-import { SkeletonRows } from "@/components/shared/loading-state";
 
 const ROLES: Role[] = ["viewer", "builder", "admin", "owner"];
 
 function canManageMembers(role: string | undefined): boolean {
   return role === "admin" || role === "owner";
+}
+
+/** A member's status: tone from the shared lifecycle map, label in this screen's words. */
+function memberStatus(member: MemberOut): LifecycleStatus {
+  if (member.pending) return { tone: lifecycleStatus("pending").tone, label: "Invited" };
+  if (member.disabled) return { tone: lifecycleStatus("failed").tone, label: "Disabled" };
+  return { tone: lifecycleStatus("ready").tone, label: "Active" };
+}
+
+function MemberStatus({ member }: { member: MemberOut }) {
+  const status = memberStatus(member);
+  return (
+    <StatusPill tone={status.tone} size="sm">
+      {status.label}
+    </StatusPill>
+  );
 }
 
 export function TeamTab() {
@@ -43,54 +64,40 @@ export function TeamTab() {
   const invalidate = useInvalidateSettings();
   const canManage = canManageMembers(membership?.role);
 
-  const members = membersQuery.data?.items ?? [];
+  const members = React.useMemo(() => membersQuery.data?.items ?? [], [membersQuery.data]);
+  const search = useListSearch("team", members, (member) => [member.name, member.email, ROLE_LABEL[member.role]]);
+  const query = search.query;
+
+  const identity = (member: MemberOut) => (
+    <div className="min-w-0">
+      <div className="truncate font-medium text-foreground">
+        <Highlight text={member.name || member.email} query={query} />
+      </div>
+      <div className="truncate font-mono text-caption text-text-secondary">
+        <Highlight text={member.email} query={query} />
+      </div>
+    </div>
+  );
 
   const columns: ResponsiveTableColumn<MemberOut>[] = [
-    {
-      id: "member",
-      header: "Member",
-      cell: (member) => (
-        <div className="min-w-0">
-          <div className="truncate font-medium text-foreground">{member.name || member.email}</div>
-          <div className="truncate font-mono text-xs text-muted-foreground">{member.email}</div>
-        </div>
-      ),
-    },
-    {
-      id: "status",
-      header: "Status",
-      cell: (member) =>
-        member.pending ? (
-          <StatusChip tone="warning" size="sm">
-            Invited
-          </StatusChip>
-        ) : member.disabled ? (
-          <StatusChip tone="danger" size="sm">
-            Disabled
-          </StatusChip>
-        ) : (
-          <StatusChip tone="success" size="sm">
-            Active
-          </StatusChip>
-        ),
-    },
+    { id: "member", header: "Member", cell: identity },
+    { id: "status", header: "Status", cell: (member) => <MemberStatus member={member} /> },
     {
       id: "role",
       header: "Role",
       interactive: true,
       cell: (member) =>
-        canManage ? (
+        canManage && membership ? (
           <RoleSelect
-            workspaceId={membership!.id}
-            userId={member.user_id}
-            role={member.role}
-            onChanged={() => invalidate(membership!.id)}
+            workspaceId={membership.id}
+            member={member}
+            onChanged={() => invalidate(membership.id)}
           />
         ) : (
-          <span className="text-muted-foreground">{ROLE_LABEL[member.role]}</span>
+          <span className="text-text-secondary">{ROLE_LABEL[member.role]}</span>
         ),
     },
-    ...(canManage
+    ...(canManage && membership
       ? [
           {
             id: "actions",
@@ -99,9 +106,9 @@ export function TeamTab() {
             interactive: true,
             cell: (member: MemberOut) => (
               <RemoveMemberButton
-                workspaceId={membership!.id}
+                workspaceId={membership.id}
                 member={member}
-                onRemoved={() => invalidate(membership!.id)}
+                onRemoved={() => invalidate(membership.id)}
               />
             ),
           },
@@ -115,57 +122,70 @@ export function TeamTab() {
       title="Team"
       description="Everyone with access to this workspace, and their role."
       aside={
-        canManage && membership ? (
-          <InviteDialog workspaceId={membership.id} onInvited={() => invalidate(membership.id)} />
+        membership ? (
+          canManage ? (
+            <InviteDialog workspaceId={membership.id} onInvited={() => invalidate(membership.id)} />
+          ) : (
+            <ReadOnlyNote>{readOnlyCopy("admin", "invite people or change roles")}</ReadOnlyNote>
+          )
         ) : null
       }
     >
       <SectionRow>
-        {membersQuery.isLoading ? (
-          <SkeletonRows label="Loading the team" rowClassName="h-12" />
+        {membersQuery.isLoading || !membership ? (
+          <RowsSkeleton label="Loading the team" />
         ) : membersQuery.isError ? (
-          <ErrorBanner message={`Couldn't load the team — ${errorMessage(membersQuery.error)}`} onRetry={() => membersQuery.refetch()} />
-        ) : members.length === 0 ? (
-          <EmptyState icon={UsersIcon} title="No members yet" compact />
-        ) : (
-          <ResponsiveTable<MemberOut>
-            columns={columns}
-            rows={members}
-            label="Team members"
-            getRowKey={(member) => member.user_id}
-            renderCard={(member) => (
-              // Phones get the same role and remove controls as the table (no
-              // table-only actions).
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium text-foreground">{member.name || member.email}</div>
-                    <div className="truncate font-mono text-xs text-muted-foreground">{member.email}</div>
-                  </div>
-                  {canManage ? null : (
-                    <StatusChip tone="neutral" size="sm">
-                      {ROLE_LABEL[member.role]}
-                    </StatusChip>
-                  )}
-                </div>
-                {canManage ? (
-                  <div className="flex items-center justify-between gap-2">
-                    <RoleSelect
-                      workspaceId={membership!.id}
-                      userId={member.user_id}
-                      role={member.role}
-                      onChanged={() => invalidate(membership!.id)}
-                    />
-                    <RemoveMemberButton
-                      workspaceId={membership!.id}
-                      member={member}
-                      onRemoved={() => invalidate(membership!.id)}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            )}
+          <ErrorBanner
+            error={membersQuery.error}
+            context={{ action: "load the team" }}
+            onRetry={() => void membersQuery.refetch()}
           />
+        ) : members.length === 0 ? (
+          <EmptyState
+            variant="plain"
+            icon={UsersIcon}
+            title="No members yet"
+            description={canManage ? "Invite someone to give them access." : undefined}
+          />
+        ) : (
+          <>
+            <ListSearchField search={search} label="Search members" total={members.length} />
+            {search.noMatches ? (
+              <ListNoMatches search={search} items="members" />
+            ) : (
+              <ResponsiveTable<MemberOut>
+                columns={columns}
+                rows={search.filtered}
+                label="Team members"
+                getRowKey={(member) => member.user_id}
+                renderCard={(member) => (
+                  // Phones get the same role and remove controls as the table.
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-2">
+                      {identity(member)}
+                      <MemberStatus member={member} />
+                    </div>
+                    {canManage ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <RoleSelect
+                          workspaceId={membership.id}
+                          member={member}
+                          onChanged={() => invalidate(membership.id)}
+                        />
+                        <RemoveMemberButton
+                          workspaceId={membership.id}
+                          member={member}
+                          onRemoved={() => invalidate(membership.id)}
+                        />
+                      </div>
+                    ) : (
+                      <Tag>{ROLE_LABEL[member.role]}</Tag>
+                    )}
+                  </div>
+                )}
+              />
+            )}
+          </>
         )}
       </SectionRow>
     </Section>
@@ -174,13 +194,11 @@ export function TeamTab() {
 
 function RoleSelect({
   workspaceId,
-  userId,
-  role,
+  member,
   onChanged,
 }: {
   workspaceId: string;
-  userId: string;
-  role: Role;
+  member: MemberOut;
   onChanged: () => void;
 }) {
   const [saving, setSaving] = React.useState(false);
@@ -188,18 +206,19 @@ function RoleSelect({
   async function onChange(next: string) {
     setSaving(true);
     try {
-      await api.put(`workspaces/${workspaceId}/members/${userId}`, { role: next });
+      await api.put(`workspaces/${workspaceId}/members/${member.user_id}`, { role: next });
+      toast.success(`${member.name || member.email} is now ${ROLE_LABEL[next as Role] ?? next}`);
       onChanged();
     } catch (err) {
-      toast.error(`Couldn't change role — ${errorMessage(err)}`);
+      toast.error("Couldn't change the role", { description: errorMessage(err) });
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Select value={role} onValueChange={onChange} disabled={saving}>
-      <SelectTrigger aria-label="Role" className="h-8 w-32">
+    <Select value={member.role} onValueChange={onChange} disabled={saving}>
+      <SelectTrigger aria-label={`Role for ${member.email}`} size="sm" className="w-32">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -222,32 +241,22 @@ function RemoveMemberButton({
   member: MemberOut;
   onRemoved: () => void;
 }) {
-  const [busy, setBusy] = React.useState(false);
-
-  async function onClick() {
-    setBusy(true);
-    try {
-      await api.delete(`workspaces/${workspaceId}/members/${member.user_id}`);
-      toast.success(`Removed ${member.email}`);
-      onRemoved();
-    } catch (err) {
-      toast.error(`Couldn't remove ${member.email} — ${errorMessage(err)}`);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <ConfirmDialog
       trigger={
-        <Button type="button" variant="ghost" size="sm" disabled={busy}>
+        <Button type="button" variant="ghost" size="sm">
           Remove
         </Button>
       }
       title={`Remove ${member.email}?`}
       description="They lose access to this workspace. You can invite them again later."
       confirmLabel="Remove member"
-      onConfirm={onClick}
+      onConfirm={async () => {
+        // A failure throws: the dialog stays open and says why in plain words.
+        await api.delete(`workspaces/${workspaceId}/members/${member.user_id}`);
+        toast.success(`Removed ${member.email}`);
+        onRemoved();
+      }}
     />
   );
 }
@@ -265,7 +274,7 @@ function InviteDialog({ workspaceId, onInvited }: { workspaceId: string; onInvit
   const [role, setRole] = React.useState<Role>("viewer");
   const [sending, setSending] = React.useState(false);
   const [invite, setInvite] = React.useState<InviteOut | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<unknown>(null);
 
   function reset() {
     setEmail("");
@@ -283,7 +292,7 @@ function InviteDialog({ workspaceId, onInvited }: { workspaceId: string; onInvit
       setInvite(created);
       onInvited();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : errorMessage(err));
+      setError(err);
     } finally {
       setSending(false);
     }
@@ -298,8 +307,8 @@ function InviteDialog({ workspaceId, onInvited }: { workspaceId: string; onInvit
       }}
     >
       <DialogTrigger asChild>
-        <Button type="button" size="sm">
-          <MailPlusIcon />
+        <Button type="button" variant="primary" size="sm">
+          <UserPlusIcon aria-hidden="true" />
           Invite
         </Button>
       </DialogTrigger>
@@ -314,22 +323,22 @@ function InviteDialog({ workspaceId, onInvited }: { workspaceId: string; onInvit
         {invite ? (
           <>
             <DialogBody className="gap-3">
-              <p className="text-sm text-muted-foreground">
+              <p className="text-label text-text-secondary">
                 Send this link to <span className="font-medium text-foreground">{invite.email}</span>:
               </p>
-              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 p-2">
-                <code className="min-w-0 flex-1 font-mono text-xs break-all">{invite.url}</code>
+              <div className="flex items-center gap-2 rounded border border-border bg-muted p-2">
+                <code className="min-w-0 flex-1 font-mono text-caption break-all">{invite.url}</code>
                 <CopyButton value={invite.url} label="Copy invite link" />
               </div>
-              <p className="text-xs text-muted-foreground">This link won&apos;t be shown again.</p>
+              <p className="text-caption text-text-secondary">This link won&apos;t be shown again.</p>
             </DialogBody>
             <DialogFooter showCloseButton />
           </>
         ) : (
           <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
             <DialogBody className="gap-4">
-              {error ? <ErrorBanner message={error} /> : null}
-              <Field label="Email" htmlFor="invite-email" required>
+              {error ? <ErrorBanner error={error} context={{ action: "send the invite" }} /> : null}
+              <Field label="Email" htmlFor="invite-email">
                 <Input
                   id="invite-email"
                   type="email"
@@ -339,7 +348,7 @@ function InviteDialog({ workspaceId, onInvited }: { workspaceId: string; onInvit
                   disabled={sending}
                 />
               </Field>
-              <Field label="Role" htmlFor="invite-role" required>
+              <Field label="Role" htmlFor="invite-role">
                 <Select value={role} onValueChange={(v) => setRole(v as Role)} disabled={sending}>
                   <SelectTrigger id="invite-role">
                     <SelectValue />
@@ -355,7 +364,10 @@ function InviteDialog({ workspaceId, onInvited }: { workspaceId: string; onInvit
               </Field>
             </DialogBody>
             <DialogFooter>
-              <Button type="submit" disabled={sending}>
+              <Button type="button" onClick={() => setOpen(false)} disabled={sending}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" busy={sending} busyLabel="Sending invite…">
                 Send invite
               </Button>
             </DialogFooter>

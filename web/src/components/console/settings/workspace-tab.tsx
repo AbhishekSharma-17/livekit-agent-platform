@@ -10,15 +10,18 @@ import { Input } from "@/components/ui/input";
 import { DescriptionList } from "@/components/shared/description-list";
 import { Field } from "@/components/shared/field";
 import { Icon } from "@/components/shared/icon";
+import { PasswordInput } from "@/components/shared/password-input";
+import { ReadOnlyNote } from "@/components/shared/read-only-note";
 import { Section, SectionRow } from "@/components/shared/section";
-import { StatusChip } from "@/components/shared/status-chip";
-import { errorMessage } from "@/components/console/shared/error-banner";
+import { Tag } from "@/components/shared/tag";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
+import { readOnlyCopy } from "@/components/console/shared/permission";
 import { useMe } from "@/components/console/shell/use-me";
+import { BREAK_GLASS_USER_ID, signOut } from "@/components/console/lib/sign-out";
 import { api } from "@/lib/api";
 import { ROLE_LABEL } from "./api-types";
+import { FormSkeleton, SettingsCardFooter } from "./settings-card";
 import { useActiveWorkspace, useInvalidateSettings, useWorkspace } from "./use-settings-queries";
-import { SkeletonRows } from "@/components/shared/loading-state";
-import { BREAK_GLASS_USER_ID, signOut } from "@/components/console/lib/sign-out";
 
 /** `admin`/`owner` may rename the workspace or change its settings (CONTRACTS-V2 §3.2). */
 function canManageWorkspace(role: string | undefined): boolean {
@@ -63,6 +66,20 @@ function supportedTimezones(): string[] {
 }
 
 export function WorkspaceTab() {
+  return (
+    <div className="flex flex-col gap-6">
+      <WorkspaceSection />
+      <AccountSection />
+    </div>
+  );
+}
+
+/**
+ * The workspace card: name and default timezone. Admins and owners edit and
+ * save it here; everyone else gets the same facts read-only, with a note that
+ * names who can change them.
+ */
+function WorkspaceSection() {
   const { workspace: membership, isLoading: meLoading } = useActiveWorkspace();
   const workspaceQuery = useWorkspace(membership?.id);
   const invalidate = useInvalidateSettings();
@@ -72,6 +89,7 @@ export function WorkspaceTab() {
   const [name, setName] = React.useState("");
   const [timezone, setTimezone] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<unknown>(null);
   const [initialized, setInitialized] = React.useState(false);
 
   const workspace = workspaceQuery.data;
@@ -87,46 +105,77 @@ export function WorkspaceTab() {
     event.preventDefault();
     if (!membership) return;
     setSaving(true);
+    setSaveError(null);
     try {
       // R-V5-10: `settings.locale.timezone` is the default timezone new agents
       // are created with (an empty field clears it, so agents fall back to UTC).
       await api.put(`workspaces/${membership.id}`, { name, settings: { locale: { timezone: timezone || null } } });
       invalidate(membership.id);
-      toast.success("Workspace updated");
+      toast.success("Workspace saved");
     } catch (err) {
-      toast.error(`Couldn't save workspace — ${errorMessage(err)}`);
+      // Keep what was typed; say what happened in the card.
+      setSaveError(err);
     } finally {
       setSaving(false);
     }
   }
 
-  if (meLoading || workspaceQuery.isLoading || !membership) {
+  const canManage = canManageWorkspace(membership?.role);
+  const loading = meLoading || workspaceQuery.isLoading;
+
+  if (loading) {
     return (
-      <Section id="workspace" title="Workspace">
+      <Section id="workspace" title="Workspace" description="Name and default timezone for this workspace.">
         <SectionRow>
-          <SkeletonRows label="Loading workspace" rows={3} rowClassName="h-9" />
+          <FormSkeleton label="Loading workspace" fields={2} columns={2} />
         </SectionRow>
       </Section>
     );
   }
 
-  const canManage = canManageWorkspace(membership.role);
+  if (workspaceQuery.isError || !membership || !workspace) {
+    return (
+      <Section id="workspace" title="Workspace" description="Name and default timezone for this workspace.">
+        <SectionRow>
+          <ErrorBanner
+            error={workspaceQuery.error ?? new Error("This workspace isn't available.")}
+            context={{ action: "load the workspace" }}
+            onRetry={() => void workspaceQuery.refetch()}
+          />
+        </SectionRow>
+      </Section>
+    );
+  }
+
+  const facts = (
+    <DescriptionList
+      columns={2}
+      items={[
+        { term: "Slug", detail: workspace.slug, mono: true },
+        {
+          term: "Default connection",
+          detail: (
+            <Button asChild variant="link">
+              <Link href="/console/connections">Manage in Connections</Link>
+            </Button>
+          ),
+        },
+      ]}
+    />
+  );
 
   return (
-    <div className="space-y-6">
-      <Section
-        id="workspace"
-        title="Workspace"
-        description="Name and default timezone for this workspace."
-        aside={
-          <StatusChip tone="neutral" size="sm">
-            {ROLE_LABEL[membership.role]}
-          </StatusChip>
-        }
-      >
-        <SectionRow>
-          {canManage ? (
-            <form onSubmit={onSave} className="grid max-w-lg gap-4 sm:grid-cols-2">
+    <Section
+      id="workspace"
+      title="Workspace"
+      description="Name and default timezone for this workspace."
+      aside={<Tag>Your role: {ROLE_LABEL[membership.role]}</Tag>}
+    >
+      {canManage ? (
+        <form onSubmit={onSave} className="flex flex-col divide-y divide-border">
+          <SectionRow className="flex flex-col gap-4">
+            {saveError ? <ErrorBanner error={saveError} context={{ action: "save the workspace" }} /> : null}
+            <div className="grid max-w-lg gap-4 sm:grid-cols-2">
               <Field label="Name" htmlFor="workspace-name" className="sm:col-span-2">
                 <Input
                   id="workspace-name"
@@ -140,61 +189,52 @@ export function WorkspaceTab() {
                 label="Default timezone for new agents"
                 htmlFor="workspace-timezone"
                 optional
-                hint="e.g. America/New_York. Leave empty to start new agents on UTC."
+                hint="For example America/New_York. Leave empty to start new agents on UTC."
               >
                 <Input
                   id="workspace-timezone"
                   list={timezoneListId}
                   autoComplete="off"
                   spellCheck={false}
-                  className="font-mono text-[0.8125rem]"
+                  className="font-mono"
                   value={timezone}
                   onChange={(event) => setTimezone(event.target.value)}
                   placeholder="UTC"
                   disabled={saving}
                 />
-                <datalist id={timezoneListId}>
-                  {timezones.map((tz) => (
-                    <option key={tz} value={tz} />
-                  ))}
-                </datalist>
               </Field>
-              <div className="sm:col-span-2">
-                <Button type="submit" disabled={saving}>
-                  Save
-                </Button>
-              </div>
-            </form>
-          ) : (
+              <datalist id={timezoneListId}>
+                {timezones.map((tz) => (
+                  <option key={tz} value={tz} />
+                ))}
+              </datalist>
+            </div>
+          </SectionRow>
+          <SectionRow>{facts}</SectionRow>
+          <SettingsCardFooter>
+            <Button type="submit" variant="primary" busy={saving} busyLabel="Saving…">
+              Save
+            </Button>
+          </SettingsCardFooter>
+        </form>
+      ) : (
+        <>
+          <SectionRow>
             <DescriptionList
               columns={2}
               items={[
-                { term: "Name", detail: workspace?.name },
+                { term: "Name", detail: workspace.name },
                 { term: "Default timezone for new agents", detail: timezone || "UTC" },
               ]}
             />
-          )}
-        </SectionRow>
-        <SectionRow>
-          <DescriptionList
-            columns={2}
-            items={[
-              { term: "Slug", detail: workspace?.slug, mono: true },
-              {
-                term: "Default connection",
-                detail: (
-                  <Link href="/console/connections" className="underline underline-offset-2">
-                    Manage in Connections
-                  </Link>
-                ),
-              },
-            ]}
-          />
-        </SectionRow>
-      </Section>
-
-      <AccountSection />
-    </div>
+          </SectionRow>
+          <SectionRow>{facts}</SectionRow>
+          <SectionRow>
+            <ReadOnlyNote variant="block">{readOnlyCopy("admin", "rename the workspace or change its timezone")}</ReadOnlyNote>
+          </SectionRow>
+        </>
+      )}
+    </Section>
   );
 }
 
@@ -204,7 +244,19 @@ function AccountSection() {
   const isBreakGlass = me?.user.id === BREAK_GLASS_USER_ID;
 
   return (
-    <Section id="account" title="Account" description="Your own sign-in.">
+    <Section
+      id="account"
+      title="Account"
+      description="Your own sign-in."
+      aside={
+        isBreakGlass ? null : (
+          <Button type="button" size="sm" onClick={() => void signOut()}>
+            <Icon as={LogOutIcon} size="sm" />
+            Sign out
+          </Button>
+        )
+      }
+    >
       <SectionRow>
         <DescriptionList
           columns={2}
@@ -215,23 +267,15 @@ function AccountSection() {
         />
       </SectionRow>
       {isBreakGlass ? (
-        <SectionRow className="text-sm text-muted-foreground">
-          Signed in with the break-glass admin token — there is no user session to change a password on or sign
-          out of. Sign in at <code className="font-mono">/login</code> to manage a real account.
+        <SectionRow>
+          <ReadOnlyNote variant="block">
+            Signed in with the break-glass admin token, so there is no password to change or session to sign out of.
+            Sign in at <code className="font-mono">/login</code> to manage a real account.
+          </ReadOnlyNote>
         </SectionRow>
       ) : (
-        <SectionRow>
-          <PasswordForm />
-        </SectionRow>
+        <PasswordForm />
       )}
-      {!isBreakGlass ? (
-        <SectionRow>
-          <Button type="button" variant="outline" onClick={() => void signOut()}>
-            <Icon as={LogOutIcon} size="sm" />
-            Sign out
-          </Button>
-        </SectionRow>
-      ) : null}
     </Section>
   );
 }
@@ -240,52 +284,57 @@ function PasswordForm() {
   const [current, setCurrent] = React.useState("");
   const [next, setNext] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<unknown>(null);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
+    setError(null);
     try {
       await api.post("auth/password", { current, new: next });
       toast.success("Password changed. Other sessions were signed out.");
       setCurrent("");
       setNext("");
     } catch (err) {
-      toast.error(`Couldn't change password — ${errorMessage(err)}`);
+      setError(err);
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <form onSubmit={onSubmit} className="grid max-w-sm gap-4">
-      <Field label="Current password" htmlFor="account-current-password" required>
-        <Input
-          id="account-current-password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={current}
-          onChange={(event) => setCurrent(event.target.value)}
-          disabled={saving}
-        />
-      </Field>
-      <Field label="New password" htmlFor="account-new-password" required hint="At least 8 characters.">
-        <Input
-          id="account-new-password"
-          type="password"
-          autoComplete="new-password"
-          required
-          minLength={8}
-          value={next}
-          onChange={(event) => setNext(event.target.value)}
-          disabled={saving}
-        />
-      </Field>
-      <div>
-        <Button type="submit" disabled={saving}>
+    <form onSubmit={onSubmit} className="flex flex-col divide-y divide-border">
+      <SectionRow className="flex flex-col gap-4">
+        {error ? <ErrorBanner error={error} context={{ action: "change your password" }} /> : null}
+        <div className="grid max-w-sm gap-4">
+          <Field label="Current password" htmlFor="account-current-password">
+            <PasswordInput
+              id="account-current-password"
+              autoComplete="current-password"
+              required
+              value={current}
+              onChange={(event) => setCurrent(event.target.value)}
+              disabled={saving}
+            />
+          </Field>
+          <Field label="New password" htmlFor="account-new-password" hint="At least 8 characters.">
+            <PasswordInput
+              id="account-new-password"
+              autoComplete="new-password"
+              required
+              minLength={8}
+              value={next}
+              onChange={(event) => setNext(event.target.value)}
+              disabled={saving}
+            />
+          </Field>
+        </div>
+      </SectionRow>
+      <SettingsCardFooter>
+        <Button type="submit" variant="primary" busy={saving} busyLabel="Changing password…">
           Change password
         </Button>
-      </div>
+      </SettingsCardFooter>
     </form>
   );
 }

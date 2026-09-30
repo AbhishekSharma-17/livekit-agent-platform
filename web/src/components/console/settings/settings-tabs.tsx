@@ -2,8 +2,23 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  BotIcon,
+  Building2Icon,
+  CpuIcon,
+  HardDriveIcon,
+  KeyRoundIcon,
+  PlugIcon,
+  ShieldCheckIcon,
+  SunIcon,
+  TriangleAlertIcon,
+  UsersIcon,
+  WebhookIcon,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { AppearanceTab } from "./appearance-tab";
 import { EnvironmentTab } from "./environment-tab";
 import { WorkspaceTab } from "./workspace-tab";
@@ -17,41 +32,35 @@ import { KnowledgeConnectionsTab } from "./knowledge-connections-tab";
 import { DangerTab } from "./danger-tab";
 
 /**
- * `/console/settings?tab=` shell (docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §2.5,
- * §3: "Settings tabs replace the single page", tab ids `workspace | team |
- * api-keys | webhooks | storage | danger`). V2-14 owns the six v2 tabs;
- * `appearance` (the v1 theme control, kept here since it has nowhere else to
- * live now that the sidebar footer's `ThemeMenu` is the quick-access copy,
- * not the only one) and `environment` (v1's read-only `/v1/health` panel)
- * were already real. `ComingSoonTab` (WP-1's placeholder) is gone from this
- * registry — see `storage-tab.tsx`/`danger-tab.tsx` for the two tabs whose
- * backend genuinely doesn't exist yet; they say so plainly instead of
- * reusing that generic copy. `ai-agents` (v3, docs/v3/AGENT-ACCESS.md §5) is
- * V3-04's "Connect an AI agent" tab, between `api-keys` and `webhooks`.
- * `compliance` (V5-15/V5-17, D-V5-22) is the workspace's jurisdiction and its
- * AI disclosure / recording wording, between `webhooks` and `storage`.
- * `knowledge-connections` (V5-24, K §5.3) is BYO Qdrant/Pinecone/Weaviate and
- * hosted re-rankers, between `compliance` and `storage` (the research doc's
- * "next to Storage and LiveKit connections").
+ * `/console/settings?tab=` (decision D5, docs/ui/AUDIT.md): a vertical
+ * section nav on the left, one section on the right. The nav is a vertical
+ * tab list, so `?tab=` stays the single source of truth and only the active
+ * section mounts (Radix unmounts inactive `TabsContent`), which keeps each
+ * section's queries from firing until someone opens it. Below 768 px the same
+ * list becomes a horizontal tab strip that scrolls sideways above the content.
+ *
+ * Tab ids are stable deep links used elsewhere (`?tab=workspace#account`,
+ * `?tab=webhooks`, `?tab=knowledge-connections`); never rename one.
  */
 interface TabDef {
   id: string;
   label: string;
+  icon: LucideIcon;
   content: React.ReactNode;
 }
 
 const TABS: TabDef[] = [
-  { id: "workspace", label: "Workspace", content: <WorkspaceTab /> },
-  { id: "appearance", label: "Appearance", content: <AppearanceTab /> },
-  { id: "team", label: "Team", content: <TeamTab /> },
-  { id: "api-keys", label: "API keys", content: <ApiKeysTab /> },
-  { id: "ai-agents", label: "AI agents", content: <AiAgentsTab /> },
-  { id: "webhooks", label: "Webhooks", content: <WebhooksTab /> },
-  { id: "compliance", label: "Compliance", content: <ComplianceTab /> },
-  { id: "knowledge-connections", label: "Knowledge connections", content: <KnowledgeConnectionsTab /> },
-  { id: "storage", label: "Storage", content: <StorageTab /> },
-  { id: "environment", label: "Environment", content: <EnvironmentTab /> },
-  { id: "danger", label: "Danger zone", content: <DangerTab /> },
+  { id: "workspace", label: "Workspace", icon: Building2Icon, content: <WorkspaceTab /> },
+  { id: "appearance", label: "Appearance", icon: SunIcon, content: <AppearanceTab /> },
+  { id: "team", label: "Team", icon: UsersIcon, content: <TeamTab /> },
+  { id: "api-keys", label: "API keys", icon: KeyRoundIcon, content: <ApiKeysTab /> },
+  { id: "ai-agents", label: "AI agents", icon: BotIcon, content: <AiAgentsTab /> },
+  { id: "webhooks", label: "Webhooks", icon: WebhookIcon, content: <WebhooksTab /> },
+  { id: "compliance", label: "Compliance", icon: ShieldCheckIcon, content: <ComplianceTab /> },
+  { id: "knowledge-connections", label: "Knowledge connections", icon: PlugIcon, content: <KnowledgeConnectionsTab /> },
+  { id: "storage", label: "Storage", icon: HardDriveIcon, content: <StorageTab /> },
+  { id: "environment", label: "Environment", icon: CpuIcon, content: <EnvironmentTab /> },
+  { id: "danger", label: "Danger zone", icon: TriangleAlertIcon, content: <DangerTab /> },
 ];
 
 const DEFAULT_TAB = "workspace";
@@ -62,23 +71,29 @@ export function SettingsTabs() {
   const searchParams = useSearchParams();
   const requested = searchParams.get("tab");
   const active = requested && TAB_IDS.has(requested) ? requested : DEFAULT_TAB;
+  // Desktop-first: the server renders the vertical nav; phones switch to the
+  // primitive's sideways-scrolling tab strip after mount (arrow keys follow).
+  const phone = useMediaQuery("(max-width: 767px)");
 
   return (
     <Tabs
+      orientation={phone ? "horizontal" : "vertical"}
       value={active}
       onValueChange={(next) => {
         router.replace(`/console/settings?tab=${next}`, { scroll: false });
       }}
+      className="max-md:flex-col md:grid md:grid-cols-[208px_minmax(0,1fr)] md:items-start md:gap-8"
     >
-      <TabsList className="h-auto flex-wrap justify-start group-data-horizontal/tabs:h-auto">
+      <TabsList aria-label="Settings sections" className="md:sticky md:top-[calc(var(--layout-topbar)+16px)]">
         {TABS.map((tab) => (
-          <TabsTrigger key={tab.id} value={tab.id}>
+          <TabsTrigger key={tab.id} value={tab.id} className="gap-2">
+            <tab.icon aria-hidden="true" />
             {tab.label}
           </TabsTrigger>
         ))}
       </TabsList>
       {TABS.map((tab) => (
-        <TabsContent key={tab.id} value={tab.id} className="pt-4">
+        <TabsContent key={tab.id} value={tab.id} className="min-w-0">
           {tab.content}
         </TabsContent>
       ))}

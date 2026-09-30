@@ -4,18 +4,23 @@ import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { Checkbox } from "@/components/ui/checkbox";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
+import { CheckboxRow } from "@/components/shared/choice";
+import { MetaList } from "@/components/shared/data-display";
 import { Field } from "@/components/shared/field";
+import { ReadOnlyNote } from "@/components/shared/read-only-note";
 import { Section, SectionRow } from "@/components/shared/section";
-import { SkeletonRows } from "@/components/shared/loading-state";
-import { errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
+import { readOnlyCopy } from "@/components/console/shared/permission";
 import { useActiveWorkspace } from "./use-settings-queries";
+import { FieldSkeleton, SettingsCardFooter } from "./settings-card";
+import { LoadingRegion } from "@/components/shared/loading-state";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import type { ComplianceOut } from "@/contracts/lkap-contracts";
-import { cn } from "@/lib/utils";
 
 /** `lkap_contracts.compliance.Jurisdiction` — the generated TS inlines it, so it's not an exported name. */
 type Jurisdiction = NonNullable<ComplianceOut["settings"]["jurisdiction"]>;
@@ -43,6 +48,10 @@ function useCompliance(workspaceId: string | undefined) {
   });
 }
 
+const TITLE = "Consent and disclosure";
+const DESCRIPTION =
+  "What callers are told, and asked, before an agent records them or tells them it's an AI. A starting point, not legal advice: have counsel review every wording for where you operate.";
+
 export function ComplianceTab() {
   const { workspace: membership, isLoading: meLoading } = useActiveWorkspace();
   const complianceQuery = useCompliance(membership?.id);
@@ -53,6 +62,7 @@ export function ComplianceTab() {
   const [recordingText, setRecordingText] = React.useState("");
   const [ack, setAck] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<unknown>(null);
   const [initialized, setInitialized] = React.useState(false);
 
   const compliance = complianceQuery.data;
@@ -72,6 +82,7 @@ export function ComplianceTab() {
   async function onSave() {
     if (!membership) return;
     setSaving(true);
+    setSaveError(null);
     try {
       await api.put(`workspaces/${membership.id}`, {
         settings: {
@@ -84,123 +95,165 @@ export function ComplianceTab() {
         },
       });
       queryClient.invalidateQueries({ queryKey: ["settings", "compliance", membership.id] });
-      toast.success("Compliance settings updated");
+      toast.success("Consent and disclosure saved");
     } catch (err) {
-      toast.error(`Couldn't save compliance settings — ${errorMessage(err)}`);
+      setSaveError(err);
     } finally {
       setSaving(false);
     }
   }
 
-  if (meLoading || complianceQuery.isLoading || !membership) {
+  if (meLoading || complianceQuery.isLoading) {
     return (
-      <Section id="compliance" title="Consent and disclosure">
+      <Section id="compliance" title={TITLE} description={DESCRIPTION}>
         <SectionRow>
-          <SkeletonRows label="Loading compliance settings" rows={4} rowClassName="h-9" />
+          <LoadingRegion label="Loading consent and disclosure settings" className="flex flex-col gap-4">
+            <div className="grid gap-2.5 sm:grid-cols-3">
+              {[0, 1, 2].map((index) => (
+                <Skeleton key={index} className="h-12 w-full rounded-lg" />
+              ))}
+            </div>
+            <FieldSkeleton tall />
+            <FieldSkeleton tall />
+          </LoadingRegion>
         </SectionRow>
       </Section>
     );
   }
 
-  const canManage = canManageCompliance(membership.role);
-  const disabled = !canManage || saving;
+  if (complianceQuery.isError || !membership || !compliance) {
+    return (
+      <Section id="compliance" title={TITLE} description={DESCRIPTION}>
+        <SectionRow>
+          <ErrorBanner
+            error={complianceQuery.error ?? new Error("These settings aren't available.")}
+            context={{ action: "load consent and disclosure settings" }}
+            onRetry={() => void complianceQuery.refetch()}
+          />
+        </SectionRow>
+      </Section>
+    );
+  }
+
+  if (!canManageCompliance(membership.role)) {
+    return <ComplianceReadOnly compliance={compliance} />;
+  }
 
   return (
-    <Section
-      id="compliance"
-      title="Consent and disclosure"
-      description="What callers are told, and asked, before an agent records them or lets them know it's an AI. A starting point, not legal advice — every wording below needs review by counsel for where you operate."
-    >
-      <SectionRow className="flex flex-col gap-3">
-        <span className="text-sm font-medium leading-5">Jurisdiction</span>
-        <RadioGroup
-          value={jurisdiction}
-          onValueChange={(next) => setJurisdiction(next as Jurisdiction)}
-          aria-label="Jurisdiction"
-          disabled={disabled}
-          data-issue-path="settings.compliance.jurisdiction"
-          className="grid gap-2.5 sm:grid-cols-3"
-        >
-          {presets.map((p) => {
-            const id = `compliance-jurisdiction-${p.jurisdiction}`;
-            const selected = jurisdiction === p.jurisdiction;
-            return (
-              <label
-                key={p.jurisdiction}
-                htmlFor={id}
-                className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors duration-(--dur-2)",
-                  selected ? "border-brand-line bg-brand-soft/40 ring-1 ring-brand-line" : "border-border hover:border-foreground/20",
-                  disabled && "cursor-not-allowed opacity-60",
-                )}
-              >
-                <span className="min-w-0 flex-1 text-sm font-medium leading-5">{p.label}</span>
-                <RadioGroupItem id={id} value={p.jurisdiction} className="mt-0.5" />
-              </label>
-            );
-          })}
-        </RadioGroup>
-      </SectionRow>
-
-      <SectionRow>
-        <Field
-          label="AI disclosure line"
-          htmlFor="compliance-disclosure-text"
-          optional
-          hint={preset ? `Leave empty to use ${preset.label}'s wording: "${preset.disclosure_text}"` : undefined}
-        >
-          <Textarea
-            id="compliance-disclosure-text"
-            rows={2}
-            maxLength={2000}
-            disabled={disabled}
-            value={disclosureText}
-            onChange={(event) => setDisclosureText(event.target.value)}
-          />
-        </Field>
-      </SectionRow>
-
-      <SectionRow>
-        <Field
-          label="Recording question"
-          htmlFor="compliance-recording-text"
-          optional
-          hint={preset ? `Leave empty to use ${preset.label}'s wording: "${preset.recording_text}"` : undefined}
-        >
-          <Textarea
-            id="compliance-recording-text"
-            rows={2}
-            maxLength={2000}
-            disabled={disabled}
-            value={recordingText}
-            onChange={(event) => setRecordingText(event.target.value)}
-          />
-        </Field>
-      </SectionRow>
-
-      <SectionRow className="flex flex-col gap-3">
-        {preset ? (
-          <p className="bg-warning-soft text-warning-text rounded-md px-3 py-2 text-[0.8125rem]">{preset.counsel_note}</p>
+    <Section id="compliance" title={TITLE} description={DESCRIPTION}>
+      <div className="flex flex-col divide-y divide-border">
+        {saveError ? (
+          <SectionRow>
+            <ErrorBanner error={saveError} context={{ action: "save consent and disclosure settings" }} />
+          </SectionRow>
         ) : null}
-        <label htmlFor="compliance-counsel-ack" className="flex items-start gap-2 text-sm">
-          <Checkbox
+        <SectionRow className="flex flex-col gap-3">
+          <span id="compliance-jurisdiction-label" className="text-label font-medium text-foreground">
+            Jurisdiction
+          </span>
+          <RadioGroup
+            value={jurisdiction}
+            onValueChange={(next) => setJurisdiction(next as Jurisdiction)}
+            aria-labelledby="compliance-jurisdiction-label"
+            disabled={saving}
+            data-issue-path="settings.compliance.jurisdiction"
+            className="grid gap-2.5 sm:grid-cols-3"
+          >
+            {presets.map((p) => {
+              const id = `compliance-jurisdiction-${p.jurisdiction}`;
+              return (
+                <label
+                  key={p.jurisdiction}
+                  htmlFor={id}
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-colors duration-(--duration-fast) hover:bg-muted has-data-[state=checked]:border-brand-border has-data-[state=checked]:bg-brand-subtle has-disabled:cursor-not-allowed has-disabled:opacity-50"
+                >
+                  <span className="min-w-0 flex-1 text-control leading-5 font-medium text-foreground">{p.label}</span>
+                  <RadioGroupItem id={id} value={p.jurisdiction} className="mt-0.5" />
+                </label>
+              );
+            })}
+          </RadioGroup>
+        </SectionRow>
+
+        <SectionRow>
+          <Field
+            label="AI disclosure line"
+            htmlFor="compliance-disclosure-text"
+            optional
+            hint={preset ? `Leave empty to use ${preset.label}'s wording: "${preset.disclosure_text}"` : undefined}
+          >
+            <Textarea
+              id="compliance-disclosure-text"
+              rows={2}
+              maxLength={2000}
+              disabled={saving}
+              value={disclosureText}
+              onChange={(event) => setDisclosureText(event.target.value)}
+            />
+          </Field>
+        </SectionRow>
+
+        <SectionRow>
+          <Field
+            label="Recording question"
+            htmlFor="compliance-recording-text"
+            optional
+            hint={preset ? `Leave empty to use ${preset.label}'s wording: "${preset.recording_text}"` : undefined}
+          >
+            <Textarea
+              id="compliance-recording-text"
+              rows={2}
+              maxLength={2000}
+              disabled={saving}
+              value={recordingText}
+              onChange={(event) => setRecordingText(event.target.value)}
+            />
+          </Field>
+        </SectionRow>
+
+        <SectionRow className="flex flex-col gap-3">
+          {preset ? <Alert tone="warning">{preset.counsel_note}</Alert> : null}
+          <CheckboxRow
             id="compliance-counsel-ack"
             checked={ack}
-            disabled={disabled}
-            onCheckedChange={(checked) => setAck(checked === true)}
-            className="mt-0.5"
+            disabled={saving}
+            onChange={(event) => setAck(event.target.checked)}
+            label="I understand this wording is a starting point and needs review by counsel for where this agent operates."
           />
-          I understand this wording is a starting point and needs review by counsel for where this agent operates.
-        </label>
-      </SectionRow>
-
-      {canManage ? (
-        <SectionRow>
-          <Button type="button" onClick={() => void onSave()} disabled={saving}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
         </SectionRow>
-      ) : null}
+
+        <SettingsCardFooter>
+          <Button type="button" variant="primary" busy={saving} busyLabel="Saving…" onClick={() => void onSave()}>
+            Save
+          </Button>
+        </SettingsCardFooter>
+      </div>
+    </Section>
+  );
+}
+
+/** What a viewer or builder sees: the wording callers actually hear, and who can change it. */
+function ComplianceReadOnly({ compliance }: { compliance: ComplianceOut }) {
+  const { jurisdiction, disclosure_text: disclosure, recording_text: recording } = compliance.effective;
+  const preset = compliance.presets.find((p) => p.jurisdiction === jurisdiction);
+  return (
+    <Section id="compliance" title={TITLE} description={DESCRIPTION}>
+      <SectionRow>
+        <MetaList
+          items={[
+            { term: "Jurisdiction", value: preset?.label ?? jurisdiction ?? "—" },
+            { term: "AI disclosure line", value: disclosure ?? "—" },
+            { term: "Recording question", value: recording ?? "—" },
+            {
+              term: "Counsel review",
+              value: compliance.settings.counsel_note_ack ? "Acknowledged" : "Not acknowledged yet",
+            },
+          ]}
+        />
+      </SectionRow>
+      <SectionRow>
+        <ReadOnlyNote variant="block">{readOnlyCopy("admin", "change what callers are told")}</ReadOnlyNote>
+      </SectionRow>
     </Section>
   );
 }

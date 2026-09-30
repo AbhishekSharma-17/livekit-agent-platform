@@ -3,9 +3,8 @@
 import * as React from "react";
 import { BotIcon } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogBody,
@@ -19,15 +18,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CheckboxRow, OptionCard } from "@/components/shared/choice";
 import { CopyButton } from "@/components/shared/copy-button";
 import { Field } from "@/components/shared/field";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
-import { api, ApiError } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { Tag } from "@/components/shared/tag";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
+import { api } from "@/lib/api";
 
 import type { ApiKeyCreated, Scope } from "./api-types";
 import {
@@ -72,11 +70,10 @@ type Step = "key" | "reveal" | "done";
 /**
  * "Connect an AI agent" (docs/v3/AGENT-ACCESS.md §5, PLAN-V3 V3-04, R-V3-2):
  * one `Dialog`, three steps in the same dialog body — never a second dialog
- * or a side sheet. Needs `admin` server-side (`api_keys.py::KeyAdminDep`),
- * same floor as the plain API-keys dialog.
+ * or a side sheet. Needs `admin` server-side (`api_keys.py::KeyAdminDep`);
+ * the AI agents tab only renders it for admins and owners.
  */
 export function ConnectAgentDialog({ onCreated }: { onCreated: () => void }) {
-  const { canWrite } = useWriteAccess("admin");
   const [open, setOpen] = React.useState(false);
   const [step, setStep] = React.useState<Step>("key");
 
@@ -88,7 +85,7 @@ export function ConnectAgentDialog({ onCreated }: { onCreated: () => void }) {
   const [expiryDays, setExpiryDays] = React.useState(DEFAULT_AGENT_KEY_EXPIRY_DAYS);
   const [acknowledged, setAcknowledged] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<unknown>(null);
   const [created, setCreated] = React.useState<ApiKeyCreated | null>(null);
   const [snippetTab, setSnippetTab] = React.useState<SnippetClientId>(snippetClientFor(DEFAULT_AGENT_KEY_CLIENT));
 
@@ -135,7 +132,7 @@ export function ConnectAgentDialog({ onCreated }: { onCreated: () => void }) {
       setStep("reveal");
       onCreated();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : errorMessage(err));
+      setError(err);
     } finally {
       setCreating(false);
     }
@@ -143,16 +140,15 @@ export function ConnectAgentDialog({ onCreated }: { onCreated: () => void }) {
 
   return (
     <Dialog
-      open={canWrite && open}
+      open={open}
       onOpenChange={(next) => {
-        if (!canWrite) return;
         setOpen(next);
         if (!next) reset();
       }}
     >
       <DialogTrigger asChild>
-        <Button type="button" size="sm" disabled={!canWrite} title={canWrite ? undefined : writeAccessReason("admin")}>
-          <BotIcon />
+        <Button type="button" variant="primary" size="sm">
+          <BotIcon aria-hidden="true" />
           Connect an AI agent
         </Button>
       </DialogTrigger>
@@ -213,10 +209,20 @@ interface KeyStepProps {
   setExpiryDays: (v: number) => void;
   acknowledged: boolean;
   setAcknowledged: (v: boolean) => void;
-  error: string | null;
+  error: unknown;
   creating: boolean;
   canSubmit: boolean;
   onSubmit: (event: React.FormEvent) => void;
+}
+
+/** A labelled group of option cards (a native radio group under a legend). */
+function ChoiceGroup({ legend, className, children }: { legend: string; className?: string; children: React.ReactNode }) {
+  return (
+    <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
+      <legend className="mb-1.5 text-label font-medium text-foreground">{legend}</legend>
+      <div className={className ?? "grid gap-2"}>{children}</div>
+    </fieldset>
+  );
 }
 
 function KeyStep({
@@ -245,116 +251,104 @@ function KeyStep({
       <DialogHeader>
         <DialogTitle>Connect an AI agent</DialogTitle>
         <DialogDescription>
-          Mint a scoped key for Claude Code, Codex or any MCP-capable coding agent to use against this workspace.
+          Create a scoped key for Claude Code, Codex or any MCP-capable coding agent to use on this workspace.
         </DialogDescription>
       </DialogHeader>
       <DialogBody className="gap-6">
-        {error ? <ErrorBanner message={error} /> : null}
+        {error ? <ErrorBanner error={error} context={{ action: "create the key" }} /> : null}
 
-        <Field label="Name" htmlFor="agent-key-name" required>
+        <Field label="Name" htmlFor="agent-key-name">
           <Input id="agent-key-name" value={name} onChange={(event) => setName(event.target.value)} disabled={creating} />
         </Field>
 
-        <div className="space-y-2">
-          <Label id="agent-key-client-label">Client</Label>
-          <RadioGroup
-            aria-labelledby="agent-key-client-label"
-            value={client}
-            onValueChange={(v) => setClient(v as AgentKeyClientId)}
-            disabled={creating}
-            className="grid-cols-2 sm:grid-cols-4"
-          >
-            {AGENT_KEY_CLIENTS.map((c) => (
-              <OptionCard key={c.id} value={c.id} id={`agent-key-client-${c.id}`} title={c.label} selected={client === c.id} />
-            ))}
-          </RadioGroup>
-        </div>
-
-        <div className="space-y-2">
-          <Label id="agent-key-connection-label">Connection</Label>
-          <RadioGroup
-            aria-labelledby="agent-key-connection-label"
-            value={remote ? "remote" : "local"}
-            onValueChange={(v) => setRemote(v === "remote")}
-            disabled={creating}
-            className="grid-cols-1 sm:grid-cols-2"
-          >
+        <ChoiceGroup legend="Client" className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2 sm:grid-cols-4">
+          {AGENT_KEY_CLIENTS.map((c) => (
             <OptionCard
-              value="local"
-              id="agent-key-conn-local"
-              title="Local (stdio)"
-              description="The agent spawns lkap-mcp on your own machine."
-              selected={!remote}
+              key={c.id}
+              id={`agent-key-client-${c.id}`}
+              name="agent-key-client"
+              value={c.id}
+              checked={client === c.id}
+              onChange={() => setClient(c.id)}
+              disabled={creating}
+              title={c.label}
             />
-            <OptionCard
-              value="remote"
-              id="agent-key-conn-remote"
-              title="Remote (HTTP)"
-              description={
-                remoteAvailable
-                  ? "Connects to the shared MCP endpoint your operator has enabled."
-                  : "Ask your operator to enable the remote MCP service."
-              }
-              selected={remote}
-              disabled={!remoteAvailable}
-            />
-          </RadioGroup>
-        </div>
+          ))}
+        </ChoiceGroup>
 
-        <div className="space-y-2">
-          <Label id="agent-key-preset-label">Access</Label>
-          <RadioGroup
-            aria-labelledby="agent-key-preset-label"
-            value={presetId}
-            onValueChange={(v) => setPresetId(v as AgentKeyPresetId)}
+        <ChoiceGroup legend="Connection" className="grid gap-2 sm:grid-cols-2">
+          <OptionCard
+            id="agent-key-conn-local"
+            name="agent-key-connection"
+            value="local"
+            checked={!remote}
+            onChange={() => setRemote(false)}
             disabled={creating}
-          >
-            {AGENT_KEY_PRESETS.map((preset) => (
-              <OptionCard
-                key={preset.id}
-                value={preset.id}
-                id={`agent-key-preset-${preset.id}`}
-                title={preset.label}
-                description={preset.description}
-                selected={presetId === preset.id}
-              >
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {preset.scopes.map((scope) => (
-                    <span
-                      key={scope}
-                      className="rounded-xs bg-muted px-1.5 py-0.5 font-mono text-[0.6875rem] text-muted-foreground"
-                    >
-                      {scope}
-                    </span>
-                  ))}
-                </div>
-              </OptionCard>
-            ))}
-          </RadioGroup>
-        </div>
-
-        <label
-          htmlFor="agent-key-calls-write"
-          data-checked={allowCalls ? "" : undefined}
-          className="flex items-start gap-2 rounded-md border border-border p-3 text-sm transition-colors data-checked:border-warning data-checked:bg-warning-soft/40"
-        >
-          <Checkbox
-            id="agent-key-calls-write"
-            checked={allowCalls}
-            onCheckedChange={(v) => setAllowCalls(v === true)}
-            disabled={creating}
+            title="Local (stdio)"
+            description="The agent starts lkap-mcp on your own machine."
           />
-          <span>
-            <span className="font-medium text-foreground">
+          <OptionCard
+            id="agent-key-conn-remote"
+            name="agent-key-connection"
+            value="remote"
+            checked={remote}
+            onChange={() => setRemote(true)}
+            disabled={creating || !remoteAvailable}
+            title="Remote (HTTP)"
+            description={
+              remoteAvailable
+                ? "Connects to the shared MCP endpoint your operator has turned on."
+                : "Ask your operator to enable the remote MCP service."
+            }
+          />
+        </ChoiceGroup>
+
+        <ChoiceGroup legend="Access">
+          {AGENT_KEY_PRESETS.map((preset) => (
+            <OptionCard
+              key={preset.id}
+              id={`agent-key-preset-${preset.id}`}
+              name="agent-key-preset"
+              value={preset.id}
+              checked={presetId === preset.id}
+              onChange={() => setPresetId(preset.id)}
+              disabled={creating}
+              title={preset.label}
+              description={
+                <>
+                  {preset.description}
+                  <span className="mt-2 flex flex-wrap gap-1.5">
+                    {preset.scopes.map((scope) => (
+                      <Tag key={scope} className="font-mono">
+                        {scope}
+                      </Tag>
+                    ))}
+                  </span>
+                </>
+              }
+            />
+          ))}
+        </ChoiceGroup>
+
+        <OptionCard
+          type="checkbox"
+          id="agent-key-calls-write"
+          checked={allowCalls}
+          onChange={(event) => setAllowCalls(event.target.checked)}
+          disabled={creating}
+          title={
+            <>
               Allow outbound phone calls (<code className="font-mono">calls:write</code>)
-            </span>
-            <p className="mt-0.5 text-xs text-pretty text-muted-foreground">
+            </>
+          }
+          description={
+            <>
               Off by default. Dialing also needs the MCP process started with{" "}
-              <code className="font-mono">LKAP_MCP_ALLOW_DIAL=1</code> and confirmation on every call; the
+              <code className="font-mono">LKAP_MCP_ALLOW_DIAL=1</code> and a confirmation on every call; the
               workspace&apos;s dialing policy (allowed prefixes, rate limits) always applies.
-            </p>
-          </span>
-        </label>
+            </>
+          }
+        />
 
         <Field label="Expiry" htmlFor="agent-key-expiry" hint="30 days by default.">
           <Select value={String(expiryDays)} onValueChange={(v) => setExpiryDays(Number(v))} disabled={creating}>
@@ -371,77 +365,52 @@ function KeyStep({
           </Select>
         </Field>
 
-        <Alert variant="warning">
-          <AlertTitle>Before you create this key</AlertTitle>
-          <AlertDescription>{TRANSCRIPT_WARNING}</AlertDescription>
-        </Alert>
-        <label htmlFor="agent-key-ack" className="flex items-start gap-2 text-sm">
-          <Checkbox
+        <div className="flex flex-col gap-3">
+          <Alert tone="warning" title="Before you create this key">
+            {TRANSCRIPT_WARNING}
+          </Alert>
+          <CheckboxRow
             id="agent-key-ack"
             checked={acknowledged}
-            onCheckedChange={(v) => setAcknowledged(v === true)}
+            onChange={(event) => setAcknowledged(event.target.checked)}
             disabled={creating}
+            label={TRANSCRIPT_ACK_LABEL}
           />
-          <span>{TRANSCRIPT_ACK_LABEL}</span>
-        </label>
+        </div>
       </DialogBody>
       <DialogFooter>
         <DialogClose asChild>
-          <Button type="button" variant="outline" disabled={creating}>
+          <Button type="button" disabled={creating}>
             Cancel
           </Button>
         </DialogClose>
-        <Button type="submit" disabled={!canSubmit}>
-          {creating ? "Creating…" : "Create key"}
+        <Button type="submit" variant="primary" disabled={!canSubmit && !creating} busy={creating} busyLabel="Creating key…">
+          Create key
         </Button>
       </DialogFooter>
     </form>
   );
 }
 
-function OptionCard({
-  value,
-  id,
-  title,
-  description,
-  selected,
-  disabled,
-  children,
-}: {
-  value: string;
-  id: string;
-  title: string;
-  description?: string;
-  selected: boolean;
-  disabled?: boolean;
-  children?: React.ReactNode;
-}) {
+// ---------------------------------------------------------- step 2: reveal
+
+function SnippetBlock({ id, value, copyLabel, className }: { id?: string; value: string; copyLabel: string; className?: string }) {
   return (
-    <label
-      htmlFor={id}
-      data-slot="option-card"
-      data-selected={selected ? "" : undefined}
-      className={cn(
-        "flex flex-col gap-1 rounded-lg border border-border bg-card p-3 text-card-foreground transition-colors",
-        "has-focus-visible:ring-2 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-background",
-        disabled
-          ? "cursor-not-allowed opacity-50"
-          : cn("cursor-pointer", selected ? "border-brand-line bg-brand-soft/40 ring-1 ring-brand-line" : "hover:bg-muted/50"),
-      )}
-    >
-      <span className="flex items-start gap-2">
-        <RadioGroupItem value={value} id={id} disabled={disabled} className="mt-0.5" />
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium text-foreground">{title}</span>
-          {description ? <span className="mt-0.5 block text-xs text-pretty text-muted-foreground">{description}</span> : null}
-        </span>
-      </span>
-      {children}
-    </label>
+    <div className="relative">
+      <pre
+        id={id}
+        tabIndex={0}
+        className={
+          className ??
+          "overflow-auto rounded border border-border bg-muted p-3 pr-10 font-mono text-caption leading-5 break-all whitespace-pre-wrap text-foreground"
+        }
+      >
+        {value}
+      </pre>
+      <CopyButton value={value} label={copyLabel} className="absolute top-2 right-2" />
+    </div>
   );
 }
-
-// ---------------------------------------------------------- step 2: reveal
 
 function RevealStep({
   created,
@@ -467,14 +436,14 @@ function RevealStep({
     <>
       <DialogHeader>
         <DialogTitle>Your agent key</DialogTitle>
-        <DialogDescription>The raw key is shown once, right after creation — copy it now.</DialogDescription>
+        <DialogDescription>The raw key is shown once, right after creation. Copy it now.</DialogDescription>
       </DialogHeader>
       <DialogBody className="gap-4">
-        <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 p-2">
-          <code className="min-w-0 flex-1 truncate font-mono text-xs">{created.key}</code>
+        <div className="flex items-center gap-2 rounded border border-border bg-muted p-2">
+          <code className="min-w-0 flex-1 font-mono text-caption break-all">{created.key}</code>
           <CopyButton value={created.key} label="Copy agent key" />
         </div>
-        <p className="text-xs text-muted-foreground">This key won&apos;t be shown again.</p>
+        <p className="text-caption text-text-secondary">This key won&apos;t be shown again.</p>
 
         <Tabs value={snippetTab} onValueChange={(v) => setSnippetTab(v as SnippetClientId)}>
           <TabsList>
@@ -488,27 +457,19 @@ function RevealStep({
             const snippet = snippetFor(tab.id, ctx);
             return (
               <TabsContent key={tab.id} value={tab.id} className="pt-3">
-                <div className="relative">
-                  <pre
-                    tabIndex={0}
-                    className="max-h-72 overflow-auto rounded-md border border-border bg-muted/40 p-4 pr-10 font-mono text-xs leading-5 break-all whitespace-pre-wrap text-foreground"
-                  >
-                    {snippet}
-                  </pre>
-                  <CopyButton
-                    value={snippet}
-                    label={`Copy the ${tab.label} snippet`}
-                    className="absolute top-2 right-2"
-                  />
-                </div>
+                <SnippetBlock
+                  value={snippet}
+                  copyLabel={`Copy the ${tab.label} snippet`}
+                  className="max-h-72 overflow-auto rounded border border-border bg-muted p-4 pr-10 font-mono text-caption leading-5 break-all whitespace-pre-wrap text-foreground"
+                />
               </TabsContent>
             );
           })}
         </Tabs>
-        <p className="text-xs text-muted-foreground">{KEEP_KEY_NOTE}</p>
+        <p className="text-caption text-text-secondary">{KEEP_KEY_NOTE}</p>
       </DialogBody>
       <DialogFooter>
-        <Button type="button" onClick={onNext}>
+        <Button type="button" variant="primary" onClick={onNext}>
           Next
         </Button>
       </DialogFooter>
@@ -528,36 +489,18 @@ function DoneStep({ onClose }: { onClose: () => void }) {
         <DialogDescription>Give your agent the platform guide, then ask it what it can do.</DialogDescription>
       </DialogHeader>
       <DialogBody className="gap-4">
-        <div>
+        <div className="flex flex-col gap-2">
           <Label htmlFor="agent-key-skill-line">Install the Claude Code skill (optional)</Label>
-          <div className="relative mt-2">
-            <pre
-              id="agent-key-skill-line"
-              tabIndex={0}
-              className="overflow-auto rounded-md border border-border bg-muted/40 p-3 pr-10 font-mono text-xs text-foreground"
-            >
-              {installLine}
-            </pre>
-            <CopyButton value={installLine} label="Copy the skill install command" className="absolute top-2 right-2" />
-          </div>
+          <SnippetBlock id="agent-key-skill-line" value={installLine} copyLabel="Copy the skill install command" />
         </div>
-        <p className="text-sm text-muted-foreground">{CODEX_AGENTS_NOTE}</p>
-        <div>
+        <p className="text-label text-text-secondary">{CODEX_AGENTS_NOTE}</p>
+        <div className="flex flex-col gap-2">
           <Label htmlFor="agent-key-ask-line">Ask your agent</Label>
-          <div className="relative mt-2">
-            <pre
-              id="agent-key-ask-line"
-              tabIndex={0}
-              className="overflow-auto rounded-md border border-border bg-muted/40 p-3 pr-10 font-mono text-xs text-foreground"
-            >
-              {ASK_AGENT_LINE}
-            </pre>
-            <CopyButton value={ASK_AGENT_LINE} label="Copy the prompt" className="absolute top-2 right-2" />
-          </div>
+          <SnippetBlock id="agent-key-ask-line" value={ASK_AGENT_LINE} copyLabel="Copy the prompt" />
         </div>
       </DialogBody>
       <DialogFooter>
-        <Button type="button" onClick={onClose}>
+        <Button type="button" variant="primary" onClick={onClose}>
           Done
         </Button>
       </DialogFooter>

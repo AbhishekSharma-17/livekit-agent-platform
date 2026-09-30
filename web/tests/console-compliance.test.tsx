@@ -166,10 +166,14 @@ describe("ComplianceTab", () => {
     }
   });
 
-  it("hides the Save button for a member without manage rights", async () => {
+  it("shows a member without manage rights a read-only card: the wording callers hear, no Save, and who can change it", async () => {
     role = "member";
     renderTab();
-    await screen.findByRole("radio", { name: "India" });
+    // The read-only variant (D12) lists the effective wording instead of a disabled form.
+    expect(await screen.findByText("India")).toBeTruthy();
+    expect(screen.getByText("This call can be recorded so we have a record of it. Is it okay if we record it?")).toBeTruthy();
+    expect(screen.queryByRole("radio")).toBeNull();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(screen.getByText(/Ask an admin to change what callers are told/)).toBeTruthy();
   });
 });

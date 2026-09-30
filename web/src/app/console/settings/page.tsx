@@ -1,20 +1,22 @@
 import type { Metadata } from "next";
 
-import { PageHeader } from "@/components/shared/page-header";
+import { Page, PageHeader } from "@/components/shared/page-header";
 import { SettingsTabs } from "@/components/console/settings/settings-tabs";
 
 export const metadata: Metadata = { title: "Settings" };
 
 /**
- * `/console/settings?tab=` — docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §1, §2.5:
- * settings becomes tabbed. See `settings-tabs.tsx` for which tabs this
- * package fills in versus reserves for V2-14.
+ * `/console/settings?tab=` — the Settings archetype (docs/ui/DESIGN-SYSTEM.md
+ * section 7.4, decision D5 in docs/ui/AUDIT.md): a wide page with a vertical
+ * section nav on the left and one section's cards on the right. `?tab=`
+ * deep links keep working; each card saves on its own, so the header has no
+ * page-level action.
  */
 export default function ConsoleSettingsPage() {
   return (
-    <div>
-      <PageHeader title="Settings" description="Your workspace, team, API keys, webhooks and account." />
+    <Page width="wide">
+      <PageHeader title="Settings" description="Manage this workspace, its team, keys and webhooks, and your own account." />
       <SettingsTabs />
-    </div>
+    </Page>
   );
 }

@@ -16,7 +16,7 @@ import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { useDatasets, useDeleteDataset } from "@/components/console/lib/api-hooks";
 import { UploadDatasetDialog } from "@/components/console/datasets/upload-dataset-dialog";
 import { plainStatusError } from "@/components/console/knowledge/status-error";
-import { Highlight, ListToolbar, SEARCH_THRESHOLD, matchesQuery, useRememberedChoice } from "@/components/console/tools/list-search";
+import { Highlight, ListToolbar, SEARCH_THRESHOLD, matchesQuery, useRememberedChoice } from "@/components/shared/list-search";
 import { useWriteGate } from "@/components/console/tools/write-gate";
 import { pluralize } from "@/lib/format";
 import type { DatasetOut } from "@/contracts/lkap-contracts";
@@ -56,7 +56,7 @@ export function DatasetList() {
   const deleteDataset = useDeleteDataset();
   const gate = useWriteGate();
   const [query, setQuery] = React.useState("");
-  const [status, setStatus] = useRememberedChoice<StatusFilter>("lkap.datasets.status", STATUS_FILTERS, "all");
+  const [status, setStatus] = useRememberedChoice<StatusFilter>("datasets-status", "all", STATUS_FILTERS, { legacyKeys: ["lkap.datasets.status"] });
 
   const header = <PageHeader title={TITLE} description={DESCRIPTION} actions={<UploadDatasetDialog />} />;
 

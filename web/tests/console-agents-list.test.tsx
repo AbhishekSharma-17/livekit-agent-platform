@@ -274,7 +274,7 @@ describe("AgentsTable", () => {
     fireEvent.change(search, { target: { value: "cafe CONC" } });
     await waitFor(() => expect(tableScope().queryByText("Claims intake")).toBeNull());
     const marks = Array.from(
-      document.querySelectorAll('[data-slot="responsive-table-table"] [data-slot="search-match"]'),
+      document.querySelectorAll('[data-slot="responsive-table-table"] [data-slot="search-highlight"]'),
     ).map((node) => node.textContent);
     expect(marks).toEqual(expect.arrayContaining(["Café", "conc", "cafe"]));
 

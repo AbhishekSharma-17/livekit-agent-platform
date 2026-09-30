@@ -31,7 +31,7 @@ import type { AgentOut, ConnectionOut, ProviderSpec } from "@/contracts/lkap-con
 import { connectionTypeLabel } from "@/components/console/agents/editor/use-connection";
 import { useConnections } from "@/hooks/useConnections";
 
-import { Highlight, matchesAllWords, queryWords, readStoredFilters, writeStoredFilters } from "./list-search";
+import { Highlight, matchesQuery, readStoredFilters, SEARCH_THRESHOLD, writeStoredFilters } from "@/components/shared/list-search";
 
 const PIPELINE_MODE_LABEL: Record<string, string> = {
   cascaded: "Cascaded",
@@ -53,9 +53,6 @@ const STATUS_FILTERS = [
 
 type StatusFilter = (typeof STATUS_FILTERS)[number]["value"];
 const STATUS_VALUES = new Set<string>(STATUS_FILTERS.map((filter) => filter.value));
-
-/** Search appears once the list has this many agents, or while a query is active (spec section 9). */
-const SEARCH_THRESHOLD = 6;
 
 /** Per-person filter memory (spec section 9): status and pack, validated on read. */
 export const AGENT_FILTERS_STORAGE_KEY = "lkap.console.agents.filters.v1";
@@ -258,8 +255,6 @@ export function AgentsTable() {
     } satisfies Record<StatusFilter, number>;
   }, [agents]);
 
-  const words = React.useMemo(() => queryWords(q), [q]);
-
   const filtered = React.useMemo(
     () =>
       agents
@@ -268,10 +263,10 @@ export function AgentsTable() {
           if (status === "live" && !agent.published) return false;
           if (status === "draft" && agent.published) return false;
           if (pack && agent.pack_id !== pack) return false;
-          return matchesAllWords(words, [agent.name, agent.slug]);
+          return matchesQuery([agent.name, agent.slug], q);
         })
         .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()),
-    [agents, pack, status, words],
+    [agents, pack, status, q],
   );
 
   if (isLoading) return <AgentsTableSkeleton />;
@@ -299,12 +294,12 @@ export function AgentsTable() {
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-medium text-foreground">
-              <Highlight text={agent.name} words={words} />
+              <Highlight text={agent.name} query={q} />
             </span>
           </div>
           <div className="flex items-center gap-1.5 text-caption text-text-tertiary">
             <span className="font-mono">
-              /<Highlight text={agent.slug} words={words} />
+              /<Highlight text={agent.slug} query={q} />
             </span>
             <span aria-hidden="true">·</span>
             <span>{packLabels.get(agent.pack_id) ?? agent.pack_id}</span>
@@ -405,7 +400,7 @@ export function AgentsTable() {
         renderCard={(agent) => (
           <AgentCard
             agent={agent}
-            words={words}
+            query={q}
             vendors={vendors}
             packLabels={packLabels}
             connectionLabel={connectionLabel(agent)}
@@ -435,14 +430,14 @@ export function AgentsTable() {
 
 function AgentCard({
   agent,
-  words,
+  query,
   vendors,
   packLabels,
   connectionLabel,
   deleteAgent,
 }: {
   agent: AgentOut;
-  words: readonly string[];
+  query: string;
   vendors: Map<string, string>;
   packLabels: Map<string, string>;
   connectionLabel: string;
@@ -454,10 +449,10 @@ function AgentCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate font-medium text-foreground">
-            <Highlight text={agent.name} words={words} />
+            <Highlight text={agent.name} query={query} />
           </p>
           <p className="truncate font-mono text-caption text-text-tertiary">
-            /<Highlight text={agent.slug} words={words} />
+            /<Highlight text={agent.slug} query={query} />
           </p>
         </div>
         <AgentStatusBadge agent={agent} />

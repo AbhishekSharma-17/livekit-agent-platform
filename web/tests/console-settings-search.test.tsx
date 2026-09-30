@@ -140,12 +140,12 @@ describe("Team list search", () => {
     fireEvent.change(search, { target: { value: "zoe" } });
     expect(rows.queryByText("arjun@example.test")).toBeNull();
     expect(rows.getByText("Zoë").tagName).toBe("MARK");
-    expect(storage.getItem("lkap:settings:search:team")).toBe("zoe");
+    expect(storage.getItem("lkap:list:team")).toBe("zoe");
 
     fireEvent.keyDown(search, { key: "Escape" });
     expect((search as HTMLInputElement).value).toBe("");
     expect(rows.getByText("arjun@example.test")).toBeTruthy();
-    expect(storage.getItem("lkap:settings:search:team")).toBeNull();
+    expect(storage.getItem("lkap:list:team")).toBeNull();
   });
 
   it("shows a distinct no-matches state whose Clear filters brings the list back", async () => {
@@ -161,8 +161,8 @@ describe("Team list search", () => {
     expect(await screen.findByRole("table", { name: "Team members" })).toBeTruthy();
   });
 
-  it("remembers the query per list, and ignores a stored value that fails validation", async () => {
-    storage.setItem("lkap:settings:search:team", "lars");
+  it("remembers the query per list", async () => {
+    storage.setItem("lkap:list:team", "lars");
     stubFetch();
     renderTeam();
     const rows = await table();
@@ -172,8 +172,21 @@ describe("Team list search", () => {
     expect(rows.queryByText("zoe@example.test")).toBeNull();
   });
 
+  it("moves a query saved under the old settings key to the list key, once", async () => {
+    storage.setItem("lkap:settings:search:team", "lars");
+    stubFetch();
+    renderTeam();
+    const rows = await table();
+    await waitFor(() =>
+      expect((screen.getByRole("searchbox", { name: "Search members" }) as HTMLInputElement).value).toBe("lars"),
+    );
+    expect(rows.queryByText("zoe@example.test")).toBeNull();
+    expect(storage.getItem("lkap:list:team")).toBe("lars");
+    expect(storage.getItem("lkap:settings:search:team")).toBeNull();
+  });
+
   it("drops an over-long stored query instead of applying it", async () => {
-    storage.setItem("lkap:settings:search:team", "x".repeat(500));
+    storage.setItem("lkap:list:team", "x".repeat(500));
     stubFetch();
     renderTeam();
     const rows = await table();

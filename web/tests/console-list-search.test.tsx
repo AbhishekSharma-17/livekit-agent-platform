@@ -10,7 +10,7 @@ import {
   normalizeText,
   queryWords,
   useRememberedChoice,
-} from "@/components/console/tools/list-search";
+} from "@/components/shared/list-search";
 
 /**
  * The build library's list search (docs/ui/DESIGN-SYSTEM.md section 9):
@@ -73,15 +73,33 @@ describe("list search", () => {
   });
 
   it("remembers a filter and ignores an unknown stored value", async () => {
-    window.localStorage.setItem("lkap.test.filter", "nonsense");
-    const { result } = renderHook(() => useRememberedChoice("lkap.test.filter", ["all", "enabled", "disabled"] as const, "all"));
+    const allowed = ["all", "enabled", "disabled"] as const;
+    window.localStorage.setItem("lkap:list:test-filter", "nonsense");
+    const { result } = renderHook(() => useRememberedChoice("test-filter", "all", allowed));
     expect(result.current[0]).toBe("all");
 
     act(() => result.current[1]("disabled"));
     expect(result.current[0]).toBe("disabled");
-    expect(window.localStorage.getItem("lkap.test.filter")).toBe("disabled");
+    expect(window.localStorage.getItem("lkap:list:test-filter")).toBe("disabled");
 
-    const second = renderHook(() => useRememberedChoice("lkap.test.filter", ["all", "enabled", "disabled"] as const, "all"));
+    const second = renderHook(() => useRememberedChoice("test-filter", "all", allowed));
     expect(second.result.current[0]).toBe("disabled");
+  });
+
+  it("moves a filter saved under a legacy key to the list key, once", () => {
+    const allowed = ["all", "enabled", "disabled"] as const;
+    window.localStorage.setItem("lkap.tools.kind", "enabled");
+    const { result } = renderHook(() => useRememberedChoice("tools-kind", "all", allowed, { legacyKeys: ["lkap.tools.kind"] }));
+    expect(result.current[0]).toBe("enabled");
+    expect(window.localStorage.getItem("lkap:list:tools-kind")).toBe("enabled");
+    expect(window.localStorage.getItem("lkap.tools.kind")).toBeNull();
+  });
+
+  it("highlights with the brand-subtle pair the contrast check holds", () => {
+    const { container } = render(<Highlight text="Policy directory" query="policy" />);
+    const mark = container.querySelector("mark");
+    expect(mark?.getAttribute("data-slot")).toBe("search-highlight");
+    expect(mark?.className).toContain("bg-brand-subtle");
+    expect(mark?.className).toContain("text-foreground");
   });
 });

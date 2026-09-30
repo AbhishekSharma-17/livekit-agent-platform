@@ -21,7 +21,7 @@ import { readOnlyCopy } from "@/components/console/shared/permission";
 import { DatasetToolEditorDialog } from "@/components/console/tools/dataset-tool-editor-dialog";
 import { DryRunDialog } from "@/components/console/tools/dry-run-dialog";
 import { HttpToolEditorDialog } from "@/components/console/tools/http-tool-editor-dialog";
-import { Highlight, ListToolbar, SEARCH_THRESHOLD, matchesQuery, useRememberedChoice } from "@/components/console/tools/list-search";
+import { Highlight, ListToolbar, SEARCH_THRESHOLD, matchesQuery, useRememberedChoice } from "@/components/shared/list-search";
 import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-dialog";
 import { ProviderToolEditorDialog } from "@/components/console/tools/provider-tool-editor-dialog";
 import { requestSummary } from "@/components/console/tools/tool-row";
@@ -163,7 +163,7 @@ export function ToolsList() {
   const secretBagSpec = providersQuery.data?.providers.find((p) => p.kind === "secret_bag");
   const gate = useWriteGate();
   const [query, setQuery] = React.useState("");
-  const [kind, setKind] = useRememberedChoice<KindFilter>("lkap.tools.kind", KIND_FILTERS, "all");
+  const [kind, setKind] = useRememberedChoice<KindFilter>("tools-kind", "all", KIND_FILTERS, { legacyKeys: ["lkap.tools.kind"] });
 
   const refetch = () => void toolsQuery.refetch();
 

@@ -14,7 +14,7 @@ import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useToolKits } from "@/components/console/lib/api-hooks";
 import { AddKitDialog } from "@/components/console/tools/kits/add-kit-dialog";
-import { Highlight, ListToolbar, SEARCH_THRESHOLD, matchesQuery } from "@/components/console/tools/list-search";
+import { Highlight, ListToolbar, SEARCH_THRESHOLD, matchesQuery } from "@/components/shared/list-search";
 import { useWriteGate } from "@/components/console/tools/write-gate";
 import type { AgentOut, ToolKit } from "@/contracts/lkap-contracts";
 

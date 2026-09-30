@@ -36,6 +36,7 @@ Nothing in `components/shared/**` imports screen code. The permission helpers re
 | Field | `shared/field.tsx` | `Field` (`optional` → "(optional)"; hint; error), `FieldRow`, `FormError`, `fieldIds` |
 | Choices | `shared/choice.tsx` | `CheckboxRow`, `RadioRow`, `OptionCard` (`:has(input:checked)`), `SwitchRow` |
 | Search and icons | `shared/search-field.tsx` | `InputWithIcon`, `SearchField` (Escape clears; X only with a value) |
+| List search (spec 9) | `shared/list-search.tsx` | The one list search for every list: `useListSearch`, `ListSearchField`, `ListNoMatches`, `ListToolbar` (search + segmented filter), `matchesQuery`, `matchRanges`, `Highlight` (foreground on `--brand-subtle`), `useRememberedQuery`, `useRememberedChoice`, `readStoredFilters` / `writeStoredFilters`. Remembered under `lkap:list:<id>`; old `lkap:settings:search:<id>` values (and a caller's `legacyKeys`) migrate once on read |
 | Secrets | `shared/password-input.tsx` | `PasswordInput` (show/hide), `SecretInput` (write-only) |
 | Chips | `shared/chip-input.tsx` | `ChipInput` (Enter/comma/semicolon, paste splits, invalid kept and flagged, polite live region), `validateEmail` |
 | Files | `shared/file-input.tsx` | `FileInput` |

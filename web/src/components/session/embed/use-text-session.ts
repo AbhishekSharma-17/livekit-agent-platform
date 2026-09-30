@@ -20,7 +20,7 @@ import { Room } from "livekit-client";
 
 import type { ConnectResponse } from "@/contracts/lkap-contracts";
 import { useAgentRpc } from "@/hooks/useAgentRpc";
-import { describeConnectError } from "@/lib/livekit";
+import { callerConnectError } from "@/components/session/caller-error";
 
 import { createTextSessionTokenSource } from "./text-token-source";
 
@@ -56,7 +56,7 @@ export function useCreateTextSession({
             setDetails((previous) => previous ?? response);
             setError(null);
           },
-          onError: (cause) => setError(describeConnectError(cause)),
+          onError: (cause) => setError(callerConnectError(cause, { testMode: viaConsole })),
         },
         { viaConsole },
       ),
@@ -68,6 +68,8 @@ export function useCreateTextSession({
   sessionRef.current = session;
   const freezeRef = useRef(freeze);
   freezeRef.current = freeze;
+  const viaConsoleRef = useRef(viaConsole);
+  viaConsoleRef.current = viaConsole;
 
   useEffect(() => {
     let cancelled = false;
@@ -76,7 +78,9 @@ export function useCreateTextSession({
     sessionRef.current
       .start({ signal: controller.signal })
       .catch((cause: unknown) => {
-        if (!cancelled && !controller.signal.aborted) setError(describeConnectError(cause));
+        if (!cancelled && !controller.signal.aborted) {
+          setError(callerConnectError(cause, { testMode: viaConsoleRef.current }));
+        }
       });
 
     return () => {

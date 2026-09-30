@@ -14,9 +14,7 @@ exempt * src/components/agents-ui/       vendored LiveKit Agents UI
 exempt * src/contracts/                  generated contract types
 exempt colour-literal src/lib/browser-colors.ts   theme-color / manifest literals, test-pinned to the tokens
 
-# UI-3 app shell (3 in 1 files)
-allow opacity-colour   1  src/components/ui/sidebar.tsx
-allow raw-shadow       2  src/components/ui/sidebar.tsx
+# UI-3 app shell (0: cleared)
 
 # UI-2 primitives and styleguide (113 in 27 files)
 allow colour-literal   1  src/components/shared/vendor-mark.tsx   # keep: per-vendor computed tint (AUDIT C6)

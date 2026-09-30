@@ -21,7 +21,7 @@ allow raw-shadow       2  src/components/ui/sidebar.tsx
 # UI-2 primitives and styleguide (113 in 27 files)
 allow colour-literal   1  src/components/shared/vendor-mark.tsx   # keep: per-vendor computed tint (AUDIT C6)
 
-# S1 agents (45 in 23 files)
+# S1 agents (0: was 45 in 23 files; cleared by the S1 screen package)
 
 # S2 connect (17 in 9 files)
 allow opacity-colour   2  src/components/console/connections/connections-table.tsx

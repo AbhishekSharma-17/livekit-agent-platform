@@ -60,16 +60,9 @@ import { Section, SectionRow } from "@/components/shared/section";
 import { StatusChip } from "@/components/shared/status-chip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { usePacks } from "@/components/console/lib/api-hooks";
+import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { BLOCK_TOOLS } from "@/components/console/lib/constants";
 import type { AgentEditorForm, PanelLayoutForm } from "@/components/console/lib/schemas";
 import { PANEL_META, panelMeta } from "@/components/shared/panel-meta";
@@ -133,25 +126,17 @@ function PanelPresets({ panel, onChange }: { panel: PanelLayoutForm; onChange: (
           </Button>
         ))}
       </div>
-      <Dialog open={pending !== null} onOpenChange={(open) => !open && setPending(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Replace the current blocks?</DialogTitle>
-            <DialogDescription>
-              Starting from the {pending?.name} preset replaces every block on this panel. This can&rsquo;t be undone
-              once you save.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setPending(null)}>
-              Cancel
-            </Button>
-            <Button variant="primary" type="button" onClick={() => pending && apply(pending)}>
-              Replace blocks
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={pending !== null}
+        onOpenChange={(open) => !open && setPending(null)}
+        title="Replace the current blocks?"
+        description={`Starting from the ${pending?.name ?? ""} preset replaces every block on this panel. This can’t be undone once you save.`}
+        confirmLabel="Replace blocks"
+        busyLabel="Replacing blocks…"
+        onConfirm={() => {
+          if (pending) apply(pending);
+        }}
+      />
     </>
   );
 }

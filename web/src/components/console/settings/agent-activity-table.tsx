@@ -63,7 +63,7 @@ function clientPayload(row: AuditOut): ClientPayload {
 export function AgentActivityTable() {
   const { workspace } = useActiveWorkspace();
   const keysQuery = useAgentKeys(workspace?.id);
-  const agentKeys = keysQuery.data?.items ?? [];
+  const agentKeys = React.useMemo(() => keysQuery.data?.items ?? [], [keysQuery.data]);
 
   const [offset, setOffset] = React.useState(0);
   const [rows, setRows] = React.useState<AuditOut[]>([]);

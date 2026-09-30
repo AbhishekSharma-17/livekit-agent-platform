@@ -164,17 +164,23 @@ describe("WorkspacePricesButton — admin gating (docs/v2/_asks.md V2-20-5)", ()
     vi.stubGlobal("fetch", stubFetch("admin").fetch);
     withClient(<WorkspacePricesButton />);
     await screen.findByRole("button", { name: "Your prices" });
-    // GatedButton swaps in a whole new element between its disabled (loading)
-    // and allowed branches, so the button must be re-queried on every poll —
-    // a captured reference from before the role resolves goes stale.
+    // The button only renders once the role resolves (IfCan renders nothing
+    // while it loads), so re-query it on every poll rather than holding a
+    // reference.
     await waitFor(() => expect((screen.getByRole("button", { name: "Your prices" }) as HTMLButtonElement).disabled).toBe(false));
   });
 
-  it("is disabled for a builder", async () => {
+  it("isn't offered to a builder (D12: hidden, not disabled)", async () => {
     vi.stubGlobal("fetch", stubFetch("builder").fetch);
-    withClient(<WorkspacePricesButton />);
-    await screen.findByRole("button", { name: "Your prices" });
-    await waitFor(() => expect((screen.getByRole("button", { name: "Your prices" }) as HTMLButtonElement).disabled).toBe(true));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <WorkspacePricesButton />
+      </QueryClientProvider>,
+    );
+    // Wait until the role is actually known, so the absence below is the gate's doing, not a loading gap.
+    await waitFor(() => expect(client.getQueryState(["auth", "me"])?.status).toBe("success"));
+    expect(screen.queryByRole("button", { name: "Your prices" })).toBeNull();
   });
 
   it("opens the dialog on click", async () => {

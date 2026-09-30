@@ -8,7 +8,7 @@ import {
   EyeIcon,
   KeyRoundIcon,
   type LucideIcon,
-  PencilLineIcon,
+  PencilIcon,
   TypeIcon,
   VolumeXIcon,
   WrenchIcon,
@@ -67,18 +67,18 @@ export const CAPABILITY_BADGE_META: Record<CapabilityKind, CapabilityMeta> = {
   "key-set": { icon: KeyRoundIcon, label: "Key set", tone: "neutral" },
   "text-modality": { icon: TypeIcon, label: "Text modality", tone: "neutral" },
   "cloud-only": { icon: CloudIcon, label: "Cloud only", tone: "neutral" },
-  custom: { icon: PencilLineIcon, label: "Custom", tone: "neutral" },
+  custom: { icon: PencilIcon, label: "Custom", tone: "neutral" },
   reasoning: { icon: BrainIcon, label: "Reasoning", tone: "neutral" },
   "fast-voice": { icon: ZapIcon, label: "Fast for voice", tone: "success" },
 };
 
 const TONE_CLASSES = {
-  neutral: "bg-muted text-muted-foreground",
-  success: "bg-success-soft text-success-text",
-  warning: "bg-warning-soft text-warning-text",
+  neutral: "border-border bg-muted text-text-secondary",
+  success: "border-success-border bg-success-subtle text-success-text",
+  warning: "border-warning-border bg-warning-subtle text-warning-text",
 } as const;
 
-/** Provider/model capability (docs/UI_UX_SPEC.md §2.7, §4.4): icon + word, micro type. */
+/** Provider/model capability: icon + word on a tone (docs/ui/DESIGN-SYSTEM.md section 6.6). */
 export function CapabilityBadge({ kind, count, children, className }: CapabilityBadgeProps) {
   const meta = CAPABILITY_BADGE_META[kind];
   let text: React.ReactNode = children;
@@ -91,13 +91,13 @@ export function CapabilityBadge({ kind, count, children, className }: Capability
       data-slot="capability-badge"
       data-kind={kind}
       className={cn(
-        "inline-flex h-5 w-fit shrink-0 items-center gap-1 rounded-xs px-1.5 whitespace-nowrap",
-        "text-[0.6875rem] leading-[0.875rem] font-medium tracking-[0.02em]",
+        "inline-flex h-5 w-fit shrink-0 items-center gap-1 rounded-sm border px-1.5 whitespace-nowrap",
+        "text-caption leading-none font-medium",
         TONE_CLASSES[meta.tone],
         className,
       )}
     >
-      <Icon as={meta.icon} size="sm" className="size-3" />
+      <Icon as={meta.icon} size="xs" />
       {text}
     </span>
   );

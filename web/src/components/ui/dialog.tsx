@@ -1,8 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { cn } from "@/lib/utils"
 import { Dialog as DialogPrimitive } from "radix-ui"
+
+import { cn } from "@/lib/utils"
 
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
@@ -39,7 +40,7 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 isolate z-50 bg-[color-mix(in_oklch,var(--shadow-color)_24%,transparent)] duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 isolate z-50 bg-overlay duration-(--duration-slow) data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className
       )}
       {...props}
@@ -48,16 +49,29 @@ function DialogOverlay({
 }
 
 /**
- * Widths for the scrolling "panel" layout (`size`). Panels replace the side
- * sheets the console used to have — side drawers are not allowed (user UI
- * rule, docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §5): forms use `md`, rich content
- * (test chat, version history, deliveries) `lg`/`xl`.
+ * Dialog (docs/ui/DESIGN-SYSTEM.md section 6.4): an `--overlay` backdrop and
+ * a popup `min(100vw − 32px, 560px)` wide (`lg` 760, `xl` 980; `sm` 440 for
+ * short confirmations), at most `min(88dvh, 860px)` tall with internal
+ * scroll, 24 px padding, 14 px radius and the modal shadow. It rises 8 px
+ * and scales from .98 over 220 ms. A 30 px close `X` sits 16 px from the top
+ * right. On phones it is `100vw − 16px` wide with 20 px padding.
+ *
+ * The footer is sticky and bleeds to the dialog's edges on a `--muted` fill
+ * with a top hairline, so the actions stay visible while the body scrolls.
+ * Put the one primary action last, Cancel to its left.
+ *
+ * Destructive confirmations pass `role="alertdialog"` (see
+ * `console/shared/confirm-dialog.tsx`). Focus is trapped while open and
+ * returns to the opener on close.
+ *
+ * Panels replace the side sheets the console used to have: side drawers are
+ * not allowed (docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md section 5, decision D7).
  */
 const DIALOG_PANEL_WIDTH = {
-  sm: "sm:max-w-md",
-  md: "sm:max-w-lg",
-  lg: "sm:max-w-3xl",
-  xl: "sm:max-w-5xl",
+  sm: "sm:w-[min(calc(100vw-32px),440px)]",
+  md: "sm:w-[min(calc(100vw-32px),560px)]",
+  lg: "sm:w-[min(calc(100vw-32px),760px)]",
+  xl: "sm:w-[min(calc(100vw-32px),980px)]",
 } as const
 
 type DialogSize = keyof typeof DIALOG_PANEL_WIDTH
@@ -112,14 +126,14 @@ function DialogContent({
         data-slot="dialog-content"
         data-layout={panel ? "panel" : undefined}
         className={cn(
-          "group/dialog fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "group/dialog fixed top-1/2 left-1/2 z-50 w-[calc(100vw-16px)] max-h-[min(88dvh,860px)] -translate-x-1/2 -translate-y-1/2 rounded-dialog border border-border bg-popover text-body text-foreground shadow-modal duration-(--duration-slow) ease-entrance outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-98 data-open:slide-in-from-bottom-2 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-98",
           // Compact layout guards: one `minmax(0,1fr)` column so a long `<pre>`,
           // URL or code line can't widen the grid past the box (grid items
-          // default to `min-width: auto`), and a viewport-capped height that
-          // scrolls instead of pushing the header/footer off a short screen.
-          !panel && "grid-cols-[minmax(0,1fr)] max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain",
-          panel &&
-            "flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 max-sm:top-0 max-sm:left-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:ring-0",
+          // default to `min-width: auto`), and a capped height that scrolls
+          // instead of pushing the header or footer off a short screen.
+          !panel &&
+            "grid grid-cols-[minmax(0,1fr)] gap-4 overflow-y-auto overscroll-contain p-5 sm:w-[min(calc(100vw-32px),560px)] sm:p-6",
+          panel && "flex flex-col gap-0 overflow-hidden p-0",
           panel && DIALOG_PANEL_WIDTH[size],
           className
         )}
@@ -138,13 +152,8 @@ function DialogContent({
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close data-slot="dialog-close" asChild>
-            <Button
-              variant="ghost"
-              className={cn("absolute top-2 right-2", panel && "top-3.5 right-3.5")}
-              size="icon-sm"
-            >
-              <XIcon
-              />
+            <Button variant="ghost" className="absolute top-4 right-4 size-[30px] rounded-sm" size="icon-sm">
+              <XIcon />
               <span className="sr-only">Close</span>
             </Button>
           </DialogPrimitive.Close>
@@ -159,7 +168,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="dialog-header"
       className={cn(
-        "flex flex-col gap-2 group-data-[layout=panel]/dialog:shrink-0 group-data-[layout=panel]/dialog:gap-1 group-data-[layout=panel]/dialog:border-b group-data-[layout=panel]/dialog:border-border group-data-[layout=panel]/dialog:px-5 group-data-[layout=panel]/dialog:py-4 group-data-[layout=panel]/dialog:pr-14",
+        "flex flex-col gap-1 pr-8 group-data-[layout=panel]/dialog:shrink-0 group-data-[layout=panel]/dialog:border-b group-data-[layout=panel]/dialog:border-border group-data-[layout=panel]/dialog:px-5 group-data-[layout=panel]/dialog:py-4 group-data-[layout=panel]/dialog:pr-14 sm:group-data-[layout=panel]/dialog:px-6 sm:group-data-[layout=panel]/dialog:pt-5",
         className
       )}
       {...props}
@@ -179,7 +188,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end group-data-[layout=panel]/dialog:mx-0 group-data-[layout=panel]/dialog:mb-0 group-data-[layout=panel]/dialog:shrink-0 group-data-[layout=panel]/dialog:px-5 group-data-[layout=panel]/dialog:py-3.5 max-sm:group-data-[layout=panel]/dialog:rounded-none max-sm:group-data-[layout=panel]/dialog:pb-[max(0.875rem,env(safe-area-inset-bottom))]",
+        "sticky bottom-0 z-10 -mx-5 -mb-5 mt-2 flex flex-col-reverse gap-2 rounded-b-dialog border-t border-border bg-muted px-5 py-3 sm:-mx-6 sm:-mb-6 sm:flex-row sm:flex-wrap sm:justify-end sm:px-6 group-data-[layout=panel]/dialog:static group-data-[layout=panel]/dialog:mx-0 group-data-[layout=panel]/dialog:mt-0 group-data-[layout=panel]/dialog:mb-0 group-data-[layout=panel]/dialog:shrink-0 group-data-[layout=panel]/dialog:pb-[max(0.75rem,env(safe-area-inset-bottom))]",
         className
       )}
       {...props}
@@ -187,7 +196,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">Close</Button>
+          <Button variant="secondary">Close</Button>
         </DialogPrimitive.Close>
       )}
     </div>
@@ -199,7 +208,7 @@ function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-body"
-      className={cn("relative flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-5 py-5", className)}
+      className={cn("relative flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6", className)}
       {...props}
     />
   )
@@ -213,7 +222,7 @@ function DialogTitle({
     <DialogPrimitive.Title
       data-slot="dialog-title"
       className={cn(
-        "font-heading text-base leading-none font-medium group-data-[layout=panel]/dialog:text-[1.0625rem] group-data-[layout=panel]/dialog:leading-6 group-data-[layout=panel]/dialog:font-semibold group-data-[layout=panel]/dialog:tracking-[-0.01em]",
+        "font-heading text-dialog font-semibold tracking-[-0.012em] text-foreground",
         className
       )}
       {...props}
@@ -229,7 +238,7 @@ function DialogDescription({
     <DialogPrimitive.Description
       data-slot="dialog-description"
       className={cn(
-        "text-sm text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+        "text-control text-text-secondary *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
         className
       )}
       {...props}

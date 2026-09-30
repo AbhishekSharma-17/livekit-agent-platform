@@ -303,7 +303,7 @@ describe("AgentKeysTable", () => {
     expect(within(table).getByText("Never")).toBeTruthy(); // last_used_at is null
 
     fireEvent.click(within(table).getByRole("button", { name: /revoke/i }));
-    const dialog = await screen.findByRole("dialog", { name: /revoke "my claude code key"\?/i });
+    const dialog = await screen.findByRole("alertdialog", { name: /revoke "my claude code key"\?/i });
     fireEvent.click(within(dialog).getByRole("button", { name: /^revoke$/i }));
 
     await waitFor(() => expect(stub.deleteCalls).toEqual(["key-1"]));

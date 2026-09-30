@@ -117,7 +117,7 @@ describe("ApiKeysTab", () => {
 
     // The table row and the phone card both carry the action.
     fireEvent.click(screen.getAllByRole("button", { name: "Revoke" })[0]);
-    const dialog = await screen.findByRole("dialog", { name: 'Revoke "CI key"?' });
+    const dialog = await screen.findByRole("alertdialog", { name: 'Revoke "CI key"?' });
     expect(deletes()).toHaveLength(0);
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Revoke key" }));

@@ -95,7 +95,7 @@ describe("DatasetList", () => {
     const table = await screen.findByRole("table", { name: "Lookup tables" });
 
     fireEvent.click(within(table).getByRole("button", { name: "Delete Policy directory" }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Confirm" }));
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Used by tool 'lookup_policy'/)));

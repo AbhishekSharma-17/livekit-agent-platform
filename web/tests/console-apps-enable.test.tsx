@@ -291,7 +291,7 @@ describe("AppsTab — the enabled header", () => {
     });
     renderTab();
     await clickWhenEnabled(await screen.findByRole("button", { name: "Disable" }));
-    const dialog = await screen.findByRole("dialog", { name: "Turn off Apps?" });
+    const dialog = await screen.findByRole("alertdialog", { name: "Turn off Apps?" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Turn off" }));
 
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/tool-providers/composio/disable"))).toBe(true));
@@ -303,7 +303,7 @@ describe("AppsTab — the enabled header", () => {
     expect(await screen.findByText("Apps are turned off")).toBeTruthy();
     await clickWhenEnabled(screen.getByRole("button", { name: "Turn on" }));
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/tool-providers/composio/enable"))).toBe(true));
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
   it("links to Console -> Keys", async () => {

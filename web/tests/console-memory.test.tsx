@@ -331,7 +331,7 @@ describe("MemoryTab", () => {
     await waitFor(() => expect(button.disabled).toBe(false));
     fireEvent.click(button);
 
-    const dialog = await screen.findByRole("dialog", { name: "Forget this caller?" });
+    const dialog = await screen.findByRole("alertdialog", { name: "Forget this caller?" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Forget caller" }));
 
     await waitFor(() =>

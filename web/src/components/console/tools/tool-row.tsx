@@ -6,7 +6,7 @@ import { PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { StatusPill } from "@/components/shared/status-chip";
+import { LifecycleBadge, StatusPill } from "@/components/shared/status-chip";
 import { Tag } from "@/components/shared/tag";
 import { useDeleteTool } from "@/components/console/lib/api-hooks";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
@@ -98,7 +98,7 @@ export function ToolRow({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="min-w-0 truncate font-mono text-body">{tool.name}</span>
-          {!tool.enabled ? <StatusPill tone="neutral">Disabled</StatusPill> : null}
+          {!tool.enabled ? <LifecycleBadge state="disabled" /> : null}
           {tool.agent_id === null ? <Tag>Shared</Tag> : null}
           {tool.definition.kind === "mcp" ? <McpAuthTag auth={tool.definition.auth} /> : null}
         </div>

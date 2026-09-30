@@ -10,7 +10,7 @@ import { SkeletonRows } from "@/components/shared/loading-state";
 import { ReadOnlyNote } from "@/components/shared/read-only-note";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
-import { StatusPill } from "@/components/shared/status-chip";
+import { LifecycleBadge } from "@/components/shared/status-chip";
 import { Tag } from "@/components/shared/tag";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { Button } from "@/components/ui/button";
@@ -227,8 +227,7 @@ export function ToolsList() {
       <span className="text-text-secondary">{kindLabel(tool)}</span>
     );
 
-  const statusPill = (tool: ToolOut) =>
-    tool.enabled ? <StatusPill tone="success">Enabled</StatusPill> : <StatusPill tone="neutral">Disabled</StatusPill>;
+  const statusPill = (tool: ToolOut) => <LifecycleBadge state={tool.enabled ? "enabled" : "disabled"} />;
 
   const columns: ResponsiveTableColumn<ToolOut>[] = [
     { id: "name", header: "Name", cell: nameBlock },

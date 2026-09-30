@@ -5,12 +5,17 @@
  *
  * | Tone    | States |
  * |---------|--------|
- * | success | done, ready, approved, sent, delivered, connected, published |
- * | warning | waiting, draft, needs review, pending, needs reauth |
- * | info    | scheduled, in progress, processing, indexing, starting |
+ * | success | done, ready, approved, sent, delivered, connected, published, enabled |
+ * | warning | **waiting on someone**: waiting, draft, needs review, pending, queued, needs reauth |
+ * | info    | **working on it**: scheduled, in progress, processing, importing, indexing, running, starting |
  * | danger  | failed, needs attention, dead, error, expired |
  * | live    | live, active call (brand tone with a pulsing dot) |
- * | neutral | stopped, cancelled, ended, archived, skipped, idle |
+ * | neutral | stopped, cancelled, ended, archived, skipped, idle, disabled |
+ *
+ * "Waiting" (warning) and "working on it" (info, `WORKING_STATES`) are
+ * different states: a queued job waits, an import in progress works. Screens
+ * pass the state that is true (`importing`, not `pending` plus a label) and,
+ * for a working state, an optional percentage (`LifecycleBadge progress`).
  *
  * Plain data, importable from both surfaces.
  */
@@ -36,6 +41,7 @@ export const LIFECYCLE: Record<string, LifecycleStatus> = {
   stored: { tone: "success", label: "Saved" },
   recalled: { tone: "success", label: "Recalled" },
   found: { tone: "success", label: "Found" },
+  enabled: { tone: "success", label: "Enabled" },
   // warning
   waiting: { tone: "warning", label: "Waiting" },
   draft: { tone: "warning", label: "Draft" },
@@ -52,6 +58,7 @@ export const LIFECYCLE: Record<string, LifecycleStatus> = {
   scheduled: { tone: "info", label: "Scheduled" },
   in_progress: { tone: "info", label: "In progress" },
   processing: { tone: "info", label: "Processing" },
+  importing: { tone: "info", label: "Importing" },
   indexing: { tone: "info", label: "Indexing" },
   running: { tone: "info", label: "Running" },
   starting: { tone: "info", label: "Starting" },
@@ -81,11 +88,32 @@ export const LIFECYCLE: Record<string, LifecycleStatus> = {
   idle: { tone: "neutral", label: "Idle" },
   none: { tone: "neutral", label: "Not set up" },
   not_connected: { tone: "neutral", label: "Not connected" },
-  disabled: { tone: "neutral", label: "Off" },
+  disabled: { tone: "neutral", label: "Disabled" },
   gone: { tone: "neutral", label: "Gone" },
   empty: { tone: "neutral", label: "Empty" },
   deferred: { tone: "neutral", label: "Later" },
 };
+
+/** States where something is actively in progress: a progress figure may follow the label ("Importing 40%"). */
+export const WORKING_STATES: ReadonlySet<string> = new Set([
+  "in_progress",
+  "processing",
+  "importing",
+  "indexing",
+  "running",
+  "starting",
+  "created",
+  "connecting",
+]);
+
+function stateKey(state: string): string {
+  return state.trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+/** Whether `state` is a "working on it" state (see `WORKING_STATES`). */
+export function isWorkingState(state: string | null | undefined): boolean {
+  return Boolean(state) && WORKING_STATES.has(stateKey(state as string));
+}
 
 /** "needs_client_registration" -> "Needs client registration". */
 export function humanizeStatus(value: string): string {
@@ -96,6 +124,6 @@ export function humanizeStatus(value: string): string {
 /** Tone and human label for any status string; unknown ones read as neutral words. */
 export function lifecycleStatus(state: string | null | undefined): LifecycleStatus {
   if (!state) return { tone: "neutral", label: "Unknown" };
-  const key = state.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const key = stateKey(state);
   return LIFECYCLE[key] ?? { tone: "neutral", label: humanizeStatus(state) };
 }

@@ -363,7 +363,7 @@ function DocumentStatus({ status, progress }: { status: KbDocumentOut["status"];
     const pct = typeof progress === "number" ? Math.round(Math.max(0, Math.min(1, progress)) * 100) : null;
     return (
       <div className="flex items-center gap-2">
-        <LifecycleBadge state="indexing" label={`Indexing${pct !== null ? ` ${pct}%` : "…"}`} />
+        <LifecycleBadge state="indexing" progress={pct} />
         {pct !== null ? <Progress value={pct} className="w-16" aria-hidden="true" /> : null}
       </div>
     );

@@ -8,7 +8,7 @@ import { EmptyState, NoMatches } from "@/components/shared/empty-state";
 import { LoadingRow } from "@/components/shared/loading-state";
 import { ProgressSteps, StepList } from "@/components/shared/progress-steps";
 import { LifecycleBadge, StatusPill } from "@/components/shared/status-chip";
-import { LIFECYCLE, humanizeStatus, lifecycleStatus } from "@/components/shared/status-map";
+import { LIFECYCLE, humanizeStatus, isWorkingState, lifecycleStatus } from "@/components/shared/status-map";
 import { Tag, TagList } from "@/components/shared/tag";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -128,6 +128,31 @@ describe("Status pill, lifecycle map, badge and tag (spec 6.6)", () => {
     expect(pill?.getAttribute("data-tone")).toBe("info");
     expect(pill?.textContent).toBe("Indexing");
     expect(pill?.querySelector('[data-slot="status-dot"]')).toBeTruthy();
+  });
+
+  it("tells waiting apart from working on it, and has an enabled state", () => {
+    expect(lifecycleStatus("pending")).toEqual({ tone: "warning", label: "Waiting" });
+    expect(lifecycleStatus("importing")).toEqual({ tone: "info", label: "Importing" });
+    expect(lifecycleStatus("enabled")).toEqual({ tone: "success", label: "Enabled" });
+    expect(lifecycleStatus("disabled")).toEqual({ tone: "neutral", label: "Disabled" });
+    expect(isWorkingState("importing")).toBe(true);
+    expect(isWorkingState("Indexing")).toBe(true);
+    expect(isWorkingState("pending")).toBe(false);
+    expect(isWorkingState("ready")).toBe(false);
+  });
+
+  it("lifecycle badge adds progress only to a working state, and only when asked", () => {
+    const { container } = render(
+      <>
+        <LifecycleBadge state="importing" progress={40.4} />
+        <LifecycleBadge state="indexing" progress={null} />
+        <LifecycleBadge state="running" />
+        <LifecycleBadge state="ready" progress={50} />
+      </>,
+    );
+    const pills = Array.from(container.querySelectorAll('[data-slot="status-chip"]'));
+    expect(pills.map((pill) => pill.textContent)).toEqual(["Importing 40%", "Indexing…", "Running", "Ready"]);
+    expect(pills.map((pill) => pill.getAttribute("data-tone"))).toEqual(["info", "info", "info", "success"]);
   });
 
   it("status pill is 22 px by default", () => {

@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-import { lifecycleStatus, type StatusTone } from "./status-map";
+import { isWorkingState, lifecycleStatus, type StatusTone } from "./status-map";
 
 export type { StatusTone } from "./status-map";
 
@@ -64,6 +64,12 @@ export function StatusChip(props: StatusChipProps) {
   return <StatusPill {...props} />;
 }
 
+/** "Importing 40%" for a percentage, "Importing…" when the amount isn't known yet. */
+export function workingLabel(label: string, progress: number | null): string {
+  if (progress === null || !Number.isFinite(progress)) return `${label}…`;
+  return `${label} ${Math.round(Math.max(0, Math.min(100, progress)))}%`;
+}
+
 /**
  * A status pill straight from an api state ("indexing", "needs_reauth"):
  * the tone and human label come from the one shared lifecycle map.
@@ -71,19 +77,26 @@ export function StatusChip(props: StatusChipProps) {
 export function LifecycleBadge({
   state,
   label,
+  progress,
   size,
   className,
 }: {
   state: string | null | undefined;
   /** Override the mapped label (the tone still comes from the map). */
   label?: React.ReactNode;
+  /**
+   * For a working state ("importing", "indexing"): a 0–100 percentage, or
+   * `null` while it isn't known ("Importing…"). Omit it for a plain label.
+   */
+  progress?: number | null;
   size?: "sm" | "md";
   className?: string;
 }) {
   const status = lifecycleStatus(state);
+  const text = label ?? (isWorkingState(state) && progress !== undefined ? workingLabel(status.label, progress) : status.label);
   return (
     <StatusPill tone={status.tone} size={size} className={className}>
-      {label ?? status.label}
+      {text}
     </StatusPill>
   );
 }

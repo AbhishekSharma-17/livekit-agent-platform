@@ -27,8 +27,8 @@ export const IMPORT_FAILED_FALLBACK = "The import failed. Check the file and upl
 /** "Importing 40%" / "Ready" / "Failed", through the shared lifecycle map. */
 export function DatasetStatus({ dataset, size }: { dataset: DatasetOut; size?: "sm" | "md" }) {
   if (dataset.status === "pending") {
-    const pct = typeof dataset.progress === "number" ? Math.round(Math.max(0, Math.min(1, dataset.progress)) * 100) : null;
-    return <LifecycleBadge state="processing" label={`Importing${pct !== null ? ` ${pct}%` : "…"}`} size={size} />;
+    const pct = typeof dataset.progress === "number" ? Math.max(0, Math.min(1, dataset.progress)) * 100 : null;
+    return <LifecycleBadge state="importing" progress={pct} size={size} />;
   }
   return <LifecycleBadge state={dataset.status === "failed" ? "failed" : "ready"} size={size} />;
 }

@@ -25,8 +25,7 @@ import { Field } from "@/components/shared/field";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { Section, SectionRow } from "@/components/shared/section";
-import { LifecycleBadge, StatusPill } from "@/components/shared/status-chip";
-import { lifecycleStatus } from "@/components/shared/status-map";
+import { LifecycleBadge } from "@/components/shared/status-chip";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
 import { api } from "@/lib/api";
 import type {
@@ -54,16 +53,7 @@ function eventsLabel(endpoint: WebhookEndpointOut): string {
 }
 
 function EndpointStatus({ endpoint }: { endpoint: WebhookEndpointOut }) {
-  // Tones from the shared lifecycle map; the labels are this screen's words.
-  return endpoint.enabled ? (
-    <StatusPill tone={lifecycleStatus("ready").tone} size="sm">
-      Enabled
-    </StatusPill>
-  ) : (
-    <StatusPill tone={lifecycleStatus("disabled").tone} size="sm">
-      Disabled
-    </StatusPill>
-  );
+  return <LifecycleBadge state={endpoint.enabled ? "enabled" : "disabled"} size="sm" />;
 }
 
 /**

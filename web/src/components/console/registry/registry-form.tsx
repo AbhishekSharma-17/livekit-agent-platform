@@ -290,7 +290,7 @@ function RegistryField({
           placeholder={field.placeholder ?? undefined}
           readOnly
           aria-readonly
-          className="font-mono text-[0.8125rem]"
+          className="font-mono text-label"
         />
       </Field>
     );
@@ -482,7 +482,7 @@ function RegistryFieldControl({
           id={fieldId}
           type="text"
           value={stringValue}
-          className={field.type === "catalog" ? "font-mono text-[0.8125rem]" : undefined}
+          className={field.type === "catalog" ? "font-mono text-label" : undefined}
           placeholder={
             field.placeholder ?? (field.default !== null && field.default !== undefined ? String(field.default) : undefined)
           }
@@ -584,7 +584,7 @@ function SecretInput({
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className="pr-10 font-mono text-[0.8125rem]"
+        className="pr-10 font-mono text-label"
         {...aria}
       />
       <Button
@@ -622,7 +622,7 @@ function JsonTextarea({
     <div className="flex flex-col gap-1.5">
       <textarea
         id={id}
-        className="min-h-24 w-full rounded-sm border border-input bg-transparent px-2.5 py-2 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="min-h-24 w-full rounded-sm border border-input bg-transparent px-2.5 py-2 font-mono text-caption outline-none focus-visible:border-ring focus-visible:ring-2"
         value={value}
         placeholder={placeholder ?? undefined}
         spellCheck={false}
@@ -635,7 +635,7 @@ function JsonTextarea({
       <div className="flex items-center gap-2">
         <Button
           type="button"
-          variant="outline"
+         
           size="sm"
           onClick={() => {
             if (value.trim() === "") return;
@@ -650,7 +650,7 @@ function JsonTextarea({
           Format
         </Button>
         {formatError ? (
-          <span role="status" className="text-[0.8125rem] text-danger-text">
+          <span role="status" className="text-label text-destructive-text">
             {formatError}
           </span>
         ) : null}
@@ -757,19 +757,19 @@ function CatalogPickerField({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder="Paste the id from the vendor's dashboard"
-          className="font-mono text-[0.8125rem]"
+          className="font-mono text-label"
           {...aria}
         />
         {items.length > 0 ? (
           <button
             type="button"
             onClick={() => setManualOverride(false)}
-            className="self-start rounded-xs text-xs font-medium text-muted-foreground underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="self-start rounded-sm text-caption font-medium text-text-secondary underline underline-offset-3 hover:text-foreground"
           >
             Choose from the catalog instead
           </button>
         ) : null}
-        {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
+        {note ? <p className="text-caption text-text-secondary">{note}</p> : null}
       </div>
     );
   }
@@ -792,13 +792,13 @@ function CatalogPickerField({
           onChange={(event) => setSearch(event.target.value)}
           placeholder={`Search ${items.length} ${kind}`}
           aria-label={`Search the ${kind} list`}
-          className="h-8 text-[0.8125rem]"
+          className="h-8 text-label"
         />
       ) : null}
       <div className="flex items-center gap-2">
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element -- vendor-hosted thumbnail, not a local asset
-          <img src={preview} alt="" className="size-8 shrink-0 rounded-full border border-border object-cover" />
+          <img src={preview} alt="" className="size-8 shrink-0 rounded-pill border border-border object-cover" />
         ) : null}
         <Select
           value={knownId && value !== "" ? value : undefined}
@@ -814,18 +814,18 @@ function CatalogPickerField({
               </SelectItem>
             ))}
             {searchable && needle && shown.length === 0 ? (
-              <p className="px-2 py-1.5 text-xs text-muted-foreground">Nothing matches the search.</p>
+              <p className="px-2 py-1.5 text-caption text-text-secondary">Nothing matches the search.</p>
             ) : null}
             <SelectItem value={MANUAL_ENTRY}>Paste id manually…</SelectItem>
           </SelectContent>
         </Select>
       </div>
       {searchable && needle ? (
-        <p className="text-xs text-muted-foreground" aria-live="polite">
+        <p className="text-caption text-text-secondary" aria-live="polite">
           {shown.length} of {items.length} match.
         </p>
       ) : null}
-      {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
+      {note ? <p className="text-caption text-text-secondary">{note}</p> : null}
     </div>
   );
 }

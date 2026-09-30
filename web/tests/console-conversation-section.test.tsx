@@ -277,6 +277,31 @@ describe("ConversationSection", () => {
     expect(screen.queryByText(/turn_handling/i)).toBeNull();
   });
 
+  it("offers the Fast preset with a plain description and posts only its name (V6-34)", async () => {
+    stubFetch();
+    const { container } = render(<Harness agent={agent()} />);
+
+    expect(screen.getByText("Fast")).toBeTruthy();
+    expect(screen.getByText(/Suggested for voice calls/)).toBeTruthy();
+    fireEvent.click(container.querySelector("#preset-fast")!);
+
+    await waitFor(() => expect(latest?.config.pipeline.conversation_preset).toBe("fast"));
+    expect(screen.getByText(/Fast does not change how long voice activity detection waits/)).toBeTruthy();
+    // The preset is resolved at session start, never written out into turn_handling.
+    expect(latest?.config.pipeline.turn_handling?.endpointing?.min_delay).toBeUndefined();
+    expect(latest?.config.pipeline.turn_handling?.preemptive_generation?.enabled).toBeUndefined();
+  });
+
+  it("lets speech-to-text decide the end of the turn (V6-34)", async () => {
+    stubFetch();
+    const { container } = render(<Harness agent={agent()} />);
+
+    expect(screen.getByText("Let speech-to-text decide")).toBeTruthy();
+    fireEvent.click(container.querySelector("#turn-detector-stt")!);
+
+    await waitFor(() => expect(latest?.config.pipeline.turn_detector?.mode).toBe("stt"));
+  });
+
   it("posts config.tools.execution_default (moved from the Instructions tab, V4-13)", async () => {
     stubFetch();
     render(<Harness agent={agent()} />);

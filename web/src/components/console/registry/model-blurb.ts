@@ -35,6 +35,10 @@ export function modelBlurb({
     if (streams === false) return "Not streaming: waits for the whole sentence";
     if (streams === true) parts.push("Streaming");
     if (provider.kind === "stt" && caps?.end_of_turn === true) parts.push("decides end of turn itself");
+    else if (provider.kind === "stt" && models.find((model) => model.id === modelId)?.end_of_turn === true) {
+      // V6-34: a model that can end turns once the agent opts in (the Fast preset).
+      parts.push("can decide end of turn itself (Fast preset)");
+    }
     return parts.length > 0 ? parts.join(" · ") : null;
   }
 

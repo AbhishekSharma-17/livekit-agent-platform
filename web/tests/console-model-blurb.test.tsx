@@ -138,7 +138,13 @@ describe("model picker one-liners", () => {
   it("says nothing for a text-only model with nothing else to say", async () => {
     render(<Picker providerId="livekit-inference-llm" />);
     openPicker();
-    expect(blurbOf(await rowWhenListed("Gemma 4 31B Instruct"))).toBeUndefined();
+    expect(blurbOf(await rowWhenListed("Grok 4.7"))).toBeUndefined();
+  });
+
+  it("marks Gemma 4 31B, which LiveKit serves tuned for voice, fast for voice (V6-34)", async () => {
+    render(<Picker providerId="livekit-inference-llm" />);
+    openPicker();
+    expect(blurbOf(await rowWhenListed("Gemma 4 31B Instruct"))).toBe("Fast for voice");
   });
 });
 

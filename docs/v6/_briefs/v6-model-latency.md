@@ -31,3 +31,13 @@ Scripted caller with real-time audio pacing (the earlier 1 s send buffer removed
 | M3: new turns, GPT-OSS 120B effort low (OpenRouter → Groq/Cerebras) | **1.42, 2.91 s** | **2.28, 3.41 s** | **0.29–0.61 s** | 0.30–0.32 s |
 
 Findings: the new turn settings cut about 1 s on Cloud; the LLM hop is the remaining lever — GPT-OSS on Groq/Cerebras starts in ~0.3 s vs ~1–1.8 s for GPT-6 Luna and ~1.1 s for Haiku (one 4 s outlier). GPT-OSS answered more tersely (dropped "can you hear me") and has a lower published tool-call pass rate (86%, Pipecat benchmark), so prefer it for simple conversational agents and keep Luna/Haiku for tool-heavy ones. The DGX path is noisy and slower because the worker runs on the Mac across a relayed Tailscale path; `docs/v6/_briefs/dgx-worker-deploy.md` moves it onto the DGX.
+
+## 2026-09-30 — after V6-34 (`fast` preset + OpenRouter `sticky_routing`)
+
+All demo agents except `demo-knowledge-assistant` now use `conversation_preset: "fast"` (Flux → `min_delay` 0.1 + preemptive generation and TTS) and `sticky_routing: true`; the knowledge assistant keeps its custom turn handling (auto-inject) and gets `sticky_routing`. Live check for ask #327: `sticky_routing` with `require_parameters: true` caused no OpenRouter 404 on `openai/gpt-oss-120b` (Groq/Cerebras) or `openai/gpt-6-luna` (0 404s in the worker log).
+
+| Agent | Where | LLM | Reply start |
+|---|---|---|---|
+| `demo-phone-agent` | Cloud | GPT-OSS 120B @ Groq/Cerebras | 1.98, 2.50 s |
+| `demo-claims-intake` | Cloud | GPT-6 Luna | 2.23 s (was 3.12 s on 2026-09-29) |
+| `demo-order-checkout` | DGX (worker on the Mac) | GPT-6 Luna | 2.21 s (was 2.51 s) |

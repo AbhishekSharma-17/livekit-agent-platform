@@ -40,7 +40,7 @@ import {
   MANAGED_SEARCH_CONNECTION_KINDS,
   RERANKER_CONNECTION_KINDS,
 } from "./knowledge-connection-dialog";
-import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "./list-search";
+import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "@/components/shared/list-search";
 import { RowsSkeleton } from "./settings-card";
 import type { KnowledgeConnectionOut, KnowledgeConnectionTestOut, ProviderSpec } from "@/contracts/lkap-contracts";
 

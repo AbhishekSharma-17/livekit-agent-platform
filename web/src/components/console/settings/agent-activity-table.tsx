@@ -12,7 +12,7 @@ import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared
 import { ErrorBanner } from "@/components/console/shared/error-banner";
 
 import type { AuditOut } from "./api-types";
-import { useRememberedChoice } from "./list-search";
+import { useRememberedChoice } from "@/components/shared/list-search";
 import { RowsSkeleton } from "./settings-card";
 import { isAgentActivityRow, useActiveWorkspace, useAgentActivityPage, useAgentKeys } from "./use-settings-queries";
 

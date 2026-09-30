@@ -37,7 +37,7 @@ import type {
 } from "@/contracts/lkap-contracts";
 import { KNOWN_WEBHOOK_EVENTS, WEBHOOK_EVENT_LABEL, type WebhookEndpointCreated } from "./api-types";
 import { RequireWrite } from "@/components/shared/require-write";
-import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "./list-search";
+import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "@/components/shared/list-search";
 import { RowsSkeleton } from "./settings-card";
 
 function useWebhooks() {

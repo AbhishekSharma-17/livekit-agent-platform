@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Highlight, matchesQuery, normalizeText } from "@/components/console/settings/list-search";
+import { Highlight, matchesQuery, normalizeText } from "@/components/shared/list-search";
 import { TeamTab } from "@/components/console/settings/team-tab";
 
 /**

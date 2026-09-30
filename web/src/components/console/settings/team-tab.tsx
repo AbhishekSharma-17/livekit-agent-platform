@@ -32,7 +32,7 @@ import { readOnlyCopy } from "@/components/console/shared/permission";
 import { api } from "@/lib/api";
 import type { InviteOut, MemberOut, Role } from "./api-types";
 import { ROLE_LABEL } from "./api-types";
-import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "./list-search";
+import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "@/components/shared/list-search";
 import { RowsSkeleton } from "./settings-card";
 import { useActiveWorkspace, useInvalidateSettings, useMembers } from "./use-settings-queries";
 

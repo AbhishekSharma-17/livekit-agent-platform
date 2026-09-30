@@ -32,7 +32,7 @@ import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { api } from "@/lib/api";
 import type { ApiKeyCreated, ApiKeyOut, Scope } from "./api-types";
 import { SCOPE_LABEL, SCOPES } from "./api-types";
-import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "./list-search";
+import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "@/components/shared/list-search";
 import { RowsSkeleton } from "./settings-card";
 import { useActiveWorkspace, useApiKeys, useInvalidateSettings } from "./use-settings-queries";
 

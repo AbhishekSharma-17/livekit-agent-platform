@@ -13,7 +13,7 @@ import { IfCan } from "@/components/console/shared/permission";
 
 import { KeyStatus, RevokeKeyButton } from "./api-keys-tab";
 import type { ApiKeyOut } from "./api-types";
-import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "./list-search";
+import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "@/components/shared/list-search";
 import { RowsSkeleton } from "./settings-card";
 import { AGENT_KEY_CLIENTS, CALLS_WRITE_SCOPE } from "./snippets";
 import { useAgentKeys, useActiveWorkspace, useInvalidateSettings } from "./use-settings-queries";

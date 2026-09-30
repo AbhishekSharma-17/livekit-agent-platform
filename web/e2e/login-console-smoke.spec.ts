@@ -43,7 +43,8 @@ test.describe("login → console → test call → transcript", () => {
     await expect(page).toHaveURL(/\/login\?next=/);
 
     await page.getByLabel("Email").fill(EMAIL!);
-    await page.getByLabel("Password").fill(PASSWORD!);
+    // Exact: the show/hide toggle's "Show password" would also match a substring query.
+    await page.getByLabel("Password", { exact: true }).fill(PASSWORD!);
     await page.getByRole("button", { name: "Sign in" }).click();
 
     await expect(page).toHaveURL(/\/console\/agents$/);

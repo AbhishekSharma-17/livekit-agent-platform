@@ -15,8 +15,11 @@ import type { ConnectionCapabilities, ProviderRef, ProviderSpec } from "@/contra
  *
  *   1. a realtime-only agent: the model decides (there is no client-side turn detector);
  *   2. an explicit turn-detection part, if one is configured;
- *   3. else the transcriber, when its provider declares `capabilities.end_of_turn`
- *      (a cascaded agent only: a half-cascade agent has no transcriber);
+ *   3. else the transcriber, when its provider declares `capabilities.end_of_turn`,
+ *      or its model does (`ModelSpec.end_of_turn`, LiveKit Inference Flux) and the
+ *      agent opted in with the Fast preset or the turn detector set to
+ *      speech-to-text (V6-34, `transcriber_ends_turns`) — a cascaded agent only:
+ *      a half-cascade agent has no transcriber;
  *   4. else the LiveKit turn detector: hosted by LiveKit when the connection's
  *      `turn_detector_mode` is `hosted`, else inside the agent's worker.
  *
@@ -42,6 +45,7 @@ export interface PipelineLike {
   avatar?: PartRef | null;
   turn_detection?: PartRef | null;
   turn_detector?: { mode?: string | null } | null;
+  conversation_preset?: string | null;
 }
 
 /** What the summary needs to know about the agent's connection. */
@@ -121,10 +125,41 @@ function partName(
   return spec.label;
 }
 
-/** Whether the transcriber ends turns itself (mirrors `stt_decides_turns`: the provider's flag, never a model id). */
-export function sttEndsTurns(stt: PartRef | null | undefined, providers: readonly ProviderSpec[]): boolean {
+/**
+ * Whether the agent asked for a model's own end of turn (mirrors `stt_turns_opted_in`):
+ * the Fast preset, or the turn detector set to speech-to-text.
+ */
+export function sttTurnsOptedIn(pipeline: PipelineLike | null | undefined): boolean {
+  return pipeline?.conversation_preset === "fast" || pipeline?.turn_detector?.mode === "stt";
+}
+
+/**
+ * Whether the transcriber can end turns (mirrors `stt_end_of_turn`): `"entry"` when
+ * the provider always does (`capabilities.end_of_turn`), `"model"` when this model
+ * can once the agent opts in (`ModelSpec.end_of_turn`), else `null`.
+ */
+export function sttEndOfTurn(
+  stt: PartRef | null | undefined,
+  providers: readonly ProviderSpec[],
+): "entry" | "model" | null {
   const spec = specOf(stt, providers);
-  return spec?.kind === "stt" && spec.capabilities?.end_of_turn === true;
+  if (spec?.kind !== "stt") return null;
+  if (spec.capabilities?.end_of_turn === true) return "entry";
+  const id = stt?.model || spec.default_model;
+  if (!id) return null;
+  const bare = id.split(":", 1)[0];
+  const model = (spec.models ?? []).find((candidate) => candidate.id === id || candidate.id === bare);
+  return model?.end_of_turn === true ? "model" : null;
+}
+
+/** Whether the transcriber ends turns itself (mirrors `stt_decides_turns` / `transcriber_ends_turns`). */
+export function sttEndsTurns(
+  stt: PartRef | null | undefined,
+  providers: readonly ProviderSpec[],
+  optedIn = false,
+): boolean {
+  const ability = sttEndOfTurn(stt, providers);
+  return ability === "entry" || (ability === "model" && optedIn);
 }
 
 /**
@@ -169,7 +204,7 @@ export function whoEndsTurn({ pipeline, providers, connection }: PipelineSummary
       place: placeOfPart(explicit),
     };
   }
-  if (mode === "cascaded" && sttEndsTurns(pipeline.stt, providers)) {
+  if (mode === "cascaded" && sttEndsTurns(pipeline.stt, providers, sttTurnsOptedIn(pipeline))) {
     return { kind: "listener", name: partName(pipeline.stt, providers, { byModel: false }) ?? "The listener" };
   }
   return { kind: "livekit", place: livekitDetectorPlace(connection, pipeline.turn_detector) };

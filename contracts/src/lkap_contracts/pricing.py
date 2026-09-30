@@ -473,6 +473,8 @@ PRICES: list[Price] = [
     # STT: $/min ÷ 60 (LiveKit meters STT on seconds of connection time).
     _lk("livekit-inference-stt", "deepgram/nova-3", "audio_s_in", Decimal("0.0048") / _MIN),
     _lk("livekit-inference-stt", "deepgram/flux-general-en", "audio_s_in", Decimal("0.0065") / _MIN),
+    # V6-34: livekit.com/pricing/inference, 2026-09-30 ("Flux (Multilingual)", Build/Ship).
+    _lk("livekit-inference-stt", "deepgram/flux-general-multi", "audio_s_in", Decimal("0.0078") / _MIN),
     _lk("livekit-inference-stt", "assemblyai/universal-streaming", "audio_s_in", Decimal("0.0025") / _MIN),
     _lk("livekit-inference-stt", "cartesia/ink-whisper", "audio_s_in", Decimal("0.0030") / _MIN),
     _lk("livekit-inference-stt", "google/gemini-3.5-transcribe-live", "audio_s_in", Decimal("0.0095") / _MIN),
@@ -505,11 +507,20 @@ PRICES: list[Price] = [
     _lk("livekit-inference-llm", "openai/gpt-4o-mini", "tokens_in", Decimal("0.150") / _M),
     _lk("livekit-inference-llm", "openai/gpt-4o-mini", "cached_tokens_in", Decimal("0.075") / _M),
     _lk("livekit-inference-llm", "openai/gpt-4o-mini", "tokens_out", Decimal("0.600") / _M),
+    # V6-34: livekit.com/pricing/inference, 2026-09-30 (Build/Ship).
+    _lk("livekit-inference-llm", "openai/gpt-4.1-mini", "tokens_in", Decimal("0.400") / _M),
+    _lk("livekit-inference-llm", "openai/gpt-4.1-mini", "cached_tokens_in", Decimal("0.100") / _M),
+    _lk("livekit-inference-llm", "openai/gpt-4.1-mini", "tokens_out", Decimal("1.600") / _M),
+    _lk("livekit-inference-llm", "openai/gpt-4.1-nano", "tokens_in", Decimal("0.100") / _M),
+    _lk("livekit-inference-llm", "openai/gpt-4.1-nano", "cached_tokens_in", Decimal("0.030") / _M),
+    _lk("livekit-inference-llm", "openai/gpt-4.1-nano", "tokens_out", Decimal("0.400") / _M),
     # TTS: $/1M characters ÷ 1e6.
     _lk("livekit-inference-tts", "cartesia/sonic-3", "chars", Decimal("50.00") / _M),
     _lk("livekit-inference-tts", "deepgram/aura-2", "chars", Decimal("30.00") / _M),
     _lk("livekit-inference-tts", "rime/mistv3", "chars", Decimal("30.00") / _M),
     _lk("livekit-inference-tts", "inworld/inworld-tts-2", "chars", Decimal("25.00") / _M),
+    # V6-34: "Realtime TTS 2.0 Flash", Build/Ship, livekit.com/pricing/inference (2026-09-30).
+    _lk("livekit-inference-tts", "inworld/inworld-tts-2-flash", "chars", Decimal("15.00") / _M),
     # ---------------------------------------------------------------- known zeros
     _row(
         "fastembed-embedding",

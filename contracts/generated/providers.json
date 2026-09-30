@@ -129,6 +129,57 @@
           "recommended": null,
           "required": false,
           "type": "string"
+        },
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "How sure Flux must be that the caller finished (0.5-0.9). Higher waits longer. Deepgram Flux models only.",
+          "label": "End-of-turn confidence",
+          "name": "eot_threshold",
+          "nested_model": null,
+          "options": null,
+          "placeholder": "0.7",
+          "positional": false,
+          "recommended": null,
+          "required": false,
+          "type": "number"
+        },
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "Start preparing a reply before the turn is certainly over (0.3-0.9, at most the end-of-turn confidence). LiveKit's default is 0.5. Deepgram Flux models only.",
+          "label": "Early reply confidence",
+          "name": "eager_eot_threshold",
+          "nested_model": null,
+          "options": null,
+          "placeholder": "0.5",
+          "positional": false,
+          "recommended": null,
+          "required": false,
+          "type": "number"
+        },
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "End the turn after this much silence even if Flux is unsure. Deepgram Flux models only.",
+          "label": "End-of-turn timeout (ms)",
+          "name": "eot_timeout_ms",
+          "nested_model": null,
+          "options": null,
+          "placeholder": "5000",
+          "positional": false,
+          "recommended": null,
+          "required": false,
+          "type": "number"
         }
       ],
       "get_key_url": null,
@@ -140,6 +191,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "deepgram/nova-3",
           "label": "Deepgram Nova 3",
           "note": null,
@@ -149,6 +201,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": true,
           "id": "deepgram/flux-general-en",
           "label": "Deepgram Flux (general, en)",
           "note": null,
@@ -158,6 +211,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": true,
           "id": "deepgram/flux-general-multi",
           "label": "Deepgram Flux (multilingual)",
           "note": null,
@@ -167,6 +221,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "deepgram/nova-3-medical",
           "label": "Deepgram Nova 3 Medical",
           "note": null,
@@ -176,6 +231,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "assemblyai/universal-streaming",
           "label": "AssemblyAI Universal Streaming",
           "note": null,
@@ -185,6 +241,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "assemblyai/universal-3-6-pro",
           "label": "AssemblyAI Universal-3.6 Pro Streaming",
           "note": null,
@@ -194,6 +251,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "cartesia/ink-2",
           "label": "Cartesia Ink 2",
           "note": null,
@@ -203,6 +261,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "cartesia/ink-whisper",
           "label": "Cartesia Ink Whisper",
           "note": null,
@@ -212,6 +271,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "google/gemini-3.5-transcribe-live",
           "label": "Gemini 3.5 Transcribe Live",
           "note": null,
@@ -221,6 +281,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "speechmatics/linden-1",
           "label": "Speechmatics Linden-1",
           "note": null,
@@ -230,6 +291,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "xai/stt-2",
           "label": "xAI Speech to Text 2",
           "note": null,
@@ -341,6 +403,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "google/gemma-4-31b-it",
           "label": "Gemma 4 31B Instruct",
           "note": "text-only on LiveKit Inference: ignores image parts silently",
@@ -350,6 +413,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "google/gemini-3.5-flash",
           "label": "Gemini 3.5 Flash",
           "note": null,
@@ -359,6 +423,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "google/gemini-3.8-flash",
           "label": "Gemini 3.8 Flash",
           "note": null,
@@ -368,6 +433,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "google/gemini-3.1-flash-lite",
           "label": "Gemini 3.1 Flash Lite",
           "note": null,
@@ -377,6 +443,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/gpt-4.1",
           "label": "GPT-4.1",
           "note": null,
@@ -386,6 +453,27 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
+          "id": "openai/gpt-4.1-mini",
+          "label": "GPT-4.1 mini",
+          "note": null,
+          "reasoning": false,
+          "reasoning_efforts": [],
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "end_of_turn": false,
+          "id": "openai/gpt-4.1-nano",
+          "label": "GPT-4.1 nano",
+          "note": null,
+          "reasoning": false,
+          "reasoning_efforts": [],
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/gpt-4o-mini",
           "label": "GPT-4o mini",
           "note": null,
@@ -395,6 +483,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/gpt-5.5",
           "label": "GPT-5.5",
           "note": null,
@@ -410,6 +499,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/gpt-5.4-mini",
           "label": "GPT-5.4 mini",
           "note": null,
@@ -425,6 +515,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/gpt-5.6-luna",
           "label": "GPT-5.6 Luna",
           "note": null,
@@ -441,6 +532,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/gpt-oss-120b",
           "label": "GPT-OSS 120B",
           "note": null,
@@ -450,6 +542,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "xai/grok-4.7",
           "label": "Grok 4.7",
           "note": null,
@@ -459,6 +552,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "deepseek-ai/deepseek-v4.1-flash",
           "label": "DeepSeek V4.1 Flash",
           "note": null,
@@ -567,6 +661,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "inworld/inworld-tts-2",
           "label": "Inworld TTS 2",
           "note": null,
@@ -576,6 +671,17 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
+          "id": "inworld/inworld-tts-2-flash",
+          "label": "Inworld TTS 2 Flash",
+          "note": "fastest to start speaking; slightly lower quality than Inworld TTS 2",
+          "reasoning": null,
+          "reasoning_efforts": [],
+          "supports_video": false
+        },
+        {
+          "deprecated": false,
+          "end_of_turn": false,
           "id": "cartesia/sonic-3.6",
           "label": "Cartesia Sonic 3.6",
           "note": null,
@@ -585,6 +691,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "cartesia/sonic-3",
           "label": "Cartesia Sonic 3",
           "note": null,
@@ -594,6 +701,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "deepgram/aura-2",
           "label": "Deepgram Aura 2",
           "note": null,
@@ -603,6 +711,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "deepgram/flux-tts",
           "label": "Deepgram Flux TTS",
           "note": null,
@@ -612,6 +721,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "fishaudio/s2.1-pro",
           "label": "Fish Audio S2.1 Pro",
           "note": null,
@@ -621,6 +731,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gradium/default",
           "label": "Gradium TTS",
           "note": null,
@@ -630,6 +741,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "rime/coda",
           "label": "Rime Coda",
           "note": null,
@@ -639,6 +751,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "rime/mistv3",
           "label": "Rime Mist v3",
           "note": null,
@@ -648,6 +761,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "xai/tts-1",
           "label": "xAI Text to Speech",
           "note": null,
@@ -892,6 +1006,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gemini-3.8-live",
           "label": "Gemini 3.8 Live",
           "note": null,
@@ -901,6 +1016,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gemini-3.8-live-extended-thinking",
           "label": "Gemini 3.8 Live (extended thinking)",
           "note": null,
@@ -910,6 +1026,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gemini-3.1-flash-live-preview",
           "label": "Gemini 3.1 Flash Live (preview)",
           "note": null,
@@ -919,6 +1036,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gemini-2.5-flash-native-audio-preview-12-2025",
           "label": "Gemini 2.5 Flash native audio (preview)",
           "note": null,
@@ -928,6 +1046,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gemini-live-2.5-flash-native-audio",
           "label": "Gemini 2.5 Flash native audio (Vertex AI, GA)",
           "note": "Vertex AI only, not the Gemini API.",
@@ -1071,6 +1190,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gpt-realtime",
           "label": "GPT Realtime",
           "note": null,
@@ -1248,6 +1368,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "nova-3",
           "label": "Nova 3",
           "note": null,
@@ -1257,6 +1378,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "nova-2",
           "label": "Nova 2",
           "note": null,
@@ -1416,6 +1538,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gpt-4.1",
           "label": "GPT-4.1",
           "note": null,
@@ -1425,6 +1548,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gpt-4o",
           "label": "GPT-4o",
           "note": null,
@@ -1434,6 +1558,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gpt-4.1-mini",
           "label": "GPT-4.1 mini",
           "note": null,
@@ -1559,6 +1684,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gemini-2.5-flash",
           "label": "Gemini 2.5 Flash",
           "note": null,
@@ -1568,6 +1694,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gemini-3.5-flash",
           "label": "Gemini 3.5 Flash",
           "note": null,
@@ -1697,6 +1824,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "sonic-3.6",
           "label": "Sonic 3.6",
           "note": null,
@@ -1706,6 +1834,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "sonic-3",
           "label": "Sonic 3",
           "note": null,
@@ -1864,6 +1993,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "eleven_flash_v2_5",
           "label": "Eleven Flash v2.5",
           "note": null,
@@ -1873,6 +2003,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "eleven_turbo_v2_5",
           "label": "Eleven Turbo v2.5",
           "note": null,
@@ -1990,6 +2121,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gpt-4o-mini-tts",
           "label": "GPT-4o mini TTS",
           "note": null,
@@ -2438,6 +2570,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gemini-3.1-flash-image",
           "label": "Gemini 3.1 Flash Image",
           "note": null,
@@ -2555,6 +2688,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gpt-image-1",
           "label": "GPT Image 1",
           "note": null,
@@ -2641,6 +2775,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "BAAI/bge-small-en-v1.5",
           "label": "BGE small en v1.5",
           "note": null,
@@ -2722,6 +2857,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "text-embedding-3-small",
           "label": "text-embedding-3-small",
           "note": null,
@@ -2930,7 +3066,7 @@
           "condition": null,
           "default": null,
           "env_fallback": null,
-          "help": "OpenRouter provider preferences: `order`, `only`, `ignore`, `sort` (price/throughput/latency), `allow_fallbacks`, `require_parameters`, `data_collection`, `preferred_max_latency`…; `require_parameters` defaults to true so a request with tools never lands on an endpoint that cannot call them.",
+          "help": "OpenRouter provider preferences: `order`, `only`, `ignore`, `sort` (price/throughput/latency), `allow_fallbacks`, `require_parameters`, `data_collection`, `preferred_max_latency`…; `require_parameters` defaults to true so a request with tools never lands on an endpoint that cannot call them. By default OpenRouter favours cheaper hosts; for a live call on a model several hosts serve, `{\"sort\": \"latency\"}` tries the fastest host first, or `{\"order\": [\"groq\", \"cerebras\"]}` pins the hosts you want in order.",
           "label": "Provider preferences",
           "name": "provider",
           "nested_model": null,
@@ -2940,6 +3076,23 @@
           "recommended": null,
           "required": false,
           "type": "json"
+        },
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": false,
+          "env_fallback": null,
+          "help": "Sends the agent's id with each request so OpenRouter keeps routing it to the same host, whose cache of the conversation is already warm; later replies start sooner. Nothing about the caller is sent.",
+          "label": "Keep the same host during a call",
+          "name": "sticky_routing",
+          "nested_model": null,
+          "options": null,
+          "placeholder": null,
+          "positional": false,
+          "recommended": true,
+          "required": false,
+          "type": "boolean"
         },
         {
           "accept": null,
@@ -2985,6 +3138,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/gpt-4.1-mini",
           "label": "GPT-4.1 mini",
           "note": null,
@@ -2994,6 +3148,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/gpt-4.1",
           "label": "GPT-4.1",
           "note": null,
@@ -3003,6 +3158,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/gpt-4o-mini",
           "label": "GPT-4o mini",
           "note": null,
@@ -3012,6 +3168,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "google/gemini-3.5-flash",
           "label": "Gemini 3.5 Flash",
           "note": null,
@@ -3021,6 +3178,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "anthropic/claude-sonnet-4.6",
           "label": "Claude Sonnet 4.6",
           "note": null,
@@ -3208,6 +3366,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/gpt-4o-mini-transcribe",
           "label": "GPT-4o mini Transcribe",
           "note": null,
@@ -3217,6 +3376,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/whisper-large-v3-turbo",
           "label": "Whisper large v3 turbo",
           "note": null,
@@ -3226,6 +3386,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/gpt-4o-transcribe",
           "label": "GPT-4o Transcribe",
           "note": null,
@@ -3235,6 +3396,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "deepgram/nova-3",
           "label": "Deepgram Nova 3 (batch)",
           "note": null,
@@ -3244,6 +3406,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "mistralai/voxtral-mini-transcribe",
           "label": "Voxtral Mini Transcribe",
           "note": null,
@@ -3391,6 +3554,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "google/gemini-3.8-flash-tts",
           "label": "Gemini 3.8 Flash TTS",
           "note": null,
@@ -3400,6 +3564,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "google/gemini-3.8-flash-lite-tts",
           "label": "Gemini 3.8 Flash Lite TTS",
           "note": null,
@@ -3409,6 +3574,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "deepgram/aura-2",
           "label": "Deepgram Aura 2",
           "note": null,
@@ -3418,6 +3584,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "mistralai/voxtral-mini-tts-2603",
           "label": "Voxtral Mini TTS",
           "note": null,
@@ -3427,6 +3594,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "x-ai/grok-voice-tts-1.0",
           "label": "Grok Voice TTS 1.0",
           "note": null,
@@ -3539,6 +3707,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/text-embedding-3-small",
           "label": "text-embedding-3-small",
           "note": null,
@@ -3673,6 +3842,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/gpt-image-1",
           "label": "GPT Image 1",
           "note": null,
@@ -3682,6 +3852,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/gpt-image-1-mini",
           "label": "GPT Image 1 mini",
           "note": null,
@@ -3691,6 +3862,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "google/gemini-3.1-flash-image",
           "label": "Gemini 3.1 Flash Image",
           "note": null,
@@ -4011,6 +4183,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "grok-voice-latest",
           "label": "Grok Voice (latest)",
           "note": null,
@@ -4020,6 +4193,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "grok-voice-think-fast-2.0",
           "label": "Grok Voice Think Fast 2.0",
           "note": null,
@@ -4029,6 +4203,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "grok-voice-think-fast-1.0",
           "label": "Grok Voice Think Fast 1.0",
           "note": null,
@@ -4038,6 +4213,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "grok-voice-fast-1.0",
           "label": "Grok Voice Fast 1.0",
           "note": null,
@@ -4878,6 +5054,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "flux-general-en",
           "label": "Flux (general, en)",
           "note": null,
@@ -4887,6 +5064,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "flux-general-multi",
           "label": "Flux (multilingual)",
           "note": null,
@@ -5225,6 +5403,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "claude-sonnet-4-6",
           "label": "Claude Sonnet 4.6",
           "note": null,
@@ -5234,6 +5413,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "claude-opus-4-6",
           "label": "Claude Opus 4.6",
           "note": null,
@@ -5243,6 +5423,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "claude-3-5-haiku-20241022",
           "label": "Claude 3.5 Haiku",
           "note": null,
@@ -5342,6 +5523,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "llama-3.3-70b-versatile",
           "label": "Llama 3.3 70B Versatile",
           "note": null,
@@ -5351,6 +5533,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "openai/gpt-oss-120b",
           "label": "GPT-OSS 120B",
           "note": null,
@@ -5445,6 +5628,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gpt-oss-120b",
           "label": "GPT-OSS 120B",
           "note": null,
@@ -5643,6 +5827,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "amazon.nova-2-lite-v1:0",
           "label": "Nova 2 Lite",
           "note": null,
@@ -5864,6 +6049,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "aura-2-andromeda-en",
           "label": "Aura 2 Andromeda (en)",
           "note": null,
@@ -6011,6 +6197,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "mistv3",
           "label": "Mist v3",
           "note": null,
@@ -6131,6 +6318,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "inworld-tts-2",
           "label": "Inworld TTS 2",
           "note": null,
@@ -6140,6 +6328,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "inworld-tts-2-flash",
           "label": "Inworld TTS 2 Flash",
           "note": null,
@@ -6149,6 +6338,7 @@
         },
         {
           "deprecated": true,
+          "end_of_turn": false,
           "id": "inworld-tts-1.5-max",
           "label": "Inworld TTS 1.5 Max",
           "note": "deprecated by the vendor",
@@ -6841,6 +7031,57 @@
           "recommended": null,
           "required": false,
           "type": "number"
+        },
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "How long the caller must be quiet before their speech counts as ended. Lower lets the agent reply sooner; with the turn detector it must be at least 0.25. Default 0.55.",
+          "label": "Silence before speech ends (s)",
+          "name": "min_silence_duration",
+          "nested_model": null,
+          "options": null,
+          "placeholder": "0.55",
+          "positional": false,
+          "recommended": null,
+          "required": false,
+          "type": "number"
+        },
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "How confident the detector must be that a sound is speech (0-1). Higher ignores more background noise but can miss quiet callers. Default 0.5.",
+          "label": "Speech threshold",
+          "name": "activation_threshold",
+          "nested_model": null,
+          "options": null,
+          "placeholder": "0.5",
+          "positional": false,
+          "recommended": null,
+          "required": false,
+          "type": "number"
+        },
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "How much audio before the detected start of speech is kept, so the first word is not clipped. Default 0.5.",
+          "label": "Audio kept before speech (s)",
+          "name": "prefix_padding_duration",
+          "nested_model": null,
+          "options": null,
+          "placeholder": "0.5",
+          "positional": false,
+          "recommended": null,
+          "required": false,
+          "type": "number"
         }
       ],
       "get_key_url": null,
@@ -6852,6 +7093,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "silero",
           "label": "Silero (local ONNX)",
           "note": null,
@@ -6910,7 +7152,59 @@
       "default_model": "silero",
       "docs_url": "https://docs.livekit.io/agents/build/turns/vad/",
       "enabled": true,
-      "fields": [],
+      "fields": [
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "How long the caller must be quiet before their speech counts as ended. Lower lets the agent reply sooner; with the turn detector it must be at least 0.25. Default 0.25.",
+          "label": "Silence before speech ends (s)",
+          "name": "min_silence_duration",
+          "nested_model": null,
+          "options": null,
+          "placeholder": "0.25",
+          "positional": false,
+          "recommended": null,
+          "required": false,
+          "type": "number"
+        },
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "How confident the detector must be that a sound is speech (0-1). Higher ignores more background noise but can miss quiet callers. Default 0.5.",
+          "label": "Speech threshold",
+          "name": "activation_threshold",
+          "nested_model": null,
+          "options": null,
+          "placeholder": "0.5",
+          "positional": false,
+          "recommended": null,
+          "required": false,
+          "type": "number"
+        },
+        {
+          "accept": null,
+          "catalog_kind": null,
+          "condition": null,
+          "default": null,
+          "env_fallback": null,
+          "help": "How much audio before the detected start of speech is kept, so the first word is not clipped. Default 0.5.",
+          "label": "Audio kept before speech (s)",
+          "name": "prefix_padding_duration",
+          "nested_model": null,
+          "options": null,
+          "placeholder": "0.5",
+          "positional": false,
+          "recommended": null,
+          "required": false,
+          "type": "number"
+        }
+      ],
       "get_key_url": null,
       "id": "inference-vad",
       "installed_on": [],
@@ -6920,6 +7214,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "silero",
           "label": "Silero (LiveKit-hosted native inference)",
           "note": null,
@@ -8424,6 +8719,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "amazon.nova-2-sonic-v1:0",
           "label": "Nova 2 Sonic",
           "note": null,
@@ -8433,6 +8729,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "amazon.nova-sonic-v1:0",
           "label": "Nova Sonic",
           "note": null,
@@ -8653,6 +8950,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "fixie-ai/ultravox",
           "label": "Ultravox (default)",
           "note": null,
@@ -8662,6 +8960,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "fixie-ai/ultravox-llama3.3-70b",
           "label": "Ultravox Llama 3.3 70B",
           "note": null,
@@ -8861,6 +9160,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "sonar-pro",
           "label": "Sonar Pro",
           "note": null,
@@ -8870,6 +9170,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "sonar",
           "label": "Sonar",
           "note": null,
@@ -8969,6 +9270,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "ministral-8b-latest",
           "label": "Ministral 8B",
           "note": null,
@@ -9073,6 +9375,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
           "label": "Llama 4 Maverick 17B",
           "note": null,
@@ -9167,6 +9470,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "grok-4-1-fast-non-reasoning",
           "label": "Grok 4.1 Fast (non-reasoning)",
           "note": null,
@@ -9284,6 +9588,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "gpt-4.1",
           "label": "GPT-4.1",
           "note": null,
@@ -13611,6 +13916,7 @@
       "models": [
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "speech-2.8-turbo",
           "label": "Speech 2.8 Turbo",
           "note": null,
@@ -13620,6 +13926,7 @@
         },
         {
           "deprecated": false,
+          "end_of_turn": false,
           "id": "speech-2.8-hd",
           "label": "Speech 2.8 HD",
           "note": null,
@@ -13629,6 +13936,7 @@
         },
         {
           "deprecated": true,
+          "end_of_turn": false,
           "id": "speech-02-turbo",
           "label": "Speech 02 Turbo",
           "note": "deprecated by the vendor",

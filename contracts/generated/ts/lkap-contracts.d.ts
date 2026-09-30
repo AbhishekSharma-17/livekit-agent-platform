@@ -1899,7 +1899,7 @@ export interface BlockSpec {
 export interface PipelineConfig {
   avatar?: ProviderRef | null;
   avatar_options?: AvatarOptions;
-  conversation_preset?: "patient" | "balanced" | "snappy" | "telephony" | "custom";
+  conversation_preset?: "patient" | "balanced" | "snappy" | "telephony" | "fast" | "custom";
   image_gen?: ProviderRef | null;
   llm?: ProviderRef | null;
   mode?: "realtime" | "cascaded" | "half_cascade";
@@ -1943,7 +1943,7 @@ export interface AvatarOptions {
  * via the `definition` "TurnDetectorSettings".
  */
 export interface TurnDetectorSettings {
-  mode?: ("hosted" | "local") | null;
+  mode?: ("hosted" | "local" | "stt") | null;
   unlikely_threshold?: number | null;
 }
 /**
@@ -7788,7 +7788,7 @@ export interface ProviderCapabilities {
    */
   detect_languages?: string[];
   /**
-   * STT only (V6-02, D-V6-5): the transcriber decides when the caller's turn ends (Deepgram Flux). The worker then runs the session with the SDK's `turn_detection="stt"` instead of the platform's default turn detector.
+   * STT only (V6-02, D-V6-5): the transcriber decides when the caller's turn ends (Deepgram Flux). The worker then runs the session with the SDK's `turn_detection="stt"` instead of the platform's default turn detector. V6-34: a gateway entry whose models differ records it per model instead (`ModelSpec.end_of_turn`, an opt-in).
    */
   end_of_turn?: boolean;
   /**
@@ -7876,6 +7876,10 @@ export interface ModelSpec {
    * The vendor deprecated this id (V6-02, D-V6-4a). It stays listed so a stored reference still resolves; the validator warns and the console offers the entry's `default_model`.
    */
   deprecated?: boolean;
+  /**
+   * STT only (V6-34): this model can decide when the caller's turn ends (LiveKit Inference's Deepgram Flux models). Unlike `ProviderCapabilities.end_of_turn` it is an opt-in: the worker runs `turn_detection="stt"` only when the agent asks for it (`pipeline.turn_detector.mode: "stt"` or the `fast` conversation preset), so a stored agent keeps the turn detector it had. See `stt_end_of_turn()`.
+   */
+  end_of_turn?: boolean;
   id: string;
   label: string;
   note?: string | null;

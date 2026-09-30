@@ -54,6 +54,12 @@ const PRESETS: { value: ConversationPreset; label: string; description: string }
   { value: "patient", label: "Patient", description: "Waits longer before replying — good for callers who pause to think." },
   { value: "balanced", label: "Balanced", description: "A good default for most calls." },
   { value: "snappy", label: "Snappy", description: "Replies quickly, and can start before the caller finishes talking." },
+  {
+    value: "fast",
+    label: "Fast",
+    description:
+      "Suggested for voice calls. Replies as soon as the caller finishes and prepares the answer early; with Deepgram Flux, Flux decides when they have finished.",
+  },
   { value: "telephony", label: "Phone call", description: "Tuned for phone audio, where a short silence is easy to mishear." },
   { value: "custom", label: "Custom", description: "Set your own timing below." },
 ];
@@ -156,6 +162,12 @@ export function ConversationSection() {
               </RadioGroup>
             )}
           />
+          {preset === "fast" ? (
+            <p className="text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">
+              Fast does not change how long voice activity detection waits for silence. To shorten that too, set Voice
+              activity detection in Providers and lower its &quot;Silence before speech ends&quot;.
+            </p>
+          ) : null}
         </SectionRow>
       </Section>
 
@@ -347,9 +359,13 @@ export function ConversationSection() {
                   <label htmlFor="turn-detector-local" className="flex items-center gap-2 text-sm">
                     <RadioGroupItem id="turn-detector-local" value="local" /> On this worker
                   </label>
+                  <label htmlFor="turn-detector-stt" className="flex items-center gap-2 text-sm">
+                    <RadioGroupItem id="turn-detector-stt" value="stt" /> Let speech-to-text decide
+                  </label>
                 </RadioGroup>
                 <p className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
-                  Leave unset to let the connection decide.
+                  Leave unset to let the connection decide. Speech-to-text decides only with a model that can, such as
+                  Deepgram Flux; with any other model the turn detector still runs.
                 </p>
               </div>
             )}

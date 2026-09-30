@@ -145,15 +145,23 @@ export function effortToSend(view: ReasoningView, requested: string | null | und
 export const FAST_VOICE_NOTE = {
   asOf: "2026-09-29",
   smallModel: /(^|[-/._])(mini|nano|flash|flash-lite|lite|haiku|small|luna)([-/._:]|$)/i,
+  /**
+   * Ids the vendor serves tuned for voice agents, by name (V6-34, 2026-09-30): LiveKit
+   * Inference lists Gemma 4 31B as "Recommended for voice agents"
+   * (docs.livekit.io/agents/models/inference). Fast unless the model is known to reason.
+   */
+  voiceModels: ["google/gemma-4-31b-it"] as readonly string[],
   text: "Answers quickly on a live call: a small model that thinks little or not at all before it speaks.",
 } as const;
 
 /**
  * "Fast for voice": a small model (FAST_VOICE_NOTE) that either does not
  * reason or can reason at `none`/`minimal`, which is what a voice session
- * sends when no effort is set.
+ * sends when no effort is set; or an id served tuned for voice
+ * (`FAST_VOICE_NOTE.voiceModels`) that is not known to reason.
  */
 export function isFastForVoice(view: ReasoningView, modelId: string): boolean {
+  if (FAST_VOICE_NOTE.voiceModels.includes(modelId) && view.reasoning !== true) return true;
   if (!FAST_VOICE_NOTE.smallModel.test(modelId)) return false;
   if (view.reasoning === false) return true;
   const lowest = lowestEffort(view);

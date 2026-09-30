@@ -49,7 +49,7 @@ from typing import Any, Final
 
 from lkap_contracts.agent_config import PipelineMode, ProviderSlot, ResolvedAgentConfig, ResolvedProvider
 from lkap_contracts.connections import TurnDetectorMode
-from lkap_contracts.providers import ProviderKind, ProviderSpec
+from lkap_contracts.providers import FLUX_OPTION_FIELDS, STICKY_ROUTING_FIELD, ProviderKind, ProviderSpec
 from lkap_contracts.providers import get as get_spec
 
 from lkap_agent.logging import get_logger
@@ -75,6 +75,7 @@ __all__ = [
     "DEEPGRAM_FLUX_STT_CLASS",
     "OPENAI_TRANSCRIPTION_STT_CLASS",
     "deepgram_flux_kwargs",
+    "inference_stt_flux_kwargs",
     "openai_transcription_language_kwargs",
     "stt_redact_kwargs",
     "TELEPHONY_VARIANT_DROPPED_KWARGS",
@@ -457,6 +458,8 @@ class ProviderFactory:
             kwargs["extra_kwargs"] = extra
         if spec.id == "openrouter-llm":
             kwargs = _openrouter_llm_kwargs(kwargs)
+        if spec.id == "livekit-inference-stt":
+            kwargs = inference_stt_flux_kwargs(kwargs)
         if spec.python_class == OPENAI_TRANSCRIPTION_STT_CLASS:
             kwargs = openai_transcription_language_kwargs(kwargs)
         if spec.python_class == DEEPGRAM_FLUX_STT_CLASS:
@@ -486,6 +489,41 @@ def deepgram_flux_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     if isinstance(timeout, float) and timeout.is_integer():
         return {**kwargs, "eot_timeout_ms": int(timeout)}
     return kwargs
+
+
+#: LiveKit Inference's Deepgram Flux model ids (livekit-agents 1.8.3 `inference/stt.py` `DeepgramFluxModels`).
+_INFERENCE_FLUX_PREFIX: Final[str] = "deepgram/flux-"
+
+
+def inference_stt_flux_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Move Flux's end-of-turn fields into ``inference.STT``'s ``extra_kwargs`` (V6-34).
+
+    livekit-agents 1.8.3 ``inference/stt.py`` takes provider options only inside
+    ``extra_kwargs`` (``DeepgramFluxOptions``: ``eot_threshold``, ``eager_eot_threshold``,
+    ``eot_timeout_ms``), as the LiveKit Deepgram page shows for Inference Flux. The
+    registry exposes them flat; they are sent only with a Flux model (any other model
+    drops them with a log line, the api's validator warned at save), and
+    ``eot_timeout_ms`` becomes the whole number the gateway expects.
+
+    Args:
+        kwargs: The resolved constructor kwargs of ``livekit.agents.inference.STT``.
+
+    Returns:
+        A copy without the flat fields; ``extra_kwargs`` carries them for a Flux model.
+    """
+    present = {name: kwargs[name] for name in FLUX_OPTION_FIELDS if name in kwargs}
+    if not present:
+        return kwargs
+    converted = {k: v for k, v in kwargs.items() if k not in present}
+    model = converted.get("model")
+    if not (isinstance(model, str) and model.startswith(_INFERENCE_FLUX_PREFIX)):
+        logger.info("ignoring Deepgram Flux options on a non-Flux model", model=model, fields=sorted(present))
+        return converted
+    extra = dict(converted.get("extra_kwargs") or {})
+    for name, value in deepgram_flux_kwargs(present).items():
+        extra.setdefault(name, value)
+    converted["extra_kwargs"] = extra
+    return converted
 
 
 #: The STT class behind ``openai-stt`` and ``openrouter-stt``; both endpoints take one ISO-639-1 code.
@@ -556,6 +594,8 @@ def _openrouter_llm_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     admin who wants cheaper routing sets ``{"require_parameters": false}``.
     """
     converted = dict(kwargs)
+    # V6-34: `prepare_resolved` turns the field into `user`/`prompt_cache_key`; it is never a kwarg.
+    converted.pop(STICKY_ROUTING_FIELD, None)
     provider = _json_field(converted, "provider", dict)
     preferences: dict[str, Any] = dict(provider or {})
     preferences.setdefault("require_parameters", True)

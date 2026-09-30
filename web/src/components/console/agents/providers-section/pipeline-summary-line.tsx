@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -88,7 +88,7 @@ export function ConnectionNotes({ connection, className }: { connection: Connect
   return (
     <Collapsible defaultOpen={limited > 0} className={className} data-slot="connection-notes">
       <CollapsibleTrigger className="group/notes inline-flex items-center gap-1 rounded-sm text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <ChevronRightIcon className="size-4 transition-transform duration-(--duration-base) group-data-[state=open]/notes:rotate-90" aria-hidden="true" />
+        <ChevronDownIcon className="size-4 transition-transform duration-(--duration-base) group-data-[state=open]/notes:rotate-180" aria-hidden="true" />
         {limited > 0 ? "What LiveKit Cloud has that this connection doesn't" : "What this connection has"}
       </CollapsibleTrigger>
       <CollapsibleContent>

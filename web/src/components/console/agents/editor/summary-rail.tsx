@@ -401,11 +401,11 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
           actionLabel="Cost: open the cost estimate"
         >
           {costEstimate.estimate?.per_minute_usd ? (
-            <span className="flex flex-col gap-0.5">
+            <span className="flex flex-col gap-0.5 tabular-nums">
               <span>
                 ≈ {formatUsd(costEstimate.estimate.per_minute_usd.mid) ?? "—"}/min · estimate
               </span>
-              <span className="text-xs text-text-secondary">
+              <span className="text-caption text-text-secondary">
                 typically {formatUsd(costEstimate.estimate.per_minute_usd.low) ?? "—"}–
                 {formatUsd(costEstimate.estimate.per_minute_usd.high) ?? "—"}
               </span>

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Controller, useFormContext, useWatch } from "react-hook-form";
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 
 import { Field } from "@/components/shared/field";
 import { Icon } from "@/components/shared/icon";
@@ -673,9 +673,9 @@ function AdvancedTurnHandling() {
             )}
           >
             <Icon
-              as={ChevronRightIcon}
+              as={ChevronDownIcon}
               size="sm"
-              className="transition-transform duration-(--duration-base) group-data-[state=open]/more:rotate-90"
+              className="transition-transform duration-(--duration-base) group-data-[state=open]/more:rotate-180"
             />
             Advanced
           </CollapsibleTrigger>

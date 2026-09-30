@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Controller, useFormContext } from "react-hook-form";
-import { ChevronRightIcon, PlusIcon, XIcon } from "lucide-react";
+import { ChevronDownIcon, PlusIcon, XIcon } from "lucide-react";
 
 import { Field, fieldIds } from "@/components/shared/field";
 import { Section, SectionRow } from "@/components/shared/section";
@@ -308,8 +308,8 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
                 "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
               )}
             >
-              <ChevronRightIcon
-                className="size-3.5 transition-transform duration-(--duration-base) group-data-[state=open]/more:rotate-90"
+              <ChevronDownIcon
+                className="size-3.5 transition-transform duration-(--duration-base) group-data-[state=open]/more:rotate-180"
                 aria-hidden="true"
               />
               Advanced

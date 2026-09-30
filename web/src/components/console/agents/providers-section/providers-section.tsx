@@ -4,7 +4,7 @@ import * as React from "react";
 import { Controller, useFormContext } from "react-hook-form";
 import {
   AudioWaveformIcon,
-  ChevronRightIcon,
+  ChevronDownIcon,
   EyeOffIcon,
   MessagesSquareIcon,
   PlusIcon,
@@ -389,7 +389,7 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
 
       <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
         <CollapsibleTrigger className="group/adv inline-flex items-center gap-1 rounded-sm text-sm font-medium text-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-          <ChevronRightIcon className="size-4 transition-transform duration-(--duration-base) group-data-[state=open]/adv:rotate-90" aria-hidden="true" />
+          <ChevronDownIcon className="size-4 transition-transform duration-(--duration-base) group-data-[state=open]/adv:rotate-180" aria-hidden="true" />
           Advanced: hearing speech, ending turns, filtering noise
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-3 flex flex-col gap-3">

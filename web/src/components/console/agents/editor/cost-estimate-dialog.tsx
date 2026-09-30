@@ -2,7 +2,7 @@
 
 import { LoadingRow } from "@/components/shared/loading-state";
 import * as React from "react";
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -318,7 +318,7 @@ function TechnicalUnitDisclosure({ line }: { line: EstimateLine }) {
           type="button"
           className="flex w-fit items-center gap-1 text-xs text-text-secondary underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <Icon as={ChevronRightIcon} size="sm" className={cn("transition-transform", open && "rotate-90")} />
+          <Icon as={ChevronDownIcon} size="sm" className={cn("transition-transform", open && "rotate-180")} />
           Details
         </button>
       </CollapsibleTrigger>

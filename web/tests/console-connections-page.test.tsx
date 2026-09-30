@@ -82,7 +82,8 @@ describe("ConnectionsTable", () => {
     // rendering) — scope to the desktop `<table>` to query a single match.
     const table = within(await screen.findByRole("table", { name: "Connections" }));
     expect(table.getByText("cloud-a")).toBeTruthy();
-    expect(table.getByText("OK")).toBeTruthy();
+    // Status words come from the shared lifecycle map (docs/ui/DESIGN-SYSTEM.md 6.6): `ok` reads "Working".
+    expect(table.getByText("Working")).toBeTruthy();
     expect(table.getByText("LiveKit Cloud")).toBeTruthy();
     expect(screen.getAllByLabelText("Default connection").length).toBeGreaterThan(0);
   });
@@ -95,6 +96,64 @@ describe("ConnectionsTable", () => {
     // `auth/me` query — the link only replaces the disabled fallback button
     // once it settles.
     expect(await screen.findByRole("link", { name: "New connection" })).toBeTruthy();
+  });
+});
+
+describe("ConnectionsTable search and permissions (docs/ui/DESIGN-SYSTEM.md sections 8, 9)", () => {
+  // The search query is remembered per list; each test gets its own storage.
+  beforeEach(() => {
+    const data = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      get length() {
+        return data.size;
+      },
+      clear: () => data.clear(),
+      getItem: (key: string) => data.get(key) ?? null,
+      key: (index: number) => Array.from(data.keys())[index] ?? null,
+      removeItem: (key: string) => void data.delete(key),
+      setItem: (key: string, value: string) => void data.set(key, String(value)),
+    } satisfies Storage);
+  });
+
+  const many: ConnectionOut[] = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot"].map((name, index) => ({
+    ...CONNECTION,
+    id: `conn-${index}`,
+    slug: name.toLowerCase(),
+    name,
+    is_default: index === 0,
+  }));
+
+  it("offers search once there are 6 connections, filters as you type and shows a distinct no-matches state", async () => {
+    stubFetch((url) => (url.includes("/fleet") ? { desired_replicas: 1, instances: [] } : { items: many, total: many.length }));
+    renderWithClient(<ConnectionsTable />);
+    const search = await screen.findByRole("searchbox", { name: "Search connections" });
+    fireEvent.change(search, { target: { value: "echo" } });
+    const table = within(screen.getByRole("table", { name: "Connections" }));
+    expect(table.getAllByRole("row")).toHaveLength(2);
+    expect(screen.getByText("1 of 6")).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: "zulu" } });
+    expect(await screen.findByText("No connections match “zulu”")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(within(screen.getByRole("table", { name: "Connections" })).getAllByRole("row")).toHaveLength(7);
+  });
+
+  it("offers a viewer only Open in the row menu: Test and Delete are admin-only server-side (D12)", async () => {
+    const viewerMe = { ...ADMIN_ME, workspaces: [{ ...ADMIN_ME.workspaces[0], role: "viewer" }] };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/auth/me")) return { ok: true, status: 200, json: async () => viewerMe } as Response;
+      if (url.includes("/fleet")) return { ok: true, status: 200, json: async () => ({ desired_replicas: 1, instances: [] }) } as Response;
+      return { ok: true, status: 200, json: async () => ({ items: [CONNECTION], total: 1 }) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithClient(<ConnectionsTable />);
+    const table = within(await screen.findByRole("table", { name: "Connections" }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/auth/me"))).toBe(true));
+    fireEvent.keyDown(table.getByRole("button", { name: "Actions for cloud-a" }), { key: "Enter" });
+    expect(await screen.findByRole("menuitem", { name: "Open" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Test" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Delete" })).toBeNull();
   });
 });
 

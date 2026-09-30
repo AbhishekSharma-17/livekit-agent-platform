@@ -1,29 +1,14 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { MoreHorizontalIcon, PlugIcon, StarIcon } from "lucide-react";
+import { ArrowRightIcon, FlaskConicalIcon, KeyRoundIcon, PlugIcon, StarIcon, Trash2Icon } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { EmptyState, Icon, NewResourceButton, ResponsiveTable, StatusChip } from "@/components/shared";
-import { useWriteAccess } from "@/components/console/lib/roles";
+import { Icon, NewResourceButton, ResponsiveTable, RowMenu, StatusPill, Tag } from "@/components/shared";
+import type { RowMenuAction } from "@/components/shared/row-menu";
+import { EmptyState } from "@/components/shared/empty-state";
+import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "@/components/shared/list-search";
 import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import {
   connectionStatusLabel,
@@ -33,53 +18,68 @@ import {
   fleetHealth,
   urlHost,
 } from "@/components/console/connections/connection-model";
-import { errorMessage } from "@/components/console/shared/error-banner";
-import { ErrorBanner } from "@/components/console/shared/error-banner";
-import {
-  useConnectionFleet,
-  useConnections,
-  useDeleteConnection,
-  useSetDefaultConnection,
-  useTestConnection,
-} from "@/hooks/useConnections";
+import { DeleteConnectionDialog } from "@/components/console/connections/delete-connection-dialog";
+import { RowsSkeleton } from "@/components/console/registry/rows-skeleton";
+import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { useCan } from "@/components/console/shared/permission";
+import { useConnectionFleet, useConnections, useSetDefaultConnection, useTestConnection } from "@/hooks/useConnections";
 import type { ConnectionOut } from "@/contracts/lkap-contracts";
-import { LoadingRegion } from "@/components/shared/loading-state";
+
+/** Admins add connections (`auth/roles.py::ROUTE_POLICY`: `/v1/connections` writes need `admin`). */
+const READ_ONLY_NOTE = "Ask an admin to add connections.";
+
+function typeLabel(connection: ConnectionOut): string {
+  return DEPLOYMENT_TYPE_LABEL[connection.deployment_type ?? "cloud"];
+}
+
+function modeLabel(connection: ConnectionOut): string {
+  return DEPLOYMENT_MODE_LABEL[connection.deployment_mode ?? "external"];
+}
+
+function ConnectionStatus({ connection }: { connection: ConnectionOut }) {
+  return (
+    <StatusPill tone={connectionStatusTone(connection.status)} size="sm">
+      {connectionStatusLabel(connection.status)}
+    </StatusPill>
+  );
+}
 
 /**
- * `/console/connections` list (UI_UX_SPEC-V2-AMENDMENTS §2.1): Name, Type,
- * URL host, Status, Capabilities, Fleet, Default star, and a row menu (Test,
- * Make default, Rotate keys, Delete). Rotate opens the connection's own
- * detail page (a modal here would need the secret fields WP-4's credential
- * dialog already builds for provider keys — connections keep the same two
- * secret fields inline on their own page instead of duplicating that UI).
+ * `/console/connections` list (UI_UX_SPEC-V2-AMENDMENTS §2.1; docs/ui/DESIGN-SYSTEM.md
+ * section 7.4 "List"): Name, Type, URL host, Status, Fleet, the default star
+ * and a row menu (Open, Test, Make default, Rotate keys, Delete). Search
+ * appears once there are 6 or more connections. Rotate opens the
+ * connection's own page, where the two secret fields live.
  */
 export function ConnectionsTable() {
   const { data, isLoading, isError, error, refetch } = useConnections();
+  const connections = React.useMemo(() => data?.items ?? [], [data]);
+  const search = useListSearch("connections", connections, (connection) => [
+    connection.name,
+    connection.slug,
+    urlHost(connection.url),
+    typeLabel(connection),
+    modeLabel(connection),
+    connectionStatusLabel(connection.status),
+  ]);
+  const query = search.query;
 
   if (isLoading) {
-    return (
-      <LoadingRegion label="Loading connections" className="flex flex-col gap-2">
-        {[0, 1].map((i) => (
-          <Skeleton key={i} className="h-14 w-full" />
-        ))}
-      </LoadingRegion>
-    );
+    return <RowsSkeleton label="Loading connections" />;
   }
 
   if (isError) {
-    return <ErrorBanner message={`Couldn't reach the api: ${errorMessage(error)}`} onRetry={() => refetch()} />;
+    return <ErrorBanner error={error} context={{ action: "load connections" }} onRetry={() => void refetch()} />;
   }
-
-  const connections = data?.items ?? [];
 
   if (connections.length === 0) {
     return (
       <EmptyState
         icon={PlugIcon}
         title="No connections yet"
-        description="A connection is a LiveKit Cloud project or self-hosted server your agents run on."
+        description="Add a LiveKit Cloud project or your own LiveKit server so your agents have somewhere to run."
         action={
-          <NewResourceButton href="/console/connections/new" min="admin">
+          <NewResourceButton href="/console/connections/new" min="admin" readOnlyNote={READ_ONLY_NOTE}>
             New connection
           </NewResourceButton>
         }
@@ -94,11 +94,15 @@ export function ConnectionsTable() {
       cell: (connection) => (
         <div className="flex min-w-0 items-center gap-1.5">
           {connection.is_default ? (
-            <Icon as={StarIcon} size="sm" className="shrink-0 fill-current text-warning" label="Default connection" />
+            <Icon as={StarIcon} size="sm" className="shrink-0 fill-current text-warning-text" label="Default connection" />
           ) : null}
           <div className="min-w-0">
-            <p className="truncate font-medium text-foreground">{connection.name}</p>
-            <p className="truncate font-mono text-xs text-muted-foreground">/{connection.slug}</p>
+            <p className="truncate font-medium text-foreground">
+              <Highlight text={connection.name} query={query} />
+            </p>
+            <p className="truncate font-mono text-caption text-text-tertiary">
+              <Highlight text={`/${connection.slug}`} query={query} />
+            </p>
           </div>
         </div>
       ),
@@ -107,30 +111,22 @@ export function ConnectionsTable() {
       id: "type",
       header: "Type",
       cell: (connection) => (
-        <div className="flex flex-col gap-1">
-          <StatusChip tone={connection.deployment_type === "cloud" ? "info" : "neutral"} size="sm">
-            {DEPLOYMENT_TYPE_LABEL[connection.deployment_type ?? "cloud"]}
-          </StatusChip>
-          <span className="text-xs text-muted-foreground">
-            {DEPLOYMENT_MODE_LABEL[connection.deployment_mode ?? "external"]}
-          </span>
+        <div className="flex flex-col items-start gap-1">
+          <Tag>{typeLabel(connection)}</Tag>
+          <span className="text-caption text-text-secondary">{modeLabel(connection)}</span>
         </div>
       ),
     },
     {
       id: "url",
       header: "URL",
-      cell: (connection) => <span className="font-mono text-[0.8125rem] text-muted-foreground">{urlHost(connection.url)}</span>,
-    },
-    {
-      id: "status",
-      header: "Status",
       cell: (connection) => (
-        <StatusChip tone={connectionStatusTone(connection.status)} dot size="sm">
-          {connectionStatusLabel(connection.status)}
-        </StatusChip>
+        <span className="font-mono text-label text-text-secondary">
+          <Highlight text={urlHost(connection.url)} query={query} />
+        </span>
       ),
     },
+    { id: "status", header: "Status", cell: (connection) => <ConnectionStatus connection={connection} /> },
     {
       id: "fleet",
       header: "Fleet",
@@ -146,14 +142,21 @@ export function ConnectionsTable() {
   ];
 
   return (
-    <ResponsiveTable<ConnectionOut>
-      columns={columns}
-      rows={connections}
-      label="Connections"
-      getRowKey={(connection) => connection.id}
-      rowHref={(connection) => `/console/connections/${connection.id}`}
-      renderCard={(connection) => <ConnectionCard connection={connection} />}
-    />
+    <div className="flex flex-col">
+      <ListSearchField search={search} label="Search connections" total={connections.length} />
+      {search.noMatches ? (
+        <ListNoMatches search={search} items="connections" />
+      ) : (
+        <ResponsiveTable<ConnectionOut>
+          columns={columns}
+          rows={search.filtered}
+          label="Connections"
+          getRowKey={(connection) => connection.id}
+          rowHref={(connection) => `/console/connections/${connection.id}`}
+          renderCard={(connection) => <ConnectionCard connection={connection} query={query} />}
+        />
+      )}
+    </div>
   );
 }
 
@@ -161,35 +164,40 @@ export function ConnectionsTable() {
 function FleetCell({ connectionId, deploymentMode }: { connectionId: string; deploymentMode: ConnectionOut["deployment_mode"] }) {
   const { data } = useConnectionFleet(connectionId, { poll: false });
   if (deploymentMode !== "supervised") {
-    return <span className="text-[0.8125rem] text-muted-foreground">—</span>;
+    return (
+      <span className="text-label text-text-tertiary">
+        <span aria-hidden="true">—</span>
+        <span className="sr-only">Not managed here</span>
+      </span>
+    );
   }
   const health = fleetHealth(data?.desired_replicas, data?.instances);
   return (
-    <span className="text-[0.8125rem] tabular-nums text-muted-foreground">
+    <span className="text-label text-text-secondary tabular-nums">
       {health.ready}/{health.desired} ready
     </span>
   );
 }
 
-function ConnectionCard({ connection }: { connection: ConnectionOut }) {
+function ConnectionCard({ connection, query }: { connection: ConnectionOut; query: string }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 truncate font-medium text-foreground">
-            {connection.is_default ? <Icon as={StarIcon} size="sm" className="shrink-0 fill-current text-warning" label="Default" /> : null}
-            {connection.name}
+            {connection.is_default ? (
+              <Icon as={StarIcon} size="sm" className="shrink-0 fill-current text-warning-text" label="Default" />
+            ) : null}
+            <Highlight text={connection.name} query={query} />
           </p>
-          <p className="truncate font-mono text-xs text-muted-foreground">{urlHost(connection.url)}</p>
+          <p className="truncate font-mono text-caption text-text-tertiary">{urlHost(connection.url)}</p>
         </div>
-        <StatusChip tone={connectionStatusTone(connection.status)} dot size="sm">
-          {connectionStatusLabel(connection.status)}
-        </StatusChip>
+        <ConnectionStatus connection={connection} />
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span>{DEPLOYMENT_TYPE_LABEL[connection.deployment_type ?? "cloud"]}</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-secondary">
+        <span>{typeLabel(connection)}</span>
         <span aria-hidden="true">·</span>
-        <span>{DEPLOYMENT_MODE_LABEL[connection.deployment_mode ?? "external"]}</span>
+        <span>{modeLabel(connection)}</span>
       </div>
       <div className="flex items-center justify-end pt-1">
         <ConnectionRowMenu connection={connection} />
@@ -198,21 +206,23 @@ function ConnectionCard({ connection }: { connection: ConnectionOut }) {
   );
 }
 
-type RowConfirmAction = "delete" | null;
-
+/**
+ * The row "…" menu. Open is for everyone; Test, Make default, Rotate keys and
+ * Delete are admin-only server-side (`auth/roles.py::ROUTE_POLICY`: every
+ * `/v1/connections` write), so they are not offered to anyone else (D12).
+ */
 function ConnectionRowMenu({ connection }: { connection: ConnectionOut }) {
+  const router = useRouter();
   const testConnection = useTestConnection();
   const setDefault = useSetDefaultConnection();
-  const deleteConnection = useDeleteConnection();
-  const [confirmAction, setConfirmAction] = React.useState<RowConfirmAction>(null);
-  // Connections need `admin` server-side (`auth/roles.py::ROUTE_POLICY`), a
-  // stricter floor than the `builder` default everywhere else.
-  const { canWrite } = useWriteAccess("admin");
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const { can } = useCan("admin");
 
   async function runTest() {
     try {
       const result = await testConnection.mutateAsync(connection.id);
-      toast[result.ok ? "success" : "error"](result.ok ? `${connection.name}: connection OK.` : `${connection.name}: ${result.message}`);
+      if (result.ok) toast.success(`${connection.name} is working.`);
+      else toast.error(`${connection.name} didn't pass the test. ${result.message}`);
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -227,77 +237,35 @@ function ConnectionRowMenu({ connection }: { connection: ConnectionOut }) {
     }
   }
 
-  async function confirmDelete() {
-    try {
-      await deleteConnection.mutateAsync(connection.id);
-      toast.success(`${connection.name} deleted.`);
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setConfirmAction(null);
+  const actions: RowMenuAction[] = [
+    { label: "Open", icon: ArrowRightIcon, onSelect: () => router.push(`/console/connections/${connection.id}`) },
+  ];
+  if (can) {
+    actions.push({
+      label: testConnection.isPending ? "Testing…" : "Test",
+      icon: FlaskConicalIcon,
+      disabled: testConnection.isPending,
+      onSelect: () => void runTest(),
+    });
+    if (!connection.is_default) {
+      actions.push({ label: "Make default", icon: StarIcon, disabled: setDefault.isPending, onSelect: () => void makeDefault() });
     }
+    actions.push({
+      label: "Rotate keys",
+      icon: KeyRoundIcon,
+      onSelect: () => router.push(`/console/connections/${connection.id}?tab=overview#rotate`),
+    });
   }
 
   return (
-    <Dialog open={confirmAction !== null} onOpenChange={(open) => !open && setConfirmAction(null)}>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${connection.name}`}>
-            <Icon as={MoreHorizontalIcon} size="md" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem asChild>
-            <Link href={`/console/connections/${connection.id}`}>Open</Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => void runTest()} disabled={testConnection.isPending}>
-            {testConnection.isPending ? "Testing…" : "Test"}
-          </DropdownMenuItem>
-          {!connection.is_default ? (
-            <DropdownMenuItem
-              disabled={!canWrite || setDefault.isPending}
-              onSelect={() => void makeDefault()}
-            >
-              Make default
-            </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuItem disabled={!canWrite} asChild>
-            <Link href={`/console/connections/${connection.id}?tab=overview#rotate`}>Rotate keys</Link>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            disabled={!canWrite}
-            onSelect={() => setConfirmAction("delete")}
-          >
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Delete &quot;{connection.name}&quot;?</DialogTitle>
-          <DialogDescription>
-            Connections with agents bound to them can&apos;t be deleted — unbind those agents first.
-            {connection.is_default ? " The default connection can't be deleted either — make another one the default first." : null}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setConfirmAction(null)}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90"
-            disabled={deleteConnection.isPending}
-            onClick={() => void confirmDelete()}
-          >
-            {deleteConnection.isPending ? "Working…" : "Delete"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <>
+      <RowMenu
+        label={`Actions for ${connection.name}`}
+        size="sm"
+        actions={actions}
+        destructive={can ? { label: "Delete", icon: Trash2Icon, onSelect: () => setDeleteOpen(true) } : undefined}
+      />
+      {can ? <DeleteConnectionDialog connection={connection} open={deleteOpen} onOpenChange={setDeleteOpen} /> : null}
+    </>
   );
 }

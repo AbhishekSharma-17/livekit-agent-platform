@@ -1,28 +1,24 @@
 import type { ConnectionOut, WorkerInstanceOut } from "@/contracts/lkap-contracts";
-import type { StatusTone } from "@/components/shared/status-chip";
+import { lifecycleStatus, type StatusTone } from "@/components/shared/status-map";
 
 /** Pure helpers for the connections list/detail (UI_UX_SPEC-V2-AMENDMENTS §2.1). Kept apart from the components for easy unit testing. */
 
+/**
+ * A connection's last test as the api records it (`ok`, `error`, or not
+ * tested yet). The tone and the word come from the one shared lifecycle map
+ * (docs/ui/DESIGN-SYSTEM.md section 6.6): "Working", "Needs attention",
+ * "Not checked yet".
+ */
+function connectionState(status: ConnectionOut["status"] | undefined): string {
+  return status === "ok" || status === "error" ? status : "unverified";
+}
+
 export function connectionStatusTone(status: ConnectionOut["status"] | undefined): StatusTone {
-  switch (status) {
-    case "ok":
-      return "success";
-    case "error":
-      return "danger";
-    default:
-      return "neutral";
-  }
+  return lifecycleStatus(connectionState(status)).tone;
 }
 
 export function connectionStatusLabel(status: ConnectionOut["status"] | undefined): string {
-  switch (status) {
-    case "ok":
-      return "OK";
-    case "error":
-      return "Error";
-    default:
-      return "Unverified";
-  }
+  return lifecycleStatus(connectionState(status)).label;
 }
 
 export const DEPLOYMENT_TYPE_LABEL: Record<NonNullable<ConnectionOut["deployment_type"]>, string> = {
@@ -77,19 +73,14 @@ export function fleetHealth(desiredReplicas: number | undefined, instances: Work
   };
 }
 
+/** A worker instance's state (ready, starting, draining, gone) through the shared lifecycle map. */
 export function instanceStatusTone(status: WorkerInstanceOut["status"] | undefined): StatusTone {
-  switch (status) {
-    case "ready":
-      return "success";
-    case "starting":
-      return "info";
-    case "draining":
-      return "warning";
-    case "gone":
-      return "neutral";
-    default:
-      return "neutral";
-  }
+  return lifecycleStatus(status).tone;
+}
+
+/** "Ready", "Starting", "Finishing calls", "Gone"; "Unknown" when the api sends none. */
+export function instanceStatusLabel(status: WorkerInstanceOut["status"] | undefined): string {
+  return lifecycleStatus(status).label;
 }
 
 /* -------------------------------------------------------------------------- */

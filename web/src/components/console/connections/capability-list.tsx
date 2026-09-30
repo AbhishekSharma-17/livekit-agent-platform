@@ -3,14 +3,15 @@
 import { CAPABILITY_FALSE_REASON, connectionCapabilityChips } from "@/components/shared/capability-meta";
 import { DescriptionList } from "@/components/shared/description-list";
 import { Icon } from "@/components/shared/icon";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import type { ConnectionCapabilities } from "@/contracts/lkap-contracts";
 
 /**
  * The capability `DescriptionList` a connection's test result renders into
  * (UI_UX_SPEC-V2-AMENDMENTS §2.1: "reasons for false flags"). A present flag
- * gets a green chip; an absent one gets a neutral chip plus the fix sentence
- * from `CAPABILITY_FALSE_REASON`.
+ * reads "Available" in the success tone; an absent one reads "Not available"
+ * in neutral, plus the fix sentence from `CAPABILITY_FALSE_REASON`. Always a
+ * word plus a tone, never colour alone.
  */
 export function CapabilityList({ capabilities }: { capabilities: ConnectionCapabilities | undefined }) {
   const chips = connectionCapabilityChips(capabilities);
@@ -25,15 +26,15 @@ export function CapabilityList({ capabilities }: { capabilities: ConnectionCapab
           </span>
         ),
         detail: chip.present ? (
-          <StatusChip tone="success" size="sm" dot>
+          <StatusPill tone="success" size="sm">
             {chip.detail ? `${chip.detail}` : "Available"}
-          </StatusChip>
+          </StatusPill>
         ) : (
           <span className="flex flex-col gap-1">
-            <StatusChip tone="neutral" size="sm">
+            <StatusPill tone="neutral" size="sm">
               Not available
-            </StatusChip>
-            <span className="text-xs text-pretty text-muted-foreground">{CAPABILITY_FALSE_REASON[chip.key]}</span>
+            </StatusPill>
+            <span className="text-caption text-pretty text-text-secondary">{CAPABILITY_FALSE_REASON[chip.key]}</span>
           </span>
         ),
       }))}

@@ -17,11 +17,14 @@ import {
   WORKER_START_BY_MODE,
 } from "@/components/console/connections/connection-model";
 import { errorMessage } from "@/components/console/shared/error-banner";
+import { OptionCard } from "@/components/shared/choice";
 import { Field } from "@/components/shared/field";
 import { Icon } from "@/components/shared/icon";
-import { StatusChip } from "@/components/shared/status-chip";
+import { SecretInput } from "@/components/shared/password-input";
+import { Section, SectionRow } from "@/components/shared/section";
+import { StatusPill } from "@/components/shared/status-chip";
+import { lifecycleStatus } from "@/components/shared/status-map";
 import { useCreateConnection, useTestUnsavedConnection } from "@/hooks/useConnections";
-import { cn } from "@/lib/utils";
 import type {
   ConnectionCreate,
   ConnectionTestResult,
@@ -32,14 +35,19 @@ type DeploymentMode = NonNullable<ConnectionCreate["deployment_mode"]>;
 type WorkerImage = NonNullable<ConnectionCreate["worker_image"]>;
 
 const DEPLOYMENT_TYPES: { value: DeploymentType; title: string; hint: string; icon: typeof CloudIcon }[] = [
-  { value: "cloud", title: "LiveKit Cloud", hint: "A project url + key/secret from cloud.livekit.io.", icon: CloudIcon },
-  { value: "self_hosted", title: "Self-hosted", hint: "Your own `livekit-server` url + key/secret.", icon: ServerIcon },
+  { value: "cloud", title: "LiveKit Cloud", hint: "A project URL plus its key and secret from cloud.livekit.io.", icon: CloudIcon },
+  { value: "self_hosted", title: "Self-hosted", hint: "Your own LiveKit server's URL plus its key and secret.", icon: ServerIcon },
 ];
 
 const DEPLOYMENT_MODES: { value: DeploymentMode; title: string; hint: string; disabledFor?: DeploymentType }[] = [
-  { value: "external", title: "External", hint: "You run the worker yourself (dev, or your own process manager)." },
-  { value: "supervised", title: "Supervised", hint: "LKAP's supervisor starts and restarts a pool of workers for you." },
-  { value: "cloud_hosted", title: "Cloud-hosted", hint: "Deploy the worker to LiveKit Cloud with the `lk` CLI.", disabledFor: "self_hosted" },
+  { value: "external", title: "External", hint: "You run the worker yourself (for development, or your own process manager)." },
+  { value: "supervised", title: "Supervised", hint: "LKAP starts and restarts a pool of workers for you." },
+  { value: "cloud_hosted", title: "Cloud-hosted", hint: "Deploy the worker to LiveKit Cloud with the lk command-line tool.", disabledFor: "self_hosted" },
+];
+
+const WORKER_IMAGES: { value: WorkerImage; title: string; hint: string }[] = [
+  { value: "slim", title: "Slim", hint: "The core provider set plus LiveKit Inference." },
+  { value: "full", title: "Full", hint: "Every available provider (a larger image with more native dependencies)." },
 ];
 
 interface FormState {
@@ -96,6 +104,10 @@ function toCreatePayload(state: FormState): ConnectionCreate {
  * user's live default connection through the UI during a capture only
  * matters for buttons a script could accidentally trigger, and this one only
  * fires on an explicit click with real typed-in credentials.
+ *
+ * The Form archetype (docs/ui/DESIGN-SYSTEM.md section 7.4): grouped fields,
+ * optional ones marked, option cards for choices that need explaining, the
+ * secret write-only, and "Create connection" as the one primary, last.
  */
 export function ConnectionCreateForm() {
   const router = useRouter();
@@ -118,9 +130,9 @@ export function ConnectionCreateForm() {
   function validate(): boolean {
     const next: Record<string, string> = {};
     if (state.name.trim() === "") next.name = "Give the connection a name.";
-    if (state.url.trim() === "") next.url = "The LiveKit url is required.";
-    if (state.api_key.trim() === "") next.api_key = "The API key is required.";
-    if (state.api_secret.trim() === "") next.api_secret = "The API secret is required.";
+    if (state.url.trim() === "") next.url = "Enter the LiveKit URL.";
+    if (state.api_key.trim() === "") next.api_key = "Enter the API key.";
+    if (state.api_secret.trim() === "") next.api_secret = "Enter the API secret.";
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -139,7 +151,6 @@ export function ConnectionCreateForm() {
       const result = await testMutation.mutateAsync(payload);
       setTestResult(result);
       setTestedPayloadKey(payloadKey);
-      if (!result.ok) toast.error(result.message);
     } catch (error) {
       if (showAgentNameError(error)) {
         // The api checks the name before it probes: there is no probe result to show.
@@ -147,10 +158,8 @@ export function ConnectionCreateForm() {
         setTestedPayloadKey(null);
         return;
       }
-      const message = errorMessage(error);
-      setTestResult({ ok: false, message, capabilities: {} });
+      setTestResult({ ok: false, message: errorMessage(error), capabilities: {} });
       setTestedPayloadKey(payloadKey);
-      toast.error(message);
     }
   }
 
@@ -167,212 +176,194 @@ export function ConnectionCreateForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex max-w-[720px] flex-col gap-6" noValidate>
-      <fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
-        <legend className="mb-1 text-sm font-medium text-foreground">Type</legend>
-        <div role="radiogroup" aria-label="Deployment type" className="grid gap-2 sm:grid-cols-2">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-6" noValidate>
+      <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
+        <legend className="mb-1.5 text-label font-medium text-foreground">Type</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
           {DEPLOYMENT_TYPES.map((option) => (
-            <label
+            <OptionCard
               key={option.value}
-              className={cn(
-                "relative flex cursor-pointer gap-3 rounded-lg border border-border bg-card p-4",
-                "transition-colors duration-(--dur-2) hover:bg-accent",
-                "has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft",
-              )}
-            >
-              <input
-                type="radio"
-                name="deployment_type"
-                value={option.value}
-                checked={state.deployment_type === option.value}
-                onChange={() => update("deployment_type", option.value)}
-                className="sr-only"
-              />
-              <Icon as={option.icon} size="md" className="mt-0.5 shrink-0 text-muted-foreground" />
-              <span className="flex flex-col gap-0.5">
-                <span className="text-sm font-semibold text-foreground">{option.title}</span>
-                <span className="text-[0.8125rem] text-pretty text-muted-foreground">{option.hint}</span>
-              </span>
-            </label>
+              name="deployment_type"
+              value={option.value}
+              checked={state.deployment_type === option.value}
+              onChange={() => update("deployment_type", option.value)}
+              title={
+                <span className="flex items-center gap-2">
+                  <Icon as={option.icon} size="md" className="text-text-secondary" />
+                  {option.title}
+                </span>
+              }
+              description={option.hint}
+            />
           ))}
         </div>
       </fieldset>
 
-      <Field label="Name" htmlFor="conn-name" required error={errors.name}>
-        <Input
-          id="conn-name"
-          value={state.name}
-          onChange={(event) => {
-            const name = event.target.value;
-            setState((prev) => ({ ...prev, name, slug: prev.slugTouched ? prev.slug : slugify(name) }));
-          }}
-          placeholder="Production"
-        />
-      </Field>
-
-      <Field label="Slug" htmlFor="conn-slug" hint="Used in urls; letters, numbers and dashes.">
-        <Input
-          id="conn-slug"
-          value={state.slug}
-          onChange={(event) => {
-            update("slug", event.target.value);
-            update("slugTouched", true);
-          }}
-          className="font-mono text-[0.8125rem]"
-        />
-      </Field>
-
-      <Field label="URL" htmlFor="conn-url" required error={errors.url} hint="wss:// (Cloud) or ws(s):// (self-hosted).">
-        <Input
-          id="conn-url"
-          value={state.url}
-          onChange={(event) => update("url", event.target.value)}
-          placeholder="wss://my-project.livekit.cloud"
-          className="font-mono text-[0.8125rem]"
-        />
-      </Field>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="API key" htmlFor="conn-key" required error={errors.api_key}>
+      <div className="flex flex-col gap-4">
+        <Field label="Name" htmlFor="conn-name" error={errors.name}>
           <Input
-            id="conn-key"
-            value={state.api_key}
-            onChange={(event) => update("api_key", event.target.value)}
-            autoComplete="off"
-            className="font-mono text-[0.8125rem]"
+            id="conn-name"
+            value={state.name}
+            onChange={(event) => {
+              const name = event.target.value;
+              setState((prev) => ({ ...prev, name, slug: prev.slugTouched ? prev.slug : slugify(name) }));
+            }}
+            placeholder="Production"
           />
         </Field>
-        <Field label="API secret" htmlFor="conn-secret" required error={errors.api_secret}>
+
+        <Field label="Slug" htmlFor="conn-slug" optional hint="Used in links: letters, numbers and dashes.">
           <Input
-            id="conn-secret"
-            type="password"
-            value={state.api_secret}
-            onChange={(event) => update("api_secret", event.target.value)}
-            autoComplete="new-password"
-            className="font-mono text-[0.8125rem]"
+            id="conn-slug"
+            value={state.slug}
+            onChange={(event) => {
+              update("slug", event.target.value);
+              update("slugTouched", true);
+            }}
+            className="font-mono"
           />
         </Field>
+
+        <Field label="URL" htmlFor="conn-url" error={errors.url} hint="wss:// for LiveKit Cloud, ws:// or wss:// for a self-hosted server.">
+          <Input
+            id="conn-url"
+            value={state.url}
+            onChange={(event) => update("url", event.target.value)}
+            placeholder="wss://my-project.livekit.cloud"
+            className="font-mono"
+          />
+        </Field>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="API key" htmlFor="conn-key" error={errors.api_key}>
+            <Input
+              id="conn-key"
+              value={state.api_key}
+              onChange={(event) => update("api_key", event.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              className="font-mono"
+            />
+          </Field>
+          <Field label="API secret" htmlFor="conn-secret" error={errors.api_secret} hint="Stored encrypted and never shown again.">
+            <SecretInput id="conn-secret" value={state.api_secret} onChange={(event) => update("api_secret", event.target.value)} />
+          </Field>
+        </div>
+
+        <Field label="Agent name" htmlFor="conn-agent-name" optional hint={AGENT_NAME_HINT} error={errors.agent_name}>
+          <Input
+            id="conn-agent-name"
+            value={state.agent_name}
+            onChange={(event) => {
+              update("agent_name", event.target.value);
+              setErrors((prev) => {
+                const next = { ...prev };
+                delete next.agent_name;
+                return next;
+              });
+            }}
+            className="font-mono"
+          />
+        </Field>
+
+        {state.deployment_type === "cloud" ? (
+          <Field label="Use LiveKit Inference" htmlFor="conn-inference" inline hint="Lets speech, language and voice slots run with no vendor key.">
+            <Switch id="conn-inference" checked={state.use_inference} onCheckedChange={(next) => update("use_inference", next)} />
+          </Field>
+        ) : null}
       </div>
 
-      <Field label="Agent name" htmlFor="conn-agent-name" hint={AGENT_NAME_HINT} error={errors.agent_name}>
-        <Input
-          id="conn-agent-name"
-          value={state.agent_name}
-          onChange={(event) => {
-            update("agent_name", event.target.value);
-            setErrors((prev) => {
-              const next = { ...prev };
-              delete next.agent_name;
-              return next;
-            });
-          }}
-          className="font-mono text-[0.8125rem]"
-        />
-      </Field>
-
-      {state.deployment_type === "cloud" ? (
-        <Field label="Use LiveKit Inference" htmlFor="conn-inference" inline hint="Lets STT/LLM/TTS slots run with no vendor key.">
-          <Switch id="conn-inference" checked={state.use_inference} onCheckedChange={(next) => update("use_inference", next)} />
-        </Field>
-      ) : null}
-
-      <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-        <legend className="mb-1 text-sm font-medium text-foreground">Worker image</legend>
-        <div role="radiogroup" aria-label="Worker image" className="grid gap-2 sm:grid-cols-2">
-          {(["slim", "full"] as const).map((image) => (
-            <label
-              key={image}
-              className={cn(
-                "flex cursor-pointer flex-col gap-0.5 rounded-md border border-border bg-background px-3 py-2.5",
-                "has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft",
-              )}
-            >
-              <span className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="worker_image"
-                  value={image}
-                  checked={state.worker_image === image}
-                  onChange={() => update("worker_image", image)}
-                  className="sr-only"
-                />
-                <span className="text-sm font-medium capitalize text-foreground">{image}</span>
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {image === "slim" ? "The v1 provider set + Inference." : "Every available provider (larger image, more native deps)."}
-              </span>
-            </label>
+      <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
+        <legend className="mb-1.5 text-label font-medium text-foreground">Worker image</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {WORKER_IMAGES.map((image) => (
+            <OptionCard
+              key={image.value}
+              name="worker_image"
+              value={image.value}
+              checked={state.worker_image === image.value}
+              onChange={() => update("worker_image", image.value)}
+              title={image.title}
+              description={image.hint}
+            />
           ))}
         </div>
       </fieldset>
 
-      <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-        <legend className="mb-1 text-sm font-medium text-foreground">Deployment mode</legend>
-        <div role="radiogroup" aria-label="Deployment mode" className="grid gap-2 sm:grid-cols-3">
-          {DEPLOYMENT_MODES.map((mode) => {
-            const disabled = mode.disabledFor === state.deployment_type;
-            return (
-              <label
-                key={mode.value}
-                className={cn(
-                  "flex flex-col gap-0.5 rounded-md border border-border bg-background px-3 py-2.5",
-                  disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft",
-                )}
-              >
-                <input
-                  type="radio"
-                  name="deployment_mode"
-                  value={mode.value}
-                  checked={state.deployment_mode === mode.value}
-                  disabled={disabled}
-                  onChange={() => update("deployment_mode", mode.value)}
-                  className="sr-only"
-                />
-                <span className="text-sm font-medium text-foreground">{mode.title}</span>
-                <span className="text-xs text-pretty text-muted-foreground">{mode.hint}</span>
-              </label>
-            );
-          })}
+      <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
+        <legend className="mb-1.5 text-label font-medium text-foreground">Deployment mode</legend>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {DEPLOYMENT_MODES.map((mode) => (
+            <OptionCard
+              key={mode.value}
+              name="deployment_mode"
+              value={mode.value}
+              checked={state.deployment_mode === mode.value}
+              disabled={mode.disabledFor === state.deployment_type}
+              onChange={() => update("deployment_mode", mode.value)}
+              title={mode.title}
+              description={mode.hint}
+            />
+          ))}
         </div>
-        <p className="text-[0.8125rem] text-pretty text-muted-foreground" data-slot="worker-note">
+        <p className="text-label text-pretty text-text-secondary" data-slot="worker-note">
           {WORKER_NEEDED_NOTE} {WORKER_START_BY_MODE[state.deployment_mode]}
         </p>
       </fieldset>
 
-      <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Test connection</h2>
-            <p className="text-xs text-muted-foreground">Runs before Save unlocks — nothing is stored yet.</p>
-          </div>
-          <Button type="button" variant="outline" onClick={() => void runTest()} disabled={testMutation.isPending}>
-            {testMutation.isPending ? "Testing…" : "Test connection"}
+      <Section
+        id="connection-test"
+        title="Test connection"
+        description="Runs before Create unlocks. Nothing is stored yet."
+        aside={
+          <Button
+            type="button"
+            onClick={() => void runTest()}
+            busy={testMutation.isPending}
+            busyLabel="Testing…"
+          >
+            Test connection
+          </Button>
+        }
+      >
+        {testResult ? (
+          <SectionRow className="flex flex-col gap-3" role="status" aria-live="polite">
+            <StatusPill tone={lifecycleStatus(testResult.ok ? "ok" : "failed").tone}>
+              {testResult.ok ? "Connection OK" : "Connection failed"}
+            </StatusPill>
+            <p className="text-label text-pretty text-text-secondary">{testResult.message}</p>
+            {testResult.ok ? (
+              <CapabilityList capabilities={testResult.capabilities} />
+            ) : (
+              <p className="text-label text-pretty text-text-secondary">Check the URL, key and secret, then test again.</p>
+            )}
+          </SectionRow>
+        ) : (
+          <SectionRow className="text-label text-text-secondary">Not tested yet.</SectionRow>
+        )}
+      </Section>
+
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button type="button" onClick={() => router.push("/console/connections")}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={!testPassed}
+            busy={createMutation.isPending}
+            busyLabel="Creating…"
+          >
+            Create connection
           </Button>
         </div>
-        {testResult ? (
-          <div className="flex flex-col gap-3 border-t border-border pt-3">
-            <StatusChip tone={testResult.ok ? "success" : "danger"} dot>
-              {testResult.ok ? "Connection OK" : "Connection failed"}
-            </StatusChip>
-            <p className="text-[0.8125rem] text-pretty text-muted-foreground">{testResult.message}</p>
-            {testResult.ok ? <CapabilityList capabilities={testResult.capabilities} /> : null}
-          </div>
+        {!testPassed && testResult ? (
+          <p className="text-right text-caption text-text-secondary">
+            {testedPayloadKey !== payloadKey ? "Details changed since the last test — test again to enable Save." : "Save unlocks once the test passes."}
+          </p>
         ) : null}
       </div>
-
-      <div className="flex items-center justify-end gap-2">
-        <Button type="button" variant="outline" onClick={() => router.push("/console/connections")}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={!testPassed || createMutation.isPending}>
-          {createMutation.isPending ? "Creating…" : "Create connection"}
-        </Button>
-      </div>
-      {!testPassed && testResult ? (
-        <p className="text-right text-xs text-muted-foreground">
-          {testedPayloadKey !== payloadKey ? "Details changed since the last test — test again to enable Save." : "Save unlocks once the test passes."}
-        </p>
-      ) : null}
     </form>
   );
 }

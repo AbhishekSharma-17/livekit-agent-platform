@@ -333,9 +333,14 @@ export function SessionRoom({
       const key = DEVICE_KEY[source] ?? "microphone";
       setDeviceErrors((prev) => ({ ...prev, [key]: true }));
       // Never the browser's own error text: a plain next step instead.
-      toast.error(DEVICE_ERROR_MESSAGE[key], {
-        description: deviceErrorHint(key, deviceError),
-      });
+      const toastOptions = { description: deviceErrorHint(key, deviceError) };
+      // Closing the screen picker is the caller's own choice, not a fault, so
+      // it doesn't get an error toast that stays until dismissed.
+      if (key === "screenShare" && deviceError.name === "NotAllowedError") {
+        toast.info(DEVICE_ERROR_MESSAGE[key], toastOptions);
+      } else {
+        toast.error(DEVICE_ERROR_MESSAGE[key], toastOptions);
+      }
     },
     [],
   );

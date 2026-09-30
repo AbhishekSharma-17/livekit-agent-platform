@@ -50,6 +50,19 @@ pairs across both themes.
 | Dark | `--destructive-solid` | `64% .18 27` | `70% .18 27` | legacy `text-destructive` on its resting `bg-destructive/20` tint over card (4.5:1) | 3.87 | 4.63 |
 | Dark | `--destructive-hover` | `59% .18 27` | `65% .18 27` | foreground on the hover fill (4.5:1); keeps the spec's 5-point step below the solid | 4.49 (white) | 5.47 |
 
+The two dark destructive rows are **transitional**. The spec's own values fail only a legacy style: the
+vendored destructive button, badge and menu item still put `text-destructive` on a `bg-destructive/20`
+tint. Once UI-2 moves those to `--destructive-text` on card, and the verification package drops that
+guard pair, both tokens can return to the spec's 64% and 59%. The near-black foreground reads 5.25:1 on
+64%.
+
+**Icon rule.** The spec's literal rule is `.lucide { width:16px; height:16px; stroke-width:1.75px;
+flex:none }`. The shipped rule keeps the stroke width and `flex: none` for every icon, but it leaves
+the default size off icons drawn by the `Icon` wrapper (`data-slot="icon"`). That wrapper still sizes
+through width and height attributes, and CSS would otherwise override them. UI-2 collapses this to the
+literal rule when `shared/icon.tsx` moves to `size-*` classes. `tests/design-tokens.test.ts` asserts
+the current split form, so UI-2 updates it at the same time.
+
 ## Legacy names
 
 The old names are `var()` aliases of the spec tokens in the shared block, so existing screens keep

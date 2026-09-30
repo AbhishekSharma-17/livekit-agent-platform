@@ -1,0 +1,127 @@
+# Design lint allowlist (scripts/design-lint.mjs, docs/ui/DESIGN-SYSTEM.md section 11).
+#
+#   exempt <rule|*> <path-prefix>   permanent: leave-alone code (docs/ui/AUDIT.md section 8)
+#   allow  <rule> <count> <path>    ratchet: today's violations, per rule and file
+#
+# The ratchet only goes down. A file may not exceed its count, and a file that
+# improves must lower its line (`pnpm lint:design --shrink` rewrites the counts;
+# it never raises one or adds a file). Each screen package takes its own files
+# to zero. One entry per line keeps parallel packages from colliding.
+
+# Leave-alone code
+exempt * src/panels/                     caller-facing panel content (panels owner)
+exempt * src/components/agents-ui/       vendored LiveKit Agents UI
+exempt * src/contracts/                  generated contract types
+exempt colour-literal src/lib/browser-colors.ts   theme-color / manifest literals, test-pinned to the tokens
+
+# UI-3 app shell (3 in 1 files)
+allow opacity-colour   1  src/components/ui/sidebar.tsx
+allow raw-shadow       2  src/components/ui/sidebar.tsx
+
+# UI-2 primitives and styleguide (113 in 27 files)
+allow opacity-colour   2  src/components/console/shared/confirm-dialog.tsx
+allow native-select    2  src/components/preview/preview-shell.tsx
+allow stroke-width     2  src/components/shared/icon.tsx
+allow opacity-colour   1  src/components/shared/responsive-table.tsx
+allow colour-literal   1  src/components/shared/vendor-mark.tsx   # keep: per-vendor computed tint (AUDIT C6)
+allow opacity-colour   1  src/components/ui/alert.tsx
+allow opacity-colour  11  src/components/ui/badge.tsx
+allow colour-literal   4  src/components/ui/bubble.tsx
+allow opacity-colour   8  src/components/ui/bubble.tsx
+allow opacity-colour  14  src/components/ui/button.tsx
+allow opacity-colour   2  src/components/ui/card.tsx
+allow opacity-colour   5  src/components/ui/checkbox.tsx
+allow opacity-colour   2  src/components/ui/command.tsx
+allow opacity-colour   2  src/components/ui/dialog.tsx
+allow opacity-colour   4  src/components/ui/dropdown-menu.tsx
+allow opacity-colour   6  src/components/ui/input-group.tsx
+allow opacity-colour   7  src/components/ui/input.tsx
+allow opacity-colour   2  src/components/ui/kbd.tsx
+allow opacity-colour   1  src/components/ui/popover.tsx
+allow opacity-colour   5  src/components/ui/radio-group.tsx
+allow opacity-colour   1  src/components/ui/scroll-area.tsx
+allow opacity-colour   8  src/components/ui/select.tsx
+allow opacity-colour   1  src/components/ui/slider.tsx
+allow opacity-colour   5  src/components/ui/switch.tsx
+allow opacity-colour   3  src/components/ui/table.tsx
+allow opacity-colour   3  src/components/ui/tabs.tsx
+allow opacity-colour   7  src/components/ui/textarea.tsx
+allow opacity-colour   3  src/components/ui/toggle.tsx
+
+# S1 agents (45 in 23 files)
+allow opacity-colour   4  src/components/console/agents/agents-table.tsx
+allow opacity-colour   4  src/components/console/agents/create/create-agent-dialog.tsx
+allow opacity-colour   1  src/components/console/agents/create/template-preview.tsx
+allow opacity-colour   6  src/components/console/agents/create/template-tile.tsx
+allow opacity-colour   1  src/components/console/agents/editor/cost-estimate-dialog.tsx
+allow opacity-colour   2  src/components/console/agents/editor/editor-shell.tsx
+allow opacity-colour   2  src/components/console/agents/editor/publish-popover.tsx
+allow opacity-colour   2  src/components/console/agents/editor/sections/conversation-section.tsx
+allow opacity-colour   1  src/components/console/agents/editor/sections/guardrails-section.tsx
+allow opacity-colour   1  src/components/console/agents/editor/sections/memory-section.tsx
+allow opacity-colour   1  src/components/console/agents/editor/sections/privacy-section.tsx
+allow opacity-colour   3  src/components/console/agents/editor/summary-rail.tsx
+allow sparkle-icon     2  src/components/console/agents/editor/summary-rail.tsx
+allow opacity-colour   2  src/components/console/agents/editor/unsaved-guard.tsx
+allow opacity-colour   1  src/components/console/agents/guardrails/pattern-tester.tsx
+allow opacity-colour   1  src/components/console/agents/guardrails/rule-dialog.tsx
+allow opacity-colour   1  src/components/console/agents/providers-section/pipeline-summary-line.tsx
+allow opacity-colour   1  src/components/console/agents/providers-section/providers-section.tsx
+allow stroke-width     1  src/components/console/agents/providers-section/providers-section.tsx
+allow stroke-width     1  src/components/console/agents/tabs/providers-tab.tsx
+allow opacity-colour   3  src/components/console/agents/tabs/tools-tab.tsx
+allow opacity-colour   1  src/components/console/agents/test-chat/add-to-website-dialog.tsx
+allow opacity-colour   1  src/components/console/agents/tests/run-table.tsx
+allow opacity-colour   1  src/components/console/flow/flow-canvas.tsx
+allow opacity-colour   1  src/components/console/flow/version-history.tsx
+
+# S2 connect (17 in 9 files)
+allow opacity-colour   2  src/components/console/connections/connections-table.tsx
+allow opacity-colour   1  src/components/console/connections/deploy-panel.tsx
+allow opacity-colour   1  src/components/console/connections/worker-status-notice.tsx
+allow opacity-colour   4  src/components/console/registry/credential-list.tsx
+allow opacity-colour   1  src/components/console/registry/model-capabilities.tsx
+allow opacity-colour   2  src/components/console/registry/model-combobox.tsx
+allow opacity-colour   4  src/components/console/registry/model-test-panel.tsx
+allow opacity-colour   1  src/components/console/registry/provider-slot-card.tsx
+allow opacity-colour   1  src/components/console/registry/registry-form.tsx
+
+# S3 telephony (5 in 2 files)
+allow native-select    1  src/components/console/telephony/native-select.tsx   # S3 deletes this file
+allow opacity-colour   2  src/components/console/telephony/native-select.tsx
+allow opacity-colour   2  src/components/console/telephony/numbers-section.tsx
+
+# S4 build library (21 in 13 files)
+allow opacity-colour   1  src/components/console/datasets/upload-dataset-dialog.tsx
+allow opacity-colour   1  src/components/console/knowledge/create-kb-dialog.tsx
+allow opacity-colour   4  src/components/console/knowledge/kb-documents.tsx
+allow opacity-colour   2  src/components/console/knowledge/kb-list.tsx
+allow opacity-colour   4  src/components/console/knowledge/kb-search-panel.tsx
+allow opacity-colour   1  src/components/console/tools/apps/connect-app-dialog.tsx
+allow opacity-colour   1  src/components/console/tools/dry-run-dialog.tsx
+allow opacity-colour   1  src/components/console/tools/kits/add-kit-dialog.tsx
+allow opacity-colour   1  src/components/console/tools/mcp-oauth-status.tsx
+allow opacity-colour   2  src/components/console/tools/mcp-tool-editor-dialog.tsx
+allow opacity-colour   1  src/components/console/tools/provider-tool-editor-dialog.tsx
+allow opacity-colour   1  src/components/console/tools/readback-field.tsx
+allow opacity-colour   1  src/components/console/tools/requires-vars-field.tsx
+
+# S5 observe (3 in 3 files)
+allow opacity-colour   1  src/components/console/sessions-v2/cost-tab.tsx
+allow opacity-colour   1  src/components/console/sessions-v2/memory-tab.tsx
+allow opacity-colour   1  src/components/console/sessions/details-disclosure.tsx
+
+# S6 settings (16 in 8 files)
+allow opacity-colour   1  src/components/console/settings/api-keys-tab.tsx
+allow opacity-colour   2  src/components/console/settings/compliance-tab.tsx
+allow opacity-colour   7  src/components/console/settings/connect-agent-dialog.tsx
+allow opacity-colour   2  src/components/console/settings/danger-tab.tsx
+allow opacity-colour   1  src/components/console/settings/knowledge-connection-dialog.tsx
+allow opacity-colour   1  src/components/console/settings/team-tab.tsx
+allow opacity-colour   1  src/components/console/settings/webhooks-tab.tsx
+allow opacity-colour   1  src/components/console/settings/workspace-prices-dialog.tsx
+
+# S7 caller-facing (6 in 2 files)
+allow opacity-colour   2  src/components/session/session-controls.tsx
+allow opacity-colour   3  src/components/session/stage-view.tsx
+allow palette-class    1  src/components/session/stage-view.tsx   # keep: bg-black video letterbox (AUDIT S7)

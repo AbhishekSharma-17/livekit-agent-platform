@@ -113,7 +113,7 @@ export function InstructionsTab({ agent }: { agent: AgentOut }) {
             {pack?.default_instructions ? (
               <ConfirmDialog
                 trigger={
-                  <Button type="button" variant="outline" size="sm">
+                  <Button type="button" variant="secondary" size="sm">
                     Reset to pack default
                   </Button>
                 }

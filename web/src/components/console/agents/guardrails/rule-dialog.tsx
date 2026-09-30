@@ -265,10 +265,10 @@ export function RuleDialog({ open, onOpenChange, initial, otherNames, stageLabel
           ) : null}
         </DialogBody>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleSave} disabled={!canSave}>
+          <Button variant="primary" type="button" onClick={handleSave} disabled={!canSave}>
             {initial ? "Save rule" : "Add rule"}
           </Button>
         </DialogFooter>

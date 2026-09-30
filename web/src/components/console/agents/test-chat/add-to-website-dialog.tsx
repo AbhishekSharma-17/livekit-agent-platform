@@ -52,7 +52,7 @@ function useOpenAgent(): string | null {
 /** Header action button: opens the snippet dialog for `agent`. */
 export function AddToWebsiteButton({ agent }: { agent: AgentOut }) {
   return (
-    <Button type="button" variant="outline" onClick={() => setOpenAgent(agent.id)}>
+    <Button type="button" variant="secondary" onClick={() => setOpenAgent(agent.id)}>
       <Icon as={GlobeIcon} size="sm" />
       Add to website
     </Button>

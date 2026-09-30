@@ -104,7 +104,7 @@ export function PatternTester({ pattern, ignoreCase }: { pattern: string; ignore
             }}
             placeholder="Try a sample line…"
           />
-          <Button type="button" variant="outline" onClick={runTest} disabled={pattern.trim() === ""}>
+          <Button type="button" variant="secondary" onClick={runTest} disabled={pattern.trim() === ""}>
             Test
           </Button>
         </div>

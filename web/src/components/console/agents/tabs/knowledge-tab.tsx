@@ -25,7 +25,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useKbs, useKnowledgeConnections } from "@/components/console/lib/api-hooks";
 import { EmptyState } from "@/components/console/shared/empty-state";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { embedderLabel } from "@/components/console/knowledge/embedder-label";
 import { RERANKER_CONNECTION_KINDS } from "@/components/console/settings/knowledge-connection-dialog";
 import { DetailsDisclosure } from "@/components/console/sessions/details-disclosure";
@@ -125,7 +125,7 @@ export function KnowledgeTab() {
           </SectionRow>
         ) : kbsQuery.isError ? (
           <SectionRow>
-            <ErrorBanner message={errorMessage(kbsQuery.error)} onRetry={() => kbsQuery.refetch()} />
+            <ErrorBanner error={kbsQuery.error} context={{ action: "load knowledge bases" }} onRetry={() => kbsQuery.refetch()} />
           </SectionRow>
         ) : allKbs.length === 0 ? (
           <SectionRow>

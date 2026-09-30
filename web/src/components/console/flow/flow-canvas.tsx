@@ -524,7 +524,7 @@ function FlowCanvasInner({ agent }: FlowCanvasProps) {
           <Panel position="top-left" className="flex flex-wrap items-center gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" size="sm" variant="outline">
+                <Button type="button" size="sm" variant="secondary">
                   <Icon as={PlusIcon} />
                   Add node
                 </Button>
@@ -544,11 +544,11 @@ function FlowCanvasInner({ agent }: FlowCanvasProps) {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button type="button" size="sm" variant="outline" onClick={tidy}>
+            <Button type="button" size="sm" variant="secondary" onClick={tidy}>
               <Icon as={LayoutGridIcon} />
               Tidy layout
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => setVariablesOpen(true)}>
+            <Button type="button" size="sm" variant="secondary" onClick={() => setVariablesOpen(true)}>
               <Icon as={BracesIcon} />
               Variables ({draft.variables.length})
             </Button>
@@ -633,7 +633,7 @@ function IssuesButton({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button type="button" size="sm" variant="outline" aria-label={`Flow issues: ${label}`}>
+        <Button type="button" size="sm" variant="secondary" aria-label={`Flow issues: ${label}`}>
           {errorCount ? (
             <Icon as={CircleAlertIcon} className="text-destructive-text" />
           ) : (

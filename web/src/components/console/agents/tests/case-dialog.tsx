@@ -231,7 +231,7 @@ export function CaseDialog({ open, onOpenChange, initial, otherIds, onSave }: Ca
               </div>
             ))}
             {draft.expectations.length < 20 ? (
-              <Button type="button" variant="outline" size="sm" className="self-start" onClick={addExpectation}>
+              <Button type="button" variant="secondary" size="sm" className="self-start" onClick={addExpectation}>
                 <Icon as={PlusIcon} size="sm" /> Add expectation
               </Button>
             ) : null}
@@ -266,7 +266,7 @@ export function CaseDialog({ open, onOpenChange, initial, otherIds, onSave }: Ca
               </div>
             ))}
             {mockErrors.some(Boolean) ? <p className="text-label text-destructive-text">Not a valid tool name.</p> : null}
-            <Button type="button" variant="outline" size="sm" className="self-start" onClick={addMockRow}>
+            <Button type="button" variant="secondary" size="sm" className="self-start" onClick={addMockRow}>
               <Icon as={PlusIcon} size="sm" /> Add a mocked tool
             </Button>
           </fieldset>
@@ -288,10 +288,10 @@ export function CaseDialog({ open, onOpenChange, initial, otherIds, onSave }: Ca
           </Field>
         </DialogBody>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleSave}>
+          <Button variant="primary" type="button" onClick={handleSave}>
             {initial ? "Save case" : "Add case"}
           </Button>
         </DialogFooter>

@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingRow } from "@/components/shared/loading-state";
 import * as React from "react";
 import { ChevronRightIcon } from "lucide-react";
 
@@ -81,10 +82,10 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
           <DialogBody className="flex flex-col gap-6">
             <section aria-label="Estimated cost" className="flex flex-col gap-1 rounded-lg border border-border bg-muted p-4">
               {isLoading && !estimate ? (
-                <p className="text-sm text-text-secondary">Estimating…</p>
+                <LoadingRow label="Estimating…" className="py-0" />
               ) : perMinute ? (
                 <>
-                  <p className="text-lg font-semibold text-foreground">
+                  <p className="text-stat font-semibold tracking-[-0.02em] text-foreground tabular-nums">
                     {bandText(
                       formatUsd(perMinute.low) ?? "—",
                       formatUsd(perMinute.mid) ?? "—",
@@ -92,7 +93,7 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
                     )}
                   </p>
                   {perSession ? (
-                    <p className="text-sm text-text-secondary">
+                    <p className="text-caption text-text-secondary tabular-nums">
                       ≈ {formatUsd(perSession.mid) ?? "—"} for a {estimate?.session_minutes ?? "—"}-minute call · estimate
                     </p>
                   ) : null}
@@ -196,7 +197,7 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
             </p>
           </DialogBody>
           <DialogFooter>
-            <Button type="button" onClick={() => onOpenChange(false)}>
+            <Button variant="primary" type="button" onClick={() => onOpenChange(false)}>
               Close
             </Button>
           </DialogFooter>

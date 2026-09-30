@@ -24,7 +24,7 @@ import {
   LinkIcon,
   NotebookPenIcon,
   PanelsTopLeftIcon,
-  PencilLineIcon,
+  BrushIcon,
   SignatureIcon,
   ChartColumnIcon,
   TimerIcon,
@@ -125,7 +125,7 @@ function PanelPresets({ panel, onChange }: { panel: PanelLayoutForm; onChange: (
           <Button
             key={preset.id}
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={() => (panel.blocks.length > 0 ? setPending(preset) : apply(preset))}
           >
@@ -143,10 +143,10 @@ function PanelPresets({ panel, onChange }: { panel: PanelLayoutForm; onChange: (
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setPending(null)}>
+            <Button type="button" variant="secondary" onClick={() => setPending(null)}>
               Cancel
             </Button>
-            <Button type="button" onClick={() => pending && apply(pending)}>
+            <Button variant="primary" type="button" onClick={() => pending && apply(pending)}>
               Replace blocks
             </Button>
           </DialogFooter>
@@ -182,7 +182,7 @@ export const BLOCK_ICONS: Record<BlockType, LucideIcon> = {
   cards: GalleryHorizontalIcon,
   notebook: NotebookPenIcon,
   layout: PanelsTopLeftIcon,
-  canvas: PencilLineIcon,
+  canvas: BrushIcon,
   signature: SignatureIcon,
   chart: ChartColumnIcon,
   timer: TimerIcon,
@@ -320,7 +320,7 @@ function AddBlockPalette({ onAdd }: { onAdd: (type: BlockType) => void }) {
     <div className="flex flex-col gap-3">
       <Button
         type="button"
-        variant="outline"
+        variant="secondary"
         size="sm"
         className="self-start"
         aria-expanded={open}

@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Section, SectionRow } from "@/components/shared/section";
 import { EmptyState } from "@/components/console/shared/empty-state";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { StatusChip } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { useAppsStatus, useToolProviderActions, useToolProviderConnections, useTools } from "@/components/console/lib/api-hooks";
@@ -276,7 +276,7 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
     >
       {statusQuery.isError ? (
         <SectionRow>
-          <ErrorBanner message={errorMessage(statusQuery.error)} onRetry={() => statusQuery.refetch()} />
+          <ErrorBanner error={statusQuery.error} context={{ action: "load connected apps" }} onRetry={() => statusQuery.refetch()} />
         </SectionRow>
       ) : showOnboarding ? (
         <SectionRow>
@@ -285,7 +285,7 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
             title="Apps aren't set up yet"
             description="Turn on Apps in Tools → Apps, then come back to give this agent some actions."
             action={
-              <Button asChild variant="outline" size="sm">
+              <Button asChild variant="secondary" size="sm">
                 <Link href="/console/tools?tab=apps">Go to Apps</Link>
               </Button>
             }
@@ -348,7 +348,7 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
                   title="No apps connected yet"
                   description="Connect one in Tools → Apps."
                   action={
-                    <Button asChild variant="outline" size="sm">
+                    <Button asChild variant="secondary" size="sm">
                       <Link href="/console/tools?tab=apps">Go to Apps</Link>
                     </Button>
                   }
@@ -468,7 +468,7 @@ function AppRow({
             )}
           </div>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={onOpenActions}>
+        <Button type="button" variant="secondary" size="sm" onClick={onOpenActions}>
           Actions
         </Button>
       </div>
@@ -617,7 +617,13 @@ function AppActionsList({
     return <p className="text-label text-text-secondary">Loading {toolkitName}&rsquo;s actions…</p>;
   }
   if (actionsQuery.isError) {
-    return <ErrorBanner message={`Couldn't load ${toolkitName}'s actions — ${errorMessage(actionsQuery.error)}`} onRetry={() => actionsQuery.refetch()} />;
+    return (
+      <ErrorBanner
+        error={actionsQuery.error}
+        context={{ action: `load ${toolkitName}'s actions` }}
+        onRetry={() => actionsQuery.refetch()}
+      />
+    );
   }
   if (items.length === 0) return null;
 

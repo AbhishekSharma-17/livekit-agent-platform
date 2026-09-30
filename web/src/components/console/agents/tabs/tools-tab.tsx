@@ -22,12 +22,13 @@ import {
 import { usePacks, useProviders, useTools } from "@/components/console/lib/api-hooks";
 import { BUILTIN_TOOLS, type BuiltinToolInfo } from "@/components/console/lib/constants";
 import { EmptyState } from "@/components/console/shared/empty-state";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { BuiltinExecutionDialog } from "@/components/console/agents/tabs/builtin-execution-dialog";
 import { ConnectedAppsCard } from "@/components/console/agents/tabs/connected-apps-card";
 import { useSectionIssues } from "@/components/console/agents/editor/editor-context";
 import { displayMessage } from "@/components/console/agents/editor/validation-map";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { useWriteAccess } from "@/components/console/lib/roles";
+import { ReadOnlyNote } from "@/components/shared/read-only-note";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
 import { ProviderSlotCard } from "@/components/console/registry/provider-slot-card";
 import { DatasetToolEditorDialog } from "@/components/console/tools/dataset-tool-editor-dialog";
@@ -360,7 +361,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
               void ownToolsQuery.refetch();
             }}
             trigger={
-              <Button type="button" variant="outline" size="sm">
+              <Button type="button" variant="secondary" size="sm">
                 <PlusIcon className="size-3.5" /> Add lookup tool
               </Button>
             }
@@ -369,7 +370,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
       >
         <SectionRow>
           {ownToolsQuery.isError ? (
-            <ErrorBanner message={errorMessage(ownToolsQuery.error)} onRetry={() => ownToolsQuery.refetch()} />
+            <ErrorBanner error={ownToolsQuery.error} context={{ action: "load this agent's tools" }} onRetry={() => ownToolsQuery.refetch()} />
           ) : ownToolsQuery.isLoading ? (
             <Skeleton className="h-10 w-full" />
           ) : datasetTools.length === 0 ? (
@@ -414,7 +415,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
                 void ownToolsQuery.refetch();
               }}
               trigger={
-                <Button type="button" variant="outline" size="sm">
+                <Button type="button" variant="secondary" size="sm">
                   <PlusIcon className="size-3.5" /> From a template
                 </Button>
               }
@@ -427,7 +428,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
                 void ownToolsQuery.refetch();
               }}
               trigger={
-                <Button type="button" variant="outline" size="sm">
+                <Button type="button" variant="secondary" size="sm">
                   <PlusIcon className="size-3.5" /> Add HTTP tool
                 </Button>
               }
@@ -437,7 +438,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
       >
         <SectionRow>
           {ownToolsQuery.isError ? (
-            <ErrorBanner message={errorMessage(ownToolsQuery.error)} onRetry={() => ownToolsQuery.refetch()} />
+            <ErrorBanner error={ownToolsQuery.error} context={{ action: "load this agent's tools" }} onRetry={() => ownToolsQuery.refetch()} />
           ) : ownToolsQuery.isLoading ? (
             <Skeleton className="h-10 w-full" />
           ) : httpTools.length === 0 ? (
@@ -480,7 +481,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
               void ownToolsQuery.refetch();
             }}
             trigger={
-              <Button type="button" variant="outline" size="sm">
+              <Button type="button" variant="secondary" size="sm">
                 <PlusIcon className="size-3.5" /> Add MCP server
               </Button>
             }
@@ -532,7 +533,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
             </Select>
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               disabled={sharedToAttach === ""}
               onClick={() => {
                 setAttached(sharedToAttach, true);
@@ -676,7 +677,7 @@ function AllowedHostsEditor({
             aria-invalid={shownError ? true : undefined}
             data-issue-path="tools.fetch_url_allowed_hosts"
           />
-          <Button type="button" variant="outline" onClick={add} disabled={draft.trim() === ""}>
+          <Button type="button" variant="secondary" onClick={add} disabled={draft.trim() === ""}>
             Add
           </Button>
         </div>
@@ -755,18 +756,24 @@ function NotifyTeamCard({
       {enabled && value ? (
         <div className="flex flex-col gap-4 border-t border-border pt-4">
           {secretBagSpec ? (
-            <div
-              className={canBindCredential ? undefined : "pointer-events-none opacity-50"}
-              aria-disabled={!canBindCredential}
-              title={canBindCredential ? undefined : writeAccessReason("admin")}
-              data-issue-path="tools.notify_team.credential_id"
-            >
-              <CredentialPicker
-                spec={secretBagSpec}
-                value={value.credential_id || null}
-                onChange={(id) => onChange({ ...value, credential_id: id ?? "" })}
-                label="Team webhook key"
-              />
+            <div data-issue-path="tools.notify_team.credential_id">
+              {canBindCredential ? (
+                <CredentialPicker
+                  spec={secretBagSpec}
+                  value={value.credential_id || null}
+                  onChange={(id) => onChange({ ...value, credential_id: id ?? "" })}
+                  label="Team webhook key"
+                />
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-label font-medium text-foreground">Team webhook key</p>
+                  <ReadOnlyNote variant="block">
+                    {value.credential_id
+                      ? "A key is chosen. Ask an admin to change it."
+                      : "Ask an admin to choose the key this webhook uses."}
+                  </ReadOnlyNote>
+                </div>
+              )}
             </div>
           ) : null}
           <Field

@@ -21,7 +21,7 @@ import { ProviderSlotCard, type SlotCostEstimate } from "@/components/console/re
 import { isKnownTextOnlyLlm, type ProviderKind } from "@/components/console/registry/provider-meta";
 import { PART_JOBS } from "@/components/console/registry/slot-jobs";
 import { WorkspacePricesDialog, type WorkspacePricePrefill } from "@/components/console/settings/workspace-prices-dialog";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { cn } from "@/lib/utils";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import type { EstimateLine, ProviderSpec } from "@/contracts/lkap-contracts";
@@ -125,7 +125,7 @@ export function ProvidersTab() {
   }
 
   if (isError) {
-    return <ErrorBanner message={`Couldn't load the provider list — ${errorMessage(error)}`} onRetry={() => refetch()} />;
+    return <ErrorBanner error={error} context={{ action: "load the provider list" }} onRetry={() => refetch()} />;
   }
 
   const providers: ProviderSpec[] = data?.providers ?? [];
@@ -273,7 +273,7 @@ export function ProvidersTab() {
               <Button
                 key={key}
                 type="button"
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => {
                   setAdded((prev) => new Set(prev).add(key));

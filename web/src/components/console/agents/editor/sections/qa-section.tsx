@@ -84,7 +84,7 @@ function OptionsEditor({ index }: { index: number }) {
             ))}
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
               className="self-start"
               onClick={() => field.onChange([...options, ""])}

@@ -291,10 +291,10 @@ export function BuiltinExecutionDialog({
           </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit">Save</Button>
+            <Button variant="primary" type="submit">Save</Button>
           </DialogFooter>
         </form>
       </DialogContent>

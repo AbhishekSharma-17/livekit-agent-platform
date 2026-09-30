@@ -91,7 +91,7 @@ export function ModeSwitchChip({ agent }: { agent: AgentOut }) {
     <>
       <Button
         type="button"
-        variant="outline"
+        variant="secondary"
         size="xs"
         data-slot="mode-chip"
         aria-haspopup="dialog"
@@ -115,10 +115,10 @@ export function ModeSwitchChip({ agent }: { agent: AgentOut }) {
           </DialogHeader>
           <p className="text-sm text-text-secondary">Nothing changes until you save.</p>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" onClick={confirm}>
+            <Button variant="primary" type="button" onClick={confirm}>
               {toFlow ? "Use a flow" : "Use a prompt"}
             </Button>
           </DialogFooter>

@@ -41,7 +41,7 @@ import {
 } from "@/components/console/registry/provider-meta";
 import type { SlotConstraints } from "@/components/console/registry/provider-slot-editor";
 import { useWriteAccess } from "@/components/console/lib/roles";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useConnections } from "@/hooks/useConnections";
 import { cn } from "@/lib/utils";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
@@ -179,7 +179,7 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
     return <ProvidersSkeleton />;
   }
   if (isError) {
-    return <ErrorBanner message={`Couldn't load the provider list — ${errorMessage(error)}`} onRetry={() => refetch()} />;
+    return <ErrorBanner error={error} context={{ action: "load the provider list" }} onRetry={() => refetch()} />;
   }
 
   const providers: ProviderOut[] = data?.providers ?? [];
@@ -372,7 +372,7 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
               <Button
                 key={key}
                 type="button"
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => {
                   setAdded((prev) => new Set(prev).add(key));

@@ -208,7 +208,7 @@ export function OriginsEditor({
             aria-describedby={describedBy(id, Boolean(shownError))}
             data-issue-path="allowed_origins"
           />
-          <Button type="button" variant="outline" onClick={add} disabled={draft.trim() === ""}>
+          <Button type="button" variant="secondary" onClick={add} disabled={draft.trim() === ""}>
             Add
           </Button>
         </div>

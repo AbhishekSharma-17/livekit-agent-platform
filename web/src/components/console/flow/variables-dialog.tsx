@@ -174,7 +174,7 @@ export function VariablesDialog({
         <DialogFooter className="sm:justify-between">
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             onClick={() =>
               setRows((current) => [
                 ...current,
@@ -186,10 +186,10 @@ export function VariablesDialog({
             Add variable
           </Button>
           <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button
+            <Button variant="primary"
               type="button"
               disabled={invalid}
               onClick={() => {

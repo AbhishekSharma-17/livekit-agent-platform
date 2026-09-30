@@ -134,7 +134,7 @@ function ListEditor({
       <Button
         id={`${idBase}-add-row`}
         type="button"
-        variant="outline"
+        variant="secondary"
         size="sm"
         className="self-start"
         onClick={() => onChange([...value, blank()])}
@@ -210,7 +210,7 @@ function ColumnsEditor({
       <Button
         id={`${idBase}-add-column`}
         type="button"
-        variant="outline"
+        variant="secondary"
         size="sm"
         className="self-start"
         onClick={() => onChange([...value, { key: `col_${value.length + 1}`, label: `Column ${value.length + 1}`, type: "string" }])}
@@ -326,7 +326,7 @@ function HostsEditor({
       <Button
         id={`${idBase}-add-site`}
         type="button"
-        variant="outline"
+        variant="secondary"
         size="sm"
         className="self-start"
         onClick={() => onChange([...value, ""])}
@@ -433,7 +433,7 @@ function NotebookSectionsEditor({
       <Button
         id={`${idBase}-add-section`}
         type="button"
-        variant="outline"
+        variant="secondary"
         size="sm"
         className="self-start"
         onClick={() => onChange([...value, { id: `section_${value.length + 1}`, title: "", kind: "text" }])}
@@ -511,7 +511,7 @@ function LayoutChildrenEditor({
       <Button
         id={`${idBase}-add-child`}
         type="button"
-        variant="outline"
+        variant="secondary"
         size="sm"
         className="self-start"
         disabled={available.length === 0}

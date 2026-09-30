@@ -285,7 +285,7 @@ export function ExtractionTab({ agent }: { agent: AgentOut }) {
               <SectionRow>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   disabled={extraction.fields.length >= 30}
                   onClick={() => set({ fields: [...extraction.fields, emptyField(names)] })}
@@ -427,7 +427,7 @@ export function ExtractionTab({ agent }: { agent: AgentOut }) {
                 ) : null}
               </SectionRow>
               <SectionRow>
-                <Button type="button" variant="outline" size="sm" onClick={() => setTestChatOpenAgent(agent.id)}>
+                <Button type="button" variant="secondary" size="sm" onClick={() => setTestChatOpenAgent(agent.id)}>
                   <Icon as={MessageCircleIcon} size="sm" /> Try it in the test chat
                 </Button>
               </SectionRow>

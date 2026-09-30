@@ -275,7 +275,7 @@ function ConditionEditor({
       <div className="flex items-center gap-3">
         <Button
           type="button"
-          variant="outline"
+          variant="secondary"
           size="sm"
           onClick={() => onChange(rowsToCondition([...activeRows, defaultRow()]))}
         >
@@ -532,7 +532,7 @@ function RuleRow({
           ))}
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             className="self-start"
             disabled={rule.then.length >= 10}

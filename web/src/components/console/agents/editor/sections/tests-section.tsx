@@ -10,7 +10,7 @@
 import * as React from "react";
 import { Controller, useFieldArray, useFormContext, useFormState, useWatch } from "react-hook-form";
 import { toast } from "sonner";
-import { Loader2Icon, PencilIcon, PlayIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { PencilIcon, PlayIcon, PlusIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/shared/field";
@@ -131,16 +131,16 @@ export function TestsSection() {
             : "Save the agent to run its tests."
         }
         aside={
-          <Button type="button" size="sm" onClick={() => void handleRun()} disabled={!ctx || fields.length === 0 || isDirty || running}>
-            {running ? (
-              <>
-                <Icon as={Loader2Icon} size="sm" className="animate-spin" /> Running…
-              </>
-            ) : (
-              <>
-                <Icon as={PlayIcon} size="sm" /> Run
-              </>
-            )}
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={() => void handleRun()}
+            disabled={!ctx || fields.length === 0 || isDirty}
+            busy={running}
+            busyLabel="Running…"
+          >
+            <Icon as={PlayIcon} size="sm" /> Run
           </Button>
         }
       >

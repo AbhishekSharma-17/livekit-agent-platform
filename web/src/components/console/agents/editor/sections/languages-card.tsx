@@ -198,7 +198,7 @@ export function LanguagesCard() {
             />
           ) : null}
           <DialogFooter>
-            <Button type="button" onClick={() => setVoiceDialogFor(null)}>
+            <Button variant="primary" type="button" onClick={() => setVoiceDialogFor(null)}>
               Done
             </Button>
           </DialogFooter>

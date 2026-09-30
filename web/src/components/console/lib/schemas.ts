@@ -109,15 +109,18 @@ export const turnHandlingOptionsSchema = z
   .catchall(z.unknown());
 export type TurnHandlingOptionsForm = z.infer<typeof turnHandlingOptionsSchema>;
 
-/** `TurnDetectorSettings` (V5-07): where the end-of-turn model runs and its sensitivity. */
+/**
+ * `TurnDetectorSettings` (V5-07): where the end-of-turn model runs and its sensitivity.
+ * `stt` (V6-34): the speech-to-text model decides, when the chosen model can.
+ */
 export const turnDetectorSettingsSchema = z.object({
-  mode: z.enum(["hosted", "local"]).nullable().optional(),
+  mode: z.enum(["hosted", "local", "stt"]).nullable().optional(),
   unlikely_threshold: z.number().min(0).max(1).nullable().optional(),
 });
 export type TurnDetectorSettingsForm = z.infer<typeof turnDetectorSettingsSchema>;
 
-/** `PipelineConfig.conversation_preset` (V5-07). Optional: fixtures built before this field don't need it. */
-export const CONVERSATION_PRESET_VALUES = ["patient", "balanced", "snappy", "telephony", "custom"] as const;
+/** `PipelineConfig.conversation_preset` (V5-07; `fast` V6-34). Optional: fixtures built before this field don't need it. */
+export const CONVERSATION_PRESET_VALUES = ["patient", "balanced", "snappy", "telephony", "fast", "custom"] as const;
 
 /**
  * True when every own value of `obj` is `undefined` or `null` (an object

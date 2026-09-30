@@ -12,7 +12,7 @@ from lkap_contracts.connections import ConnectionInfo
 from lkap_contracts.extraction import ExtractionConfig
 from lkap_contracts.flow import FlowSpec, QaNode
 from lkap_contracts.guardrails import GuardrailsConfig
-from lkap_contracts.providers import LANGUAGE_CODE_PATTERN, ModelCapabilities, base_language
+from lkap_contracts.providers import LANGUAGE_CODE_PATTERN, ModelCapabilities, base_language, stt_end_of_turn
 from lkap_contracts.qa import MAX_QA_FIELDS, QaField
 from lkap_contracts.rules import Rules
 from lkap_contracts.telephony import TelephonyConfig, WarmTransferRoute
@@ -20,6 +20,7 @@ from lkap_contracts.tool_providers import AppsMode
 from lkap_contracts.tools import ToolDefinition, ToolExecution, ToolExecutionMode
 from lkap_contracts.turn_handling import (
     AMBIENT_SOUND_PATTERN,
+    FAST_PRESET,
     ConversationPreset,
     TurnDetectorSettings,
     TurnHandlingOptions,
@@ -116,6 +117,8 @@ __all__ = [
     "effective_languages",
     "panel_preset",
     "pipeline_issues",
+    "stt_turns_opted_in",
+    "transcriber_ends_turns",
     "voice_for_language",
 ]
 
@@ -928,6 +931,47 @@ def pipeline_issues(pipeline: PipelineConfig) -> list[Issue]:
                 )
             )
     return issues
+
+
+def stt_turns_opted_in(pipeline: PipelineConfig) -> bool:
+    """Whether the agent asked for a model's own end of turn (V6-34, D-V6-31 opt-in).
+
+    ``pipeline.turn_detector.mode == "stt"``, or the ``fast`` conversation preset. Only a model
+    whose ``ModelSpec.end_of_turn`` is set reads it (LiveKit Inference Flux); a transcriber
+    whose whole entry ends turns (Deepgram Flux direct) does so without it, as since V6-02.
+    """
+    settings = pipeline.turn_detector
+    return pipeline.conversation_preset == FAST_PRESET or (settings is not None and settings.mode == "stt")
+
+
+def transcriber_ends_turns(
+    pipeline: PipelineConfig, *, stt_provider_id: str | None = None, stt_model: str | None = None
+) -> bool:
+    """Whether the speech-to-text model ends the caller's turn in a session of this pipeline.
+
+    The one rule the worker (``session_builder``), the api's validator and the console's
+    pipeline summary follow (V6-02 D-V6-5, V6-34): a ``cascaded`` pipeline with no
+    ``turn_detection`` slot, whose transcriber either always ends turns
+    (``stt_end_of_turn() == "entry"``) or can and the agent opted in
+    (``"model"`` and :func:`stt_turns_opted_in`). The worker adds one condition of its own:
+    never on the text channel (no audio).
+
+    Args:
+        pipeline: The stored pipeline.
+        stt_provider_id: The transcriber's registry id; ``None`` = ``pipeline.stt``'s.
+        stt_model: Its model id; with ``stt_provider_id`` given, ``None`` means the entry's default.
+
+    Returns:
+        ``True`` when the session should run ``turn_detection="stt"``.
+    """
+    if pipeline.mode != "cascaded" or pipeline.turn_detection is not None:
+        return False
+    if stt_provider_id is None:
+        if pipeline.stt is None:
+            return False
+        stt_provider_id, stt_model = pipeline.stt.provider_id, pipeline.stt.model
+    ability = stt_end_of_turn(stt_provider_id, stt_model)
+    return ability == "entry" or (ability == "model" and stt_turns_opted_in(pipeline))
 
 
 def effective_qa(config: AgentConfig) -> QaConfig:

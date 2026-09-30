@@ -33,6 +33,8 @@ from lkap_contracts.agent_config import (
     effective_qa,
     panel_preset,
     pipeline_issues,
+    stt_turns_opted_in,
+    transcriber_ends_turns,
 )
 from lkap_contracts.agent_tests import (
     AGENT_TEST_JUDGES,
@@ -318,6 +320,7 @@ from lkap_contracts.migrate import agent_config_v1_to_v2, agent_config_v2_to_v1
 from lkap_contracts.packs import KbSeed, PackManifest, ToolMeta
 from lkap_contracts.pricing import PRICE_VERSION, PRICES, Price, lookup
 from lkap_contracts.providers import (
+    FLUX_OPTION_FIELDS,
     ID_LIKE_FIELD_NAMES,
     MODEL_ID_PATTERN,
     MODEL_KINDS,
@@ -328,6 +331,8 @@ from lkap_contracts.providers import (
     REGISTRY,
     SECRET_PREFIXES,
     SLOW_VOICE_EFFORTS,
+    STICKY_ROUTING_FIELD,
+    VAD_MIN_SILENCE_WITH_TURN_DETECTOR,
     Availability,
     CatalogFilter,
     CatalogKind,
@@ -357,6 +362,7 @@ from lkap_contracts.providers import (
     mvp_providers,
     reasoning_effort_to_send,
     shares_credential,
+    stt_end_of_turn,
     validate_model_id,
     vision_support,
 )
@@ -429,9 +435,13 @@ from lkap_contracts.tools import (
 )
 from lkap_contracts.turn_handling import (
     CONVERSATION_PRESETS,
+    FAST_PRESETS,
     ConversationPreset,
+    TurnDetectorMode,
     TurnDetectorSettings,
+    TurnEnd,
     TurnHandlingOptions,
+    preset_values,
     resolve_turn_handling,
 )
 from lkap_contracts.ui_agui import (
@@ -599,6 +609,8 @@ __all__ = [
     "E164_PATTERN",
     "EDITABLE_BLOCK_TYPES",
     "EXTRACTION_EVENT",
+    "FAST_PRESETS",
+    "FLUX_OPTION_FIELDS",
     "FORM_FIELD_TYPES",
     "GUARDRAIL_EVENT",
     "GUARDRAIL_TIMEOUT_EVENT",
@@ -634,6 +646,7 @@ __all__ = [
     "SIGNATURE_SOURCE",
     "SLOW_VOICE_EFFORTS",
     "SNAPSHOT_EVERY_N_PATCHES",
+    "STICKY_ROUTING_FIELD",
     "TEMPLATE_ID_PATTERN",
     "TIMER_ENDED_EVENT",
     "TIMER_MODES",
@@ -648,6 +661,7 @@ __all__ = [
     "TRANSFER_TARGET_PATTERN",
     "UPDATABLE_BLOCK_TYPES",
     "UPLOAD_MIME_TYPES",
+    "VAD_MIN_SILENCE_WITH_TURN_DETECTOR",
     "VISION_TOOL_NAMES",
     "ActivityEvent",
     "AgentAction",
@@ -1038,7 +1052,9 @@ __all__ = [
     "TrunkOut",
     "TrunkPage",
     "TrunkUpdate",
+    "TurnDetectorMode",
     "TurnDetectorSettings",
+    "TurnEnd",
     "TurnHandlingOptions",
     "UiPatch",
     "UiPatchOp",
@@ -1104,12 +1120,16 @@ __all__ = [
     "panel_preset",
     "patch_to_agui_delta",
     "pipeline_issues",
+    "preset_values",
     "reasoning_effort_to_send",
     "resolve_compliance",
     "resolve_turn_handling",
     "safe_filename",
     "shares_credential",
     "sniff_mime",
+    "stt_end_of_turn",
+    "stt_turns_opted_in",
+    "transcriber_ends_turns",
     "validate_block_config",
     "validate_id_value",
     "validate_model_id",

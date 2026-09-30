@@ -1850,6 +1850,7 @@
             "balanced",
             "snappy",
             "telephony",
+            "fast",
             "custom"
           ],
           "title": "Conversation Preset",
@@ -3604,7 +3605,8 @@
             {
               "enum": [
                 "hosted",
-                "local"
+                "local",
+                "stt"
               ],
               "type": "string"
             },

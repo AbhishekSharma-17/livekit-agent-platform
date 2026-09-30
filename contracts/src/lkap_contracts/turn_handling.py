@@ -16,7 +16,10 @@ Two rules keep stored configs byte-for-byte stable:
 
 The four named presets are pinned dicts (:data:`CONVERSATION_PRESETS`). A preset is
 never stored expanded: :func:`resolve_turn_handling` expands it when a session is
-built, and ``custom`` returns the stored dict unchanged. The ``balanced`` values are
+built, and ``custom`` returns the stored dict unchanged. The ``fast`` preset (V6-34) has
+two pinned dicts, one per way the turn ends (:data:`FAST_PRESETS`): the session's
+pipeline picks one at session start (``stt_turns``), so the same stored agent resolves
+per pipeline and nothing is stored expanded. The ``balanced`` values are
 the SDK defaults (``turn.py:135-140`` endpointing ``fixed``/0.5/3.0, ``turn.py:190-198``
 interruption ``min_duration=0.5``, ``min_words=0``, ``false_interruption_timeout=2.0``,
 ``resume_false_interruption=True``), written out so the console can show them.
@@ -33,21 +36,36 @@ __all__ = [
     "AMBIENT_SOUNDS",
     "AMBIENT_SOUND_PATTERN",
     "CONVERSATION_PRESETS",
+    "FAST_PRESET",
+    "FAST_PRESETS",
     "PRESET_KEYS",
     "REALTIME_IGNORED_KEYS",
     "ConversationPreset",
     "EndpointingOptions",
     "InterruptionOptions",
     "PreemptiveGenerationOptions",
+    "TurnDetectorMode",
     "TurnDetectorSettings",
+    "TurnEnd",
     "TurnHandlingOptions",
     "UserTurnLimitOptions",
+    "preset_values",
     "resolve_turn_handling",
     "turn_handling_dict",
 ]
 
-#: ``PipelineConfig.conversation_preset``. ``custom`` means "use ``turn_handling`` as stored".
-ConversationPreset = Literal["patient", "balanced", "snappy", "telephony", "custom"]
+#: ``PipelineConfig.conversation_preset``. ``custom`` means "use ``turn_handling`` as stored";
+#: ``fast`` (V6-34) resolves per pipeline (:data:`FAST_PRESETS`).
+ConversationPreset = Literal["patient", "balanced", "snappy", "telephony", "fast", "custom"]
+
+#: :data:`FAST_PRESETS` keys: who ends the caller's turn in the session. ``stt`` = the
+#: speech-to-text model (``turn_detection="stt"``); ``detector`` = VAD plus the LiveKit turn
+#: detector (or VAD alone).
+TurnEnd = Literal["stt", "detector"]
+
+#: ``TurnDetectorSettings.mode``: ``hosted``/``local`` place the LiveKit turn detector; ``stt``
+#: (V6-34) lets a speech-to-text model that can end turns do it (LiveKit Inference Flux).
+TurnDetectorMode = Literal["hosted", "local", "stt"]
 
 
 class _SdkOptions(BaseModel):
@@ -132,9 +150,13 @@ class TurnDetectorSettings(BaseModel):
     runs the local model, whatever ``mode`` says.
     """
 
-    mode: Literal["hosted", "local"] | None = None
+    mode: TurnDetectorMode | None = None
     """``hosted`` lets the SDK use the hosted model where the connection has it; ``local``
-    always runs the small model on the worker. Unset = the connection decides (as before)."""
+    always runs the small model on the worker. Unset = the connection decides (as before).
+    ``stt`` (V6-34): the speech-to-text model decides when the caller has finished, when the
+    chosen model can (``ModelSpec.end_of_turn``: LiveKit Inference's Deepgram Flux models), and
+    no turn detector runs. With a model that cannot, the detector runs as if unset (the api
+    warns). A transcriber whose whole entry ends turns (``deepgram-flux-stt``) does so anyway."""
     unlikely_threshold: float | None = Field(None, ge=0, le=1)
     """End-of-turn probability below which the caller is assumed to keep talking. Higher =
     the agent waits more often. Unset = the model's calibrated per-language default."""
@@ -181,9 +203,49 @@ CONVERSATION_PRESETS: Final[dict[str, dict[str, Any]]] = {
     },
 }
 
+#: The ``fast`` preset's name (V6-34).
+FAST_PRESET: Final[str] = "fast"
+
+#: The ``fast`` preset, one pinned dict per way the turn ends (V6-34,
+#: ``docs/research-v6/low-latency-stack.md`` §4). Both turn preemptive generation on
+#: explicitly, so it survives knowledge auto-inject, and pin ``interruption`` to the SDK
+#: defaults like every other preset.
+#:
+#: * ``stt`` — the transcriber ends the turn (Deepgram Flux). livekit-agents 1.8.3 still waits
+#:   ``min_delay`` after the last word once the transcriber has decided
+#:   (``voice/audio_recognition.py`` ``_bounce_eou_task``), so ``min_delay`` is 0.1; ``max_delay``
+#:   is unused in that mode and left out. The reply's speech is also prepared early
+#:   (``preemptive_tts``), which Flux's early end-of-turn feeds.
+#: * ``detector`` — VAD and the turn detector end the turn: LiveKit's documented values for the
+#:   audio turn detector (``min_delay`` 0.3, ``max_delay`` 2.5; docs.livekit.io/agents/logic/turns/
+#:   turn-detector, 2026-09-30), with preemptive generation. The VAD's own silence (Silero's 0.55 s
+#:   unless a ``vad`` slot sets ``min_silence_duration``) still comes first.
+FAST_PRESETS: Final[dict[TurnEnd, dict[str, Any]]] = {
+    "stt": {
+        "endpointing": {"mode": "fixed", "min_delay": 0.1},
+        "interruption": {
+            "min_duration": 0.5,
+            "min_words": 0,
+            "false_interruption_timeout": 2.0,
+            "resume_false_interruption": True,
+        },
+        "preemptive_generation": {"enabled": True, "preemptive_tts": True},
+    },
+    "detector": {
+        "endpointing": {"mode": "fixed", "min_delay": 0.3, "max_delay": 2.5},
+        "interruption": {
+            "min_duration": 0.5,
+            "min_words": 0,
+            "false_interruption_timeout": 2.0,
+            "resume_false_interruption": True,
+        },
+        "preemptive_generation": {"enabled": True},
+    },
+}
+
 #: Top-level ``turn_handling`` keys any named preset sets.
 PRESET_KEYS: Final[frozenset[str]] = frozenset(
-    key for preset in CONVERSATION_PRESETS.values() for key in preset
+    key for preset in (*CONVERSATION_PRESETS.values(), *FAST_PRESETS.values()) for key in preset
 )
 
 #: Keys a ``realtime`` pipeline ignores: the model detects turns and interruptions itself
@@ -225,8 +287,27 @@ def turn_handling_dict(value: TurnHandlingOptions | dict[str, Any]) -> dict[str,
     return copy.deepcopy(value)
 
 
+def preset_values(preset: str, *, stt_turns: bool = False) -> dict[str, Any]:
+    """The pinned ``turn_handling`` of a named preset (a copy); ``{}`` for ``custom``.
+
+    Args:
+        preset: ``PipelineConfig.conversation_preset``.
+        stt_turns: Whether the session's transcriber ends the caller's turn; only ``fast``
+            reads it (:data:`FAST_PRESETS`).
+
+    Returns:
+        A new dict.
+    """
+    if preset == FAST_PRESET:
+        return copy.deepcopy(FAST_PRESETS["stt" if stt_turns else "detector"])
+    return copy.deepcopy(CONVERSATION_PRESETS.get(preset, {}))
+
+
 def resolve_turn_handling(
-    preset: ConversationPreset, stored: TurnHandlingOptions | dict[str, Any]
+    preset: ConversationPreset,
+    stored: TurnHandlingOptions | dict[str, Any],
+    *,
+    stt_turns: bool = False,
 ) -> dict[str, Any]:
     """Expand a conversation preset into the ``turn_handling`` a session runs with.
 
@@ -238,9 +319,14 @@ def resolve_turn_handling(
     does not cover. The worker then layers ``interruption.enabled`` and the turn
     detector on top.
 
+    ``fast`` picks its dict by ``stt_turns`` (:data:`FAST_PRESETS`); every other preset
+    ignores it, so their values are the same whatever the pipeline.
+
     Args:
         preset: ``PipelineConfig.conversation_preset``.
         stored: ``PipelineConfig.turn_handling`` as saved.
+        stt_turns: Whether the session's transcriber ends the caller's turn
+            (``agent_config.transcriber_ends_turns``).
 
     Returns:
         A new dict; neither argument is modified.
@@ -249,5 +335,5 @@ def resolve_turn_handling(
     if preset == "custom":
         return current
     expanded = {key: value for key, value in current.items() if key not in PRESET_KEYS}
-    expanded.update(copy.deepcopy(CONVERSATION_PRESETS[preset]))
+    expanded.update(preset_values(preset, stt_turns=stt_turns))
     return expanded

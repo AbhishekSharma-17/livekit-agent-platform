@@ -312,6 +312,12 @@
           "title": "Deprecated",
           "type": "boolean"
         },
+        "end_of_turn": {
+          "default": false,
+          "description": "STT only (V6-34): this model can decide when the caller's turn ends (LiveKit Inference's Deepgram Flux models). Unlike `ProviderCapabilities.end_of_turn` it is an opt-in: the worker runs `turn_detection=\"stt\"` only when the agent asks for it (`pipeline.turn_detector.mode: \"stt\"` or the `fast` conversation preset), so a stored agent keeps the turn detector it had. See `stt_end_of_turn()`.",
+          "title": "End Of Turn",
+          "type": "boolean"
+        },
         "id": {
           "title": "Id",
           "type": "string"
@@ -512,7 +518,7 @@
         },
         "end_of_turn": {
           "default": false,
-          "description": "STT only (V6-02, D-V6-5): the transcriber decides when the caller's turn ends (Deepgram Flux). The worker then runs the session with the SDK's `turn_detection=\"stt\"` instead of the platform's default turn detector.",
+          "description": "STT only (V6-02, D-V6-5): the transcriber decides when the caller's turn ends (Deepgram Flux). The worker then runs the session with the SDK's `turn_detection=\"stt\"` instead of the platform's default turn detector. V6-34: a gateway entry whose models differ records it per model instead (`ModelSpec.end_of_turn`, an opt-in).",
           "title": "End Of Turn",
           "type": "boolean"
         },

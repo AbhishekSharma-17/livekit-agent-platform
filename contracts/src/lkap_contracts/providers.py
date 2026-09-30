@@ -602,6 +602,16 @@ class ModelSpec(BaseModel):
             "first. Empty = not recorded."
         ),
     )
+    end_of_turn: bool = Field(
+        False,
+        description=(
+            "STT only (V6-34): this model can decide when the caller's turn ends (LiveKit Inference's "
+            "Deepgram Flux models). Unlike `ProviderCapabilities.end_of_turn` it is an opt-in: the "
+            'worker runs `turn_detection="stt"` only when the agent asks for it '
+            '(`pipeline.turn_detector.mode: "stt"` or the `fast` conversation preset), so a stored '
+            "agent keeps the turn detector it had. See `stt_end_of_turn()`."
+        ),
+    )
 
 
 class CatalogSpec(BaseModel):
@@ -695,7 +705,8 @@ class ProviderCapabilities(BaseModel):
         description=(
             "STT only (V6-02, D-V6-5): the transcriber decides when the caller's turn ends (Deepgram "
             'Flux). The worker then runs the session with the SDK\'s `turn_detection="stt"` instead of '
-            "the platform's default turn detector."
+            "the platform's default turn detector. V6-34: a gateway entry whose models differ records "
+            "it per model instead (`ModelSpec.end_of_turn`, an opt-in)."
         ),
     )
     avatar_aspect: Literal["portrait", "landscape", "square"] | None = Field(
@@ -844,6 +855,88 @@ def _reasoning_effort_field() -> FieldSpec:
         "medium or higher adds several seconds to every reply. Left empty, the agent uses the lowest "
         "level the model supports. Models that do not reason ignore it.",
     )
+
+
+#: The LiveKit turn detector needs at least this much VAD silence (seconds): livekit-agents 1.8.3
+#: `voice/audio_recognition.py` `_check_vad_silence_requirement` raises below
+#: `(MIN_SILENCE_DURATION_MS + 50) / 1000` (`inference/eot/base.py`: 200 ms), and LiveKit's
+#: turn-detector page says "at least 0.25 seconds" (2026-09-30).
+VAD_MIN_SILENCE_WITH_TURN_DETECTOR = 0.25
+
+#: The VAD field that sets it (V6-34).
+VAD_MIN_SILENCE_FIELD = "min_silence_duration"
+
+#: ``openrouter-llm``'s boolean that sends the agent's id as ``user`` and ``prompt_cache_key`` (V6-34).
+STICKY_ROUTING_FIELD = "sticky_routing"
+
+
+def _vad_fields(*, silence_default: str) -> list[FieldSpec]:
+    """The VAD timing fields shared by ``silero-vad`` and ``inference-vad`` (V6-34)."""
+    return [
+        FieldSpec(
+            name=VAD_MIN_SILENCE_FIELD,
+            label="Silence before speech ends (s)",
+            type="number",
+            placeholder=silence_default,
+            help="How long the caller must be quiet before their speech counts as ended. Lower lets the "
+            "agent reply sooner; with the turn detector it must be at least 0.25. Default "
+            f"{silence_default}.",
+        ),
+        FieldSpec(
+            name="activation_threshold",
+            label="Speech threshold",
+            type="number",
+            placeholder="0.5",
+            help="How confident the detector must be that a sound is speech (0-1). Higher ignores more "
+            "background noise but can miss quiet callers. Default 0.5.",
+        ),
+        FieldSpec(
+            name="prefix_padding_duration",
+            label="Audio kept before speech (s)",
+            type="number",
+            placeholder="0.5",
+            help="How much audio before the detected start of speech is kept, so the first word is not "
+            "clipped. Default 0.5.",
+        ),
+    ]
+
+
+#: Deepgram Flux's end-of-turn options (V6-02 `deepgram-flux-stt`; V6-34 LiveKit Inference Flux).
+FLUX_OPTION_FIELDS: tuple[str, ...] = ("eot_threshold", "eager_eot_threshold", "eot_timeout_ms")
+
+
+def _flux_option_fields(
+    *,
+    eot_placeholder: str,
+    eager_placeholder: str,
+    eager_help: str,
+    timeout_placeholder: str,
+    suffix: str = "",
+) -> list[FieldSpec]:
+    """Flux's three end-of-turn fields (:data:`FLUX_OPTION_FIELDS`), worded the same everywhere."""
+    return [
+        FieldSpec(
+            name="eot_threshold",
+            label="End-of-turn confidence",
+            type="number",
+            placeholder=eot_placeholder,
+            help="How sure Flux must be that the caller finished (0.5-0.9). Higher waits longer." + suffix,
+        ),
+        FieldSpec(
+            name="eager_eot_threshold",
+            label="Early reply confidence",
+            type="number",
+            placeholder=eager_placeholder,
+            help=eager_help + suffix,
+        ),
+        FieldSpec(
+            name="eot_timeout_ms",
+            label="End-of-turn timeout (ms)",
+            type="number",
+            placeholder=timeout_placeholder,
+            help="End the turn after this much silence even if Flux is unsure." + suffix,
+        ),
+    ]
 
 
 def _deferred(
@@ -1006,14 +1099,31 @@ _AVAILABLE: list[ProviderSpec] = [
                 type="string",
                 default="en",
                 help="BCP-47 language code passed to the transcriber.",
-            )
+            ),
+            # V6-34: Deepgram Flux's end-of-turn options, sent in `extra_kwargs` (livekit-agents 1.8.3
+            # `inference/stt.py` `DeepgramFluxOptions`; docs.livekit.io/agents/models/stt/deepgram,
+            # 2026-09-30). The worker sends them only with a Flux model.
+            *_flux_option_fields(
+                eot_placeholder="0.7",
+                eager_placeholder="0.5",
+                eager_help="Start preparing a reply before the turn is certainly over (0.3-0.9, at most "
+                "the end-of-turn confidence). LiveKit's default is 0.5.",
+                timeout_placeholder="5000",
+                suffix=" Deepgram Flux models only.",
+            ),
         ],
         models=[
             # V6-02 (D-V6-8): every id checked against docs.livekit.io/agents/models/inference
             # (rendered 2026-09-27T22:10Z, fetched 2026-09-28); none of these is deprecated there.
             ModelSpec(id="deepgram/nova-3", label="Deepgram Nova 3"),
-            ModelSpec(id="deepgram/flux-general-en", label="Deepgram Flux (general, en)"),
-            ModelSpec(id="deepgram/flux-general-multi", label="Deepgram Flux (multilingual)"),
+            # V6-34: Flux ends turns itself through Inference too (`turn_detection="stt"`, the LiveKit
+            # Deepgram page, 2026-09-30); an opt-in per agent (`ModelSpec.end_of_turn`). Only Flux: the
+            # gateway's other models send a final transcript per segment, which the SDK would take as
+            # the end of every turn (`inference/stt.py` `_process_transcript`).
+            ModelSpec(id="deepgram/flux-general-en", label="Deepgram Flux (general, en)", end_of_turn=True),
+            ModelSpec(
+                id="deepgram/flux-general-multi", label="Deepgram Flux (multilingual)", end_of_turn=True
+            ),
             ModelSpec(id="deepgram/nova-3-medical", label="Deepgram Nova 3 Medical"),
             ModelSpec(id="assemblyai/universal-streaming", label="AssemblyAI Universal Streaming"),
             ModelSpec(id="assemblyai/universal-3-6-pro", label="AssemblyAI Universal-3.6 Pro Streaming"),
@@ -1066,6 +1176,9 @@ _AVAILABLE: list[ProviderSpec] = [
             # strips `reasoning_effort` for `gpt-5.2*`/`gpt-5.4*` ids itself
             # (`_REASONING_EFFORT_TOOL_INCOMPATIBLE_PREFIXES`), so GPT-5.4 mini runs at its own default.
             ModelSpec(id="openai/gpt-4.1", label="GPT-4.1", reasoning=False),
+            # V6-34: small, non-reasoning ids from the same docs table (2026-09-30), quick to answer.
+            ModelSpec(id="openai/gpt-4.1-mini", label="GPT-4.1 mini", reasoning=False),
+            ModelSpec(id="openai/gpt-4.1-nano", label="GPT-4.1 nano", reasoning=False),
             ModelSpec(id="openai/gpt-4o-mini", label="GPT-4o mini", reasoning=False),
             ModelSpec(
                 id="openai/gpt-5.5",
@@ -1110,9 +1223,14 @@ _AVAILABLE: list[ProviderSpec] = [
             # V6-02 (D-V6-8): checked against docs.livekit.io/agents/models/inference (rendered
             # 2026-09-27T22:10Z). ElevenLabs is not in that table and is not offered here.
             ModelSpec(id="inworld/inworld-tts-2", label="Inworld TTS 2"),
-            # `inworld/inworld-tts-2-flash` is in the docs table too, but its price lookup would fall
-            # through to the `inworld/inworld-tts-2` row (a quality variant); it waits for its own
-            # price row (docs/v6/_asks.md).
+            # V6-34: in the docs table (2026-09-30) and priced on its own row (`pricing.py`, $15 per
+            # 1M characters on livekit.com/pricing/inference); the lowest independently measured
+            # time to first audio of the Inference voices (docs/research-v6/low-latency-stack.md §3.3).
+            ModelSpec(
+                id="inworld/inworld-tts-2-flash",
+                label="Inworld TTS 2 Flash",
+                note="fastest to start speaking; slightly lower quality than Inworld TTS 2",
+            ),
             ModelSpec(id="cartesia/sonic-3.6", label="Cartesia Sonic 3.6"),
             ModelSpec(id="cartesia/sonic-3", label="Cartesia Sonic 3"),
             ModelSpec(id="deepgram/aura-2", label="Deepgram Aura 2"),
@@ -1664,7 +1782,23 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
                 help="OpenRouter provider preferences: `order`, `only`, `ignore`, `sort` "
                 "(price/throughput/latency), `allow_fallbacks`, `require_parameters`, "
                 "`data_collection`, `preferred_max_latency`…; `require_parameters` defaults to true so "
-                "a request with tools never lands on an endpoint that cannot call them.",
+                "a request with tools never lands on an endpoint that cannot call them. By default "
+                "OpenRouter favours cheaper hosts; for a live call on a model several hosts serve, "
+                '`{"sort": "latency"}` tries the fastest host first, or `{"order": ["groq", "cerebras"]}` '
+                "pins the hosts you want in order.",
+            ),
+            # V6-34: `LLM.with_openrouter(user=..., prompt_cache_key=...)` (livekit-plugins-openai 1.8.3
+            # `llm.py:454,460`, sent at `:976-977,:994-995`). Off for a stored agent (D-V6-31), on for a
+            # new one (`recommended`).
+            FieldSpec(
+                name=STICKY_ROUTING_FIELD,
+                label="Keep the same host during a call",
+                type="boolean",
+                default=False,
+                recommended=True,
+                help="Sends the agent's id with each request so OpenRouter keeps routing it to the same "
+                "host, whose cache of the conversation is already warm; later replies start sooner. "
+                "Nothing about the caller is sent.",
             ),
             FieldSpec(
                 name="site_url",
@@ -2008,29 +2142,12 @@ _FULL: list[ProviderSpec] = [
         # dev venv carries livekit-plugins-deepgram, so a dev worker reports it installed anyway.
         credential_provider="deepgram-stt",
         secret_fields=[_api_key("Deepgram API key", env="DEEPGRAM_API_KEY")],
-        fields=[
-            FieldSpec(
-                name="eot_threshold",
-                label="End-of-turn confidence",
-                type="number",
-                placeholder="0.7",
-                help="How sure Flux must be that the caller finished (0.5-0.9). Higher waits longer.",
-            ),
-            FieldSpec(
-                name="eager_eot_threshold",
-                label="Early reply confidence",
-                type="number",
-                placeholder="off",
-                help="Start preparing a reply before the turn is certainly over (0.3-0.9). Off by default.",
-            ),
-            FieldSpec(
-                name="eot_timeout_ms",
-                label="End-of-turn timeout (ms)",
-                type="number",
-                placeholder="3000",
-                help="End the turn after this much silence even if Flux is unsure.",
-            ),
-        ],
+        fields=_flux_option_fields(
+            eot_placeholder="0.7",
+            eager_placeholder="off",
+            eager_help="Start preparing a reply before the turn is certainly over (0.3-0.9). Off by default.",
+            timeout_placeholder="3000",
+        ),
         models=[
             ModelSpec(id="flux-general-en", label="Flux (general, en)"),
             ModelSpec(id="flux-general-multi", label="Flux (multilingual)"),
@@ -2421,7 +2538,11 @@ _NEW: list[ProviderSpec] = [
         "livekit-plugins-silero",
         "livekit.plugins.silero.VAD.load",
         requires_credential=False,
-        fields=[FieldSpec(name="min_speech_duration", label="Min speech duration (s)", type="number")],
+        fields=[
+            FieldSpec(name="min_speech_duration", label="Min speech duration (s)", type="number"),
+            # V6-34: livekit-plugins-silero 1.8.3 `VAD.load` (`vad.py:60-71`); defaults 0.55 / 0.5 / 0.5.
+            *_vad_fields(silence_default="0.55"),
+        ],
         models=[ModelSpec(id="silero", label="Silero (local ONNX)")],
         default_model="silero",
         notes="Constructed via the VAD.load(...) classmethod factory, not __init__ directly.",
@@ -2435,6 +2556,8 @@ _NEW: list[ProviderSpec] = [
         "livekit-agents",
         "livekit.agents.inference.VAD",
         requires_credential=False,
+        # V6-34: livekit-agents 1.8.3 `inference/vad.py:59-70`; its defaults are 0.25 / 0.5 / 0.5.
+        fields=_vad_fields(silence_default="0.25"),
         models=[ModelSpec(id="silero", label="Silero (LiveKit-hosted native inference)")],
         default_model="silero",
         capabilities=ProviderCapabilities(cloud_only=True),
@@ -4589,3 +4712,36 @@ def vision_support(provider_id: str, model: str | None) -> bool | None:
         if candidate.id == model_id:
             return candidate.supports_video
     return None
+
+
+def _model_spec(spec: ProviderSpec, model: str | None) -> ModelSpec | None:
+    """The suggested model ``model`` names (``None`` = the entry's default), ignoring a ``:lang`` suffix."""
+    model_id = model or spec.default_model
+    if not model_id:
+        return None
+    for candidate in spec.models:
+        if candidate.id == model_id or candidate.id == model_id.split(":", 1)[0]:
+            return candidate
+    return None
+
+
+def stt_end_of_turn(provider_id: str, model: str | None) -> Literal["entry", "model"] | None:
+    """Whether a transcriber can decide when the caller's turn ends (V6-02, V6-34).
+
+    Args:
+        provider_id: An ``stt`` registry id.
+        model: The reference's model id; ``None`` = the entry's ``default_model``.
+
+    Returns:
+        ``"entry"`` when the whole entry always does (``capabilities.end_of_turn``: Deepgram
+        Flux direct, as since V6-02); ``"model"`` when this model can once the agent opts in
+        (``ModelSpec.end_of_turn``: LiveKit Inference Flux); ``None`` when it cannot or the
+        entry is unknown.
+    """
+    spec = _BY_ID.get(provider_id)
+    if spec is None or spec.kind != "stt":
+        return None
+    if spec.capabilities.end_of_turn:
+        return "entry"
+    listed = _model_spec(spec, model)
+    return "model" if listed is not None and listed.end_of_turn else None

@@ -193,7 +193,7 @@ export function OriginsEditor({
             inputMode="url"
             autoComplete="off"
             spellCheck={false}
-            className="font-mono text-[0.8125rem]"
+            className="font-mono text-label"
             onChange={(event) => {
               setDraft(event.target.value);
               if (draftError) setDraftError(null);
@@ -208,7 +208,7 @@ export function OriginsEditor({
             aria-describedby={describedBy(id, Boolean(shownError))}
             data-issue-path="allowed_origins"
           />
-          <Button type="button" variant="outline" onClick={add} disabled={draft.trim() === ""}>
+          <Button type="button" variant="secondary" onClick={add} disabled={draft.trim() === ""}>
             Add
           </Button>
         </div>
@@ -218,14 +218,14 @@ export function OriginsEditor({
           {value.map((origin) => (
             <li
               key={origin}
-              className="inline-flex h-7 items-center gap-1 rounded-xs border border-border bg-muted pr-0.5 pl-2 font-mono text-xs"
+              className="inline-flex h-7 items-center gap-1 rounded-sm border border-border bg-muted pr-0.5 pl-2 font-mono text-xs"
             >
               <span className="max-w-64 truncate">{origin === "*" ? "* (any site)" : origin}</span>
               <button
                 type="button"
                 onClick={() => onChange(value.filter((item) => item !== origin))}
                 aria-label={`Remove ${origin}`}
-                className="inline-flex size-6 items-center justify-center rounded-xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex size-6 items-center justify-center rounded-sm text-text-secondary outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Icon as={XIcon} size="sm" />
               </button>
@@ -233,7 +233,7 @@ export function OriginsEditor({
           ))}
         </ul>
       ) : (
-        <p className="text-[0.8125rem] text-muted-foreground">No other websites can start calls.</p>
+        <p className="text-label text-text-secondary">No other websites can start calls.</p>
       )}
     </div>
   );

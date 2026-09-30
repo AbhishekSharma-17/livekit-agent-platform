@@ -56,7 +56,7 @@ export function MemorySection() {
       description="Remember what a returning caller told a previous agent, so the next call doesn't start from zero."
     >
       <SectionRow>
-        <p className="max-w-[70ch] text-[0.8125rem] text-pretty text-muted-foreground">
+        <p className="max-w-[70ch] text-label text-pretty text-text-secondary">
           Callers are identified by a pseudonymous id — a scrambled code, never their name or phone
           number. An anonymous web visitor (someone the platform can&apos;t recognize on a later visit) is
           never remembered. A builder can forget one caller, or every caller&apos;s memories at once, at any
@@ -106,12 +106,12 @@ export function MemorySection() {
                     <label
                       key={option.value}
                       htmlFor={id}
-                      className="flex items-start gap-2.5 rounded-md border border-border p-3 text-sm has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft/40 has-[:disabled]:opacity-60"
+                      className="flex items-start gap-2.5 rounded border border-border p-3 text-sm has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle has-[:disabled]:opacity-60"
                     >
                       <RadioGroupItem id={id} value={option.value} className="mt-0.5" />
                       <span className="flex flex-col gap-0.5">
                         <span className="font-medium text-foreground">{option.label}</span>
-                        <span className="text-[0.8125rem] text-pretty text-muted-foreground">{option.hint}</span>
+                        <span className="text-label text-pretty text-text-secondary">{option.hint}</span>
                       </span>
                     </label>
                   );

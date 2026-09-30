@@ -2,7 +2,13 @@
 
 import * as React from "react";
 import { Controller, useFormContext } from "react-hook-form";
-import { AudioWaveformIcon, EyeOffIcon, PlusIcon, type LucideIcon } from "lucide-react";
+import {
+  AudioWaveformIcon,
+  EyeOffIcon,
+  PlusIcon,
+  type LucideIcon,
+  WaypointsIcon,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,7 +21,7 @@ import { ProviderSlotCard, type SlotCostEstimate } from "@/components/console/re
 import { isKnownTextOnlyLlm, type ProviderKind } from "@/components/console/registry/provider-meta";
 import { PART_JOBS } from "@/components/console/registry/slot-jobs";
 import { WorkspacePricesDialog, type WorkspacePricePrefill } from "@/components/console/settings/workspace-prices-dialog";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { cn } from "@/lib/utils";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import type { EstimateLine, ProviderSpec } from "@/contracts/lkap-contracts";
@@ -119,7 +125,7 @@ export function ProvidersTab() {
   }
 
   if (isError) {
-    return <ErrorBanner message={`Couldn't load the provider list — ${errorMessage(error)}`} onRetry={() => refetch()} />;
+    return <ErrorBanner error={error} context={{ action: "load the provider list" }} onRetry={() => refetch()} />;
   }
 
   const providers: ProviderSpec[] = data?.providers ?? [];
@@ -245,7 +251,7 @@ export function ProvidersTab() {
       <Group
         title="Pipeline"
         description={pipelineSlots.length > 1 ? "In the order a turn flows through them." : undefined}
-        aside={headerUsd ? <span className="text-[0.8125rem] text-muted-foreground">{headerUsd} · estimate</span> : undefined}
+        aside={headerUsd ? <span className="text-label text-text-secondary">{headerUsd} · estimate</span> : undefined}
       >
         <ol className="flex flex-col" aria-label="Pipeline parts">
           {pipelineSlots.map((key, index) => (
@@ -267,7 +273,7 @@ export function ProvidersTab() {
               <Button
                 key={key}
                 type="button"
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => {
                   setAdded((prev) => new Set(prev).add(key));
@@ -303,24 +309,24 @@ function Group({
     <section aria-labelledby={id} className="flex flex-col gap-3">
       <div className="flex flex-col gap-0.5">
         <div className="flex items-baseline justify-between gap-2">
-          <h2 id={id} className="text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em] text-balance text-foreground">
+          <h2 id={id} className="text-dialog leading-6 font-semibold tracking-[-0.01em] text-balance text-foreground">
             {title}
           </h2>
           {aside}
         </div>
-        {description ? <p className="max-w-[65ch] text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">{description}</p> : null}
+        {description ? <p className="max-w-[65ch] text-label leading-[1.125rem] text-pretty text-text-secondary">{description}</p> : null}
       </div>
       {children}
     </section>
   );
 }
 
-const MODES: { value: Exclude<PipelineMode, "half_cascade">; title: string; description: string; icon: LucideIcon | "dots" }[] = [
+const MODES: { value: Exclude<PipelineMode, "half_cascade">; title: string; description: string; icon: LucideIcon }[] = [
   {
     value: "cascaded",
     title: "Cascaded",
     description: "Separate speech-to-text, language model and text-to-speech. Most flexible; works with LiveKit Inference without keys.",
-    icon: "dots",
+    icon: WaypointsIcon,
   },
   {
     value: "realtime",
@@ -340,8 +346,8 @@ function ModeCards({ value, onChange }: { value: PipelineMode; onChange: (next: 
             key={mode.value}
             className={cn(
               "relative flex cursor-pointer gap-3 rounded-lg border border-border bg-card p-4",
-              "transition-colors duration-(--dur-2) hover:bg-accent",
-              "has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft",
+              "transition-colors duration-(--duration-base) hover:bg-muted",
+              "has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle",
               "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background",
             )}
           >
@@ -355,19 +361,19 @@ function ModeCards({ value, onChange }: { value: PipelineMode; onChange: (next: 
             />
             <span
               aria-hidden="true"
-              className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+              className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded bg-muted text-text-secondary"
             >
-              {mode.icon === "dots" ? <LinkedDots /> : <Icon as={mode.icon} size="md" />}
+              <Icon as={mode.icon} size="md" />
             </span>
             <span className="flex min-w-0 flex-col gap-1">
               <span className="text-sm font-semibold text-foreground">{mode.title}</span>
-              <span className="text-[0.8125rem] leading-[1.125rem] text-pretty text-muted-foreground">{mode.description}</span>
+              <span className="text-label leading-[1.125rem] text-pretty text-text-secondary">{mode.description}</span>
             </span>
           </label>
         ))}
       </div>
       {value === "half_cascade" ? (
-        <p className="rounded-md bg-info-soft px-3 py-2 text-[0.8125rem] text-info-text">
+        <p className="rounded bg-info-subtle px-3 py-2 text-label text-info-text">
           This agent uses half-cascade: a realtime model thinks, a separate voice speaks. Pick a card above to switch.
         </p>
       ) : null}
@@ -375,28 +381,16 @@ function ModeCards({ value, onChange }: { value: PipelineMode; onChange: (next: 
   );
 }
 
-/** "Three linked dots" (§4.4) — no Lucide glyph says cascade. */
-function LinkedDots() {
-  return (
-    <svg viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-      <circle cx="3" cy="8" r="1.75" />
-      <circle cx="8" cy="8" r="1.75" />
-      <circle cx="13" cy="8" r="1.75" />
-      <path d="M4.75 8h1.5M9.75 8h1.5" />
-    </svg>
-  );
-}
-
 function VisionNote({ onShowVisionModels }: { onShowVisionModels: () => void }) {
   return (
-    <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2 text-[0.8125rem] leading-[1.125rem] text-warning-text">
+    <div className="flex items-start gap-2 rounded bg-warning-subtle px-3 py-2 text-label leading-[1.125rem] text-warning-text">
       <Icon as={EyeOffIcon} size="sm" className="mt-0.5" />
       <p className="text-pretty">
         This model can&apos;t see images; pick one marked Vision to use the camera.{" "}
         <button
           type="button"
           onClick={onShowVisionModels}
-          className="rounded-xs font-medium underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded-sm font-medium underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           Show vision models
         </button>

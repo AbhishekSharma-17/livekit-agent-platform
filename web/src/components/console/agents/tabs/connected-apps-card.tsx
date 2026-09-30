@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Section, SectionRow } from "@/components/shared/section";
 import { EmptyState } from "@/components/console/shared/empty-state";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { StatusChip } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { useAppsStatus, useToolProviderActions, useToolProviderConnections, useTools } from "@/components/console/lib/api-hooks";
@@ -276,7 +276,7 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
     >
       {statusQuery.isError ? (
         <SectionRow>
-          <ErrorBanner message={errorMessage(statusQuery.error)} onRetry={() => statusQuery.refetch()} />
+          <ErrorBanner error={statusQuery.error} context={{ action: "load connected apps" }} onRetry={() => statusQuery.refetch()} />
         </SectionRow>
       ) : showOnboarding ? (
         <SectionRow>
@@ -285,7 +285,7 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
             title="Apps aren't set up yet"
             description="Turn on Apps in Tools → Apps, then come back to give this agent some actions."
             action={
-              <Button asChild variant="outline" size="sm">
+              <Button asChild variant="secondary" size="sm">
                 <Link href="/console/tools?tab=apps">Go to Apps</Link>
               </Button>
             }
@@ -294,8 +294,8 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
       ) : (
         <>
           {!enabled ? (
-            <SectionRow className="bg-warning-soft">
-              <p className="text-[0.8125rem] text-warning-text">
+            <SectionRow className="bg-warning-subtle">
+              <p className="text-label text-warning-text">
                 Apps are turned off for this workspace — this agent can&rsquo;t use them until they&rsquo;re back on.{" "}
                 <Link href="/console/tools?tab=apps" className="underline underline-offset-2">
                   Go to Apps
@@ -327,9 +327,9 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
                 </Select>
               )}
             />
-            <p className="text-[0.8125rem] text-muted-foreground">{activeOption.helper}</p>
+            <p className="text-label text-text-secondary">{activeOption.helper}</p>
             {activeOption.latency ? (
-              <p className="text-[0.8125rem] text-warning-text">
+              <p className="text-label text-warning-text">
                 The agent looks tools up during the call; expect slower replies.
               </p>
             ) : null}
@@ -341,14 +341,14 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
                 {mode === "actions" ? "Connected apps" : "Apps this agent may use"}
               </p>
               {connectionsQuery.isLoading ? (
-                <p className="text-[0.8125rem] text-muted-foreground">Loading connected apps…</p>
+                <p className="text-label text-text-secondary">Loading connected apps…</p>
               ) : connections.length === 0 ? (
                 <EmptyState
                   compact
                   title="No apps connected yet"
                   description="Connect one in Tools → Apps."
                   action={
-                    <Button asChild variant="outline" size="sm">
+                    <Button asChild variant="secondary" size="sm">
                       <Link href="/console/tools?tab=apps">Go to Apps</Link>
                     </Button>
                   }
@@ -391,7 +391,7 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
           {(mode === "server" || mode === "router") && allowedAppGroups.length > 0 ? (
             <SectionRow className="flex flex-col gap-3">
               <p className="text-sm font-medium text-foreground">Actions the agent may take</p>
-              <p className="text-[0.8125rem] text-muted-foreground">
+              <p className="text-label text-text-secondary">
                 Destructive actions (delete, remove, send money) stay blocked until you review them.
               </p>
               <div className="flex flex-col gap-3" data-issue-path="tools.apps.denied_actions">
@@ -448,14 +448,14 @@ function AppRow({
   const needsReconnect = connection.needs_reconnect || connection.status !== "active";
 
   return (
-    <li className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+    <li className="flex flex-col gap-2 rounded border border-border p-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <VendorMark vendor={name} />
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-foreground">
               {name}{" "}
-              {showAccountLabel ? <span className="font-normal text-muted-foreground">({connection.label ?? name})</span> : null}
+              {showAccountLabel ? <span className="font-normal text-text-secondary">({connection.label ?? name})</span> : null}
             </p>
             {needsReconnect ? (
               <Link href="/console/tools?tab=apps" className="text-xs text-warning-text underline underline-offset-2">
@@ -468,14 +468,14 @@ function AppRow({
             )}
           </div>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={onOpenActions}>
+        <Button type="button" variant="secondary" size="sm" onClick={onOpenActions}>
           Actions
         </Button>
       </div>
       {attachedTools.length > 0 ? (
         <ul className="flex flex-wrap gap-1.5 pl-7">
           {attachedTools.map((tool) => (
-            <li key={tool.id} className="inline-flex items-center gap-1 rounded-full bg-secondary py-0.5 pr-1 pl-2.5 font-mono text-xs text-secondary-foreground">
+            <li key={tool.id} className="inline-flex items-center gap-1 rounded-pill bg-muted-strong py-0.5 pr-1 pl-2.5 font-mono text-xs text-foreground">
               {tool.name}
               <Button
                 type="button"
@@ -528,7 +528,7 @@ function AppAllowRow({
   const uncheckDisabled = allowed && !allowToggleOff;
 
   return (
-    <li className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+    <li className="flex flex-col gap-2 rounded border border-border p-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <VendorMark vendor={name} />
@@ -554,7 +554,7 @@ function AppAllowRow({
           />
           <Label
             htmlFor={inputId}
-            className="text-[0.8125rem] font-normal text-muted-foreground"
+            className="text-label font-normal text-text-secondary"
             title={uncheckDisabled ? "At least one connected app must stay allowed" : undefined}
           >
             Let the agent use this app
@@ -563,7 +563,7 @@ function AppAllowRow({
       </div>
       {allowed && accounts.length > 1 ? (
         <fieldset className="m-0 flex flex-col gap-1.5 border-0 pl-7">
-          <legend className="mb-0.5 text-xs font-medium text-muted-foreground">Which accounts</legend>
+          <legend className="mb-0.5 text-xs font-medium text-text-secondary">Which accounts</legend>
           {accounts.map((account) => {
             const accountInputId = `apps-account-${account.id}`;
             const checked = selectedAccountIds.includes(account.id);
@@ -577,7 +577,7 @@ function AppAllowRow({
                   title={lastOne ? "At least the default account must stay picked" : undefined}
                   onCheckedChange={(v) => onToggleAccount(account.id, v === true)}
                 />
-                <Label htmlFor={accountInputId} className="flex items-center gap-1.5 text-[0.8125rem] font-normal">
+                <Label htmlFor={accountInputId} className="flex items-center gap-1.5 text-label font-normal">
                   {account.label ?? name}
                   {account.is_default ? (
                     <StatusChip tone="neutral" size="sm">
@@ -614,16 +614,22 @@ function AppActionsList({
   const items = React.useMemo(() => actionsQuery.data?.pages.flatMap((page) => page.items) ?? [], [actionsQuery.data]);
 
   if (actionsQuery.isLoading) {
-    return <p className="text-[0.8125rem] text-muted-foreground">Loading {toolkitName}&rsquo;s actions…</p>;
+    return <p className="text-label text-text-secondary">Loading {toolkitName}&rsquo;s actions…</p>;
   }
   if (actionsQuery.isError) {
-    return <ErrorBanner message={`Couldn't load ${toolkitName}'s actions — ${errorMessage(actionsQuery.error)}`} onRetry={() => actionsQuery.refetch()} />;
+    return (
+      <ErrorBanner
+        error={actionsQuery.error}
+        context={{ action: `load ${toolkitName}'s actions` }}
+        onRetry={() => actionsQuery.refetch()}
+      />
+    );
   }
   if (items.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-xs font-medium text-muted-foreground">{toolkitName}</p>
+      <p className="text-xs font-medium text-text-secondary">{toolkitName}</p>
       <ul className="flex flex-col gap-1">
         {items.map((action) => {
           const inputId = `apps-action-${toolkit}-${action.slug}`;
@@ -640,7 +646,7 @@ function AppActionsList({
           return (
             <li key={action.slug} className="flex items-center gap-2">
               <Checkbox id={inputId} checked={checked} onCheckedChange={(v) => onCheckedChange(v === true)} />
-              <Label htmlFor={inputId} className="flex items-center gap-1.5 text-[0.8125rem] font-normal">
+              <Label htmlFor={inputId} className="flex items-center gap-1.5 text-label font-normal">
                 {action.name}
                 {destructive ? (
                   <StatusChip tone="danger" size="sm">

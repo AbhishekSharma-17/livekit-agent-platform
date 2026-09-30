@@ -166,7 +166,7 @@ export function ExtractionTab({ agent }: { agent: AgentOut }) {
             >
               <SectionRow className="flex flex-col divide-y divide-border">
                 {extraction.fields.length === 0 ? (
-                  <p className="py-1 text-sm text-muted-foreground">No fields yet.</p>
+                  <p className="py-1 text-sm text-text-secondary">No fields yet.</p>
                 ) : (
                   extraction.fields.map((row, index) => {
                     const base = `extraction-field-${index}`;
@@ -285,7 +285,7 @@ export function ExtractionTab({ agent }: { agent: AgentOut }) {
               <SectionRow>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   disabled={extraction.fields.length >= 30}
                   onClick={() => set({ fields: [...extraction.fields, emptyField(names)] })}
@@ -408,7 +408,7 @@ export function ExtractionTab({ agent }: { agent: AgentOut }) {
                   When the agent asks
                 </label>
                 {triggerOf(extraction.triggers, "manual") ? (
-                  <p className="ml-6 text-xs text-muted-foreground">
+                  <p className="ml-6 text-xs text-text-secondary">
                     Try it in the test chat, then ask the agent to check what it has captured so far.
                   </p>
                 ) : null}
@@ -427,13 +427,13 @@ export function ExtractionTab({ agent }: { agent: AgentOut }) {
                 ) : null}
               </SectionRow>
               <SectionRow>
-                <Button type="button" variant="outline" size="sm" onClick={() => setTestChatOpenAgent(agent.id)}>
+                <Button type="button" variant="secondary" size="sm" onClick={() => setTestChatOpenAgent(agent.id)}>
                   <Icon as={MessageCircleIcon} size="sm" /> Try it in the test chat
                 </Button>
               </SectionRow>
             </Section>
 
-            <p className="px-1 text-[0.8125rem] text-muted-foreground">
+            <p className="px-1 text-label text-text-secondary">
               Captured values are kept the same way the rest of this call is —{" "}
               {storageTier === "full"
                 ? "in full, since this agent keeps whole conversations."

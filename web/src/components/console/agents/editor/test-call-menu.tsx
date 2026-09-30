@@ -62,32 +62,33 @@ export function TestCallMenu({ agent, dirty, saveNow, extraItems = [] }: TestCal
       await navigator.clipboard.writeText(publicUrl(agent.slug, true));
       toast.success("Test link copied");
     } catch {
-      toast.error("Couldn't copy the link");
+      toast.error("Couldn't copy the link. Open the test page and copy it from the address bar instead.");
     }
   }
 
   const primary = dirty ? (
     <Popover open={askOpen} onOpenChange={setAskOpen}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" className="rounded-r-none">
+        <Button type="button" variant="secondary" className="rounded-r-none">
           <Icon as={PhoneIcon} size="md" />
           Test call
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[min(20rem,calc(100vw-2rem))]">
         <div className="flex flex-col gap-3">
-          <p className="text-sm font-semibold">You have unsaved changes</p>
-          <p className="text-[0.8125rem] text-pretty text-muted-foreground">
+          <p className="text-body font-semibold">You have unsaved changes</p>
+          <p className="text-label text-pretty text-text-secondary">
             The test call runs the saved configuration.
           </p>
           <div className="flex flex-wrap justify-end gap-2">
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="secondary" size="sm">
               <a href={path} target="_blank" rel="noopener noreferrer" onClick={() => setAskOpen(false)}>
                 Test the saved version
               </a>
             </Button>
             <Button
               type="button"
+              variant="primary"
               size="sm"
               onClick={() => {
                 setAskOpen(false);
@@ -101,7 +102,7 @@ export function TestCallMenu({ agent, dirty, saveNow, extraItems = [] }: TestCal
       </PopoverContent>
     </Popover>
   ) : (
-    <Button asChild variant="outline" className="rounded-r-none">
+    <Button asChild variant="secondary" className="rounded-r-none">
       <a href={path} target="_blank" rel="noopener noreferrer">
         <Icon as={PhoneIcon} size="md" />
         Test call
@@ -114,7 +115,7 @@ export function TestCallMenu({ agent, dirty, saveNow, extraItems = [] }: TestCal
       {primary}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button type="button" variant="outline" size="icon" className="-ml-px rounded-l-none" aria-label="More test options">
+          <Button type="button" variant="secondary" size="icon" className="-ml-px rounded-l-none" aria-label="More test options">
             <Icon as={ChevronDownIcon} size="md" />
           </Button>
         </DropdownMenuTrigger>

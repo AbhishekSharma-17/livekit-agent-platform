@@ -55,7 +55,7 @@ function LanguageRow({
       <div className="flex items-center gap-2">
         <span className="font-medium text-foreground">{languageLabel(code)}</span>
         {isDefault ? <StatusChip tone="neutral">Default</StatusChip> : null}
-        <span className="text-[0.8125rem] text-muted-foreground">
+        <span className="text-label text-text-secondary">
           {voice?.provider_id ? `Voice: ${voice.provider_id}` : "Uses the agent's own voice"}
         </span>
       </div>
@@ -119,7 +119,7 @@ export function LanguagesCard() {
     >
       <SectionRow className="flex flex-col divide-y divide-border">
         {languages.length === 0 ? (
-          <p className="py-1 text-sm text-muted-foreground">
+          <p className="py-1 text-sm text-text-secondary">
             Just the agent&apos;s one language (set on the Instructions tab). Add another below to let it switch.
           </p>
         ) : (
@@ -198,7 +198,7 @@ export function LanguagesCard() {
             />
           ) : null}
           <DialogFooter>
-            <Button type="button" onClick={() => setVoiceDialogFor(null)}>
+            <Button variant="primary" type="button" onClick={() => setVoiceDialogFor(null)}>
               Done
             </Button>
           </DialogFooter>

@@ -80,20 +80,20 @@ export function VerdictDialog({ open, onOpenChange, verdict }: VerdictDialogProp
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">
           {verdict.error ? (
-            <p className="rounded-md bg-warning-soft px-3 py-2 text-[0.8125rem] text-warning-text">{verdict.error}</p>
+            <p className="rounded bg-warning-subtle px-3 py-2 text-label text-warning-text">{verdict.error}</p>
           ) : null}
 
           {(verdict.scores ?? []).length > 0 ? (
             <div className="grid gap-2 sm:grid-cols-2">
               {(verdict.scores ?? []).map((score) => (
-                <div key={score.judge} className="flex flex-col gap-1 rounded-md border border-border p-2.5">
+                <div key={score.judge} className="flex flex-col gap-1 rounded border border-border p-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium">{JUDGE_LABEL[score.judge]}</span>
                     <StatusChip tone={VERDICT_TONE[score.verdict]} size="sm">
                       {score.verdict}
                     </StatusChip>
                   </div>
-                  {score.reason ? <p className="text-[0.8125rem] text-pretty text-muted-foreground">{score.reason}</p> : null}
+                  {score.reason ? <p className="text-label text-pretty text-text-secondary">{score.reason}</p> : null}
                 </div>
               ))}
             </div>
@@ -108,7 +108,7 @@ export function VerdictDialog({ open, onOpenChange, verdict }: VerdictDialogProp
                     <p
                       className={cn(
                         "max-w-[85%] rounded-lg px-3 py-1.5 text-sm leading-snug break-words",
-                        turn.role === "user" ? "bg-muted" : "bg-brand-soft text-foreground",
+                        turn.role === "user" ? "bg-muted" : "bg-brand-subtle text-foreground",
                       )}
                     >
                       <span className="sr-only">{turn.role === "user" ? "Persona: " : "Agent: "}</span>
@@ -125,14 +125,14 @@ export function VerdictDialog({ open, onOpenChange, verdict }: VerdictDialogProp
               <h3 className="text-sm font-semibold">Tool calls</h3>
               <ul className="flex flex-col gap-1.5">
                 {(verdict.tool_calls ?? []).map((call, index) => (
-                  <li key={index} className="flex flex-wrap items-center gap-2 text-[0.8125rem]">
+                  <li key={index} className="flex flex-wrap items-center gap-2 text-label">
                     <span className="font-mono">{call.tool}</span>
                     {call.mocked ? (
                       <StatusChip tone="info" size="sm">
                         Mocked
                       </StatusChip>
                     ) : null}
-                    {call.status ? <span className="text-muted-foreground">{call.status}</span> : null}
+                    {call.status ? <span className="text-text-secondary">{call.status}</span> : null}
                   </li>
                 ))}
               </ul>

@@ -22,7 +22,7 @@ export function ComposerPreview({ panel }: { panel: PanelLayoutForm }) {
     >
       <div
         className={cn(
-          "border-border bg-card max-h-[40rem] w-full overflow-hidden rounded-xl border",
+          "border-border bg-card max-h-[40rem] w-full overflow-hidden rounded-dialog border",
           wide ? "max-w-2xl" : "max-w-[400px]",
         )}
       >

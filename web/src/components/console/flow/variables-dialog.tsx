@@ -69,7 +69,7 @@ export function VariablesDialog({
         </DialogHeader>
         <DialogBody className="gap-3">
           {rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No variables yet.</p>
+            <p className="text-sm text-text-secondary">No variables yet.</p>
           ) : (
             rows.map((row, index) => {
               const base = `flow-variable-${index}`;
@@ -77,7 +77,7 @@ export function VariablesDialog({
                 <div
                   key={index}
                   data-variable-row={row.name}
-                  className="grid grid-cols-1 gap-2 rounded-md border border-border p-3 md:grid-cols-[minmax(0,1fr)_8rem_auto]"
+                  className="grid grid-cols-1 gap-2 rounded border border-border p-3 md:grid-cols-[minmax(0,1fr)_8rem_auto]"
                 >
                   <div className="flex flex-col gap-1">
                     <label htmlFor={`${base}-name`} className="text-xs font-medium">
@@ -91,7 +91,7 @@ export function VariablesDialog({
                       onChange={(event) => update(index, { name: event.target.value.trim() })}
                     />
                     {problems[index] ? (
-                      <p id={`${base}-error`} className="text-xs text-danger-text">
+                      <p id={`${base}-error`} className="text-xs text-destructive-text">
                         {problems[index]}
                       </p>
                     ) : null}
@@ -174,7 +174,7 @@ export function VariablesDialog({
         <DialogFooter className="sm:justify-between">
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             onClick={() =>
               setRows((current) => [
                 ...current,
@@ -186,10 +186,10 @@ export function VariablesDialog({
             Add variable
           </Button>
           <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button
+            <Button variant="primary"
               type="button"
               disabled={invalid}
               onClick={() => {

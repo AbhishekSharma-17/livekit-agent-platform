@@ -11,7 +11,8 @@ import { firstErrorMessage } from "@/components/console/lib/form-errors";
 import { useWriteAccess } from "@/components/console/lib/roles";
 import { agentEditorFormSchema, type AgentEditorForm } from "@/components/console/lib/schemas";
 import { zodResolver } from "@/components/console/lib/zod-resolver";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
+import { friendlyError } from "@/components/console/lib/friendly-error";
 import { useSetBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
 import type { AgentOut, ValidationResult } from "@/contracts/lkap-contracts";
 import { pluralize } from "@/lib/format";
@@ -47,31 +48,85 @@ export interface AgentEditorProps {
 }
 
 export function AgentEditor({ agentId, sections = EDITOR_SECTIONS }: AgentEditorProps) {
-  const { data: agent, isLoading, isError, error, refetch } = useAgent(agentId);
+  const { data: agent, isLoading, isError, error, refetch, isFetching } = useAgent(agentId);
   // Top bar trail "Agents / <name>" (docs/UI_UX_SPEC.md §3.2); a no-op outside the console shell.
   useSetBreadcrumbs([{ label: "Agents", href: "/console/agents" }, { label: agent?.name ?? "Agent" }]);
 
   if (isLoading) return <EditorSkeleton />;
 
   if (isError || !agent) {
-    return <ErrorBanner message={`Couldn't load this agent — ${errorMessage(error)}`} onRetry={() => refetch()} />;
+    return (
+      <ErrorBanner
+        error={error ?? new Error("This agent couldn't be found.")}
+        context={{ action: "load this agent" }}
+        onRetry={() => refetch()}
+      />
+    );
   }
 
-  return <AgentEditorFormBody agent={agent} allSections={sections} />;
+  return (
+    <AgentEditorFormBody
+      agent={agent}
+      allSections={sections}
+      onRefresh={() => void refetch()}
+      refreshing={isFetching}
+    />
+  );
 }
 
-function EditorSkeleton() {
+/**
+ * The editor's loading state (spec section 8.1), also the route's Suspense
+ * fallback: it mirrors the header (back link, title and pill, meta, actions)
+ * and the nav · content · rail columns.
+ */
+export function EditorSkeleton() {
   return (
     <LoadingRegion label="Loading agent" className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2 border-b border-border pb-4">
-        <Skeleton className="h-3 w-16" />
-        <Skeleton className="h-7 w-64" />
-        <Skeleton className="h-5 w-80" />
+      <div className="flex flex-col gap-3 border-b border-border pb-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-4 w-28" />
+          <div className="flex items-center gap-2.5">
+            <Skeleton className="h-6 w-56" />
+            <Skeleton className="h-[22px] w-14 rounded-pill" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-6 w-36 rounded-pill" />
+            <Skeleton className="h-6 w-20 rounded-pill" />
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Skeleton className="size-8 rounded" />
+          <Skeleton className="h-[34px] w-28 rounded" />
+          <Skeleton className="h-[34px] w-32 rounded" />
+          <Skeleton className="h-[34px] w-20 rounded" />
+          <Skeleton className="h-[34px] w-16 rounded" />
+        </div>
       </div>
       <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)_280px]">
-        <Skeleton className="hidden h-72 lg:block" />
-        <Skeleton className="h-96" />
-        <Skeleton className="hidden h-96 lg:block" />
+        <div className="hidden flex-col gap-2 lg:flex">
+          {[0, 1, 2, 3, 4, 5].map((item) => (
+            <Skeleton key={item} className="h-8 w-full rounded" />
+          ))}
+        </div>
+        <div className="flex max-w-[720px] flex-col gap-4">
+          <div className="flex flex-col gap-3 rounded-lg border border-border p-5">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-3.5 w-3/5" />
+            <Skeleton className="h-9 w-full rounded" />
+            <Skeleton className="h-24 w-full rounded" />
+          </div>
+          <div className="flex flex-col gap-3 rounded-lg border border-border p-5">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-9 w-full rounded" />
+          </div>
+        </div>
+        <div className="hidden flex-col gap-3 rounded-lg border border-border p-4 lg:flex">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-3.5 w-full" />
+          <Skeleton className="h-3.5 w-11/12" />
+          <Skeleton className="h-3.5 w-3/5" />
+        </div>
       </div>
     </LoadingRegion>
   );
@@ -104,7 +159,17 @@ function focusFieldFor(issue: EditorIssue, setFocus: (path: string) => void): bo
   return false;
 }
 
-function AgentEditorFormBody({ agent, allSections }: { agent: AgentOut; allSections: EditorSectionDef[] }) {
+function AgentEditorFormBody({
+  agent,
+  allSections,
+  onRefresh,
+  refreshing,
+}: {
+  agent: AgentOut;
+  allSections: EditorSectionDef[];
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -260,11 +325,12 @@ function AgentEditorFormBody({ agent, allSections }: { agent: AgentOut; allSecti
         if (serverIssues) {
           setLastResult((error as { details?: ValidationResult }).details ?? null);
           const errorCount = serverIssues.filter((issue) => issue.severity === "error").length;
-          toast.error(`Couldn't save — fix ${pluralize(errorCount || serverIssues.length, "issue", "issues")} first`);
+          toast.error(`Couldn't save. Fix ${pluralize(errorCount || serverIssues.length, "issue", "issues")} first.`);
           const target = firstSectionWithIssues(serverIssues, sectionOrder, "error");
           if (target) goToSection(target);
         } else {
-          toast.error(`Couldn't save — ${errorMessage(error)}`);
+          const friendly = friendlyError(error, { action: "save" });
+          toast.error(friendly.title, { description: friendly.message });
         }
         return null;
       } finally {
@@ -315,15 +381,11 @@ function AgentEditorFormBody({ agent, allSections }: { agent: AgentOut; allSecti
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // A failure throws into the confirmation, which says why in plain words and stays open.
   async function onDelete() {
-    try {
-      await deleteAgent.mutateAsync(agent.id);
-      toast.success("Deleted");
-      router.push("/console/agents");
-    } catch (error) {
-      toast.error(`Couldn't delete — ${errorMessage(error)}`);
-      throw error;
-    }
+    await deleteAgent.mutateAsync(agent.id);
+    toast.success(`${agent.name} deleted.`);
+    router.push("/console/agents");
   }
 
   const contextValue = React.useMemo<EditorContextValue>(
@@ -360,6 +422,8 @@ function AgentEditorFormBody({ agent, allSections }: { agent: AgentOut; allSecti
             onValidated={setLastResult}
             goToFirstIssue={goToFirstIssue}
             onDelete={onDelete}
+            onRefresh={onRefresh}
+            refreshing={refreshing}
             contentRef={contentRef}
           >
             <ActiveComponent agent={agent} />

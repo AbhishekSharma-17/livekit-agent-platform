@@ -150,8 +150,33 @@ function stubFetch(agents: AgentOut[], role: "owner" | "admin" | "builder" | "vi
   return fetchMock;
 }
 
+/**
+ * Node ≥ 22 ships an inert global `localStorage` that shadows jsdom's (see
+ * tests/theme-provider.test.tsx), so the list's remembered filters go to an
+ * in-memory Storage that lives for one test (cleared in `afterEach`).
+ */
+const storageData = new Map<string, string>();
+function stubLocalStorage() {
+  const storage: Storage = {
+    get length() {
+      return storageData.size;
+    },
+    clear: () => storageData.clear(),
+    getItem: (key) => storageData.get(key) ?? null,
+    key: (index) => Array.from(storageData.keys())[index] ?? null,
+    removeItem: (key) => {
+      storageData.delete(key);
+    },
+    setItem: (key, value) => {
+      storageData.set(key, String(value));
+    },
+  };
+  vi.stubGlobal("localStorage", storage);
+}
+
 function renderTable(agents: AgentOut[], role: "owner" | "admin" | "builder" | "viewer" = "admin") {
   vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+  stubLocalStorage();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const fetchMock = stubFetch(agents, role);
   const view = render(
@@ -166,6 +191,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
   searchParams = new URLSearchParams();
+  storageData.clear();
 });
 
 /**
@@ -210,11 +236,24 @@ describe("AgentsTable", () => {
     expect(screen.queryAllByRole("switch")).toHaveLength(0);
   });
 
+  /** Search appears once the list has 6 agents (docs/ui/DESIGN-SYSTEM.md section 9). */
+  const SIX_AGENTS = [
+    agent({ id: "a-1", name: "Claims intake", slug: "claims-intake" }),
+    agent({ id: "a-2", name: "Support desk", slug: "support-desk" }),
+    agent({ id: "a-3", name: "Café concierge", slug: "cafe" }),
+    agent({ id: "a-4", name: "Billing line", slug: "billing" }),
+    agent({ id: "a-5", name: "Renewals", slug: "renewals" }),
+    agent({ id: "a-6", name: "Roadside help", slug: "roadside" }),
+  ];
+
+  it("hides the search box below 6 agents", async () => {
+    renderTable(SIX_AGENTS.slice(0, 2));
+    await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
+    expect(screen.queryByLabelText("Search agents")).toBeNull();
+  });
+
   it("filters by search text across name and slug", async () => {
-    renderTable([
-      agent({ id: "a-1", name: "Claims intake", slug: "claims-intake" }),
-      agent({ id: "a-2", name: "Support desk", slug: "support-desk" }),
-    ]);
+    renderTable(SIX_AGENTS);
 
     await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
     expect(tableScope().getByText("Support desk")).toBeTruthy();
@@ -222,7 +261,83 @@ describe("AgentsTable", () => {
     fireEvent.change(screen.getByLabelText("Search agents"), { target: { value: "support" } });
 
     await waitFor(() => expect(tableScope().queryByText("Claims intake")).toBeNull());
+    // The match is highlighted, so the name is split across a <mark> and a text node.
+    const bodyRows = tableScope().getAllByRole("row").slice(1);
+    expect(bodyRows.map((row) => row.querySelector("span.font-medium")?.textContent)).toEqual(["Support desk"]);
+  });
+
+  it("matches accent-insensitively, needs every word, highlights the match and clears on Escape", async () => {
+    renderTable(SIX_AGENTS);
+    await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
+    const search = screen.getByLabelText("Search agents");
+
+    fireEvent.change(search, { target: { value: "cafe CONC" } });
+    await waitFor(() => expect(tableScope().queryByText("Claims intake")).toBeNull());
+    const marks = Array.from(
+      document.querySelectorAll('[data-slot="responsive-table-table"] [data-slot="search-match"]'),
+    ).map((node) => node.textContent);
+    expect(marks).toEqual(expect.arrayContaining(["Café", "conc", "cafe"]));
+
+    fireEvent.change(search, { target: { value: "cafe desk" } });
+    expect((await screen.findAllByText("No agents match “cafe desk”")).length).toBeGreaterThan(0);
+
+    fireEvent.keyDown(search, { key: "Escape" });
+    await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
+    expect((search as HTMLInputElement).value).toBe("");
+  });
+
+  it("shows a no-matches state with Clear filters, distinct from the empty list", async () => {
+    renderTable(SIX_AGENTS);
+    await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText("Search agents"), { target: { value: "nothing like this" } });
+    expect(await screen.findByText("No agents match “nothing like this”")).toBeTruthy();
+    expect(screen.queryByText("No agents yet")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
+  });
+
+  it("remembers the status filter per person and ignores a stored value it doesn't recognise", async () => {
+    const first = renderTable([
+      agent({ id: "a-1", name: "Claims intake", slug: "claims-intake", published: true }),
+      agent({ id: "a-2", name: "Support desk", slug: "support-desk", published: false }),
+    ]);
+    await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
+    fireEvent.click(screen.getByRole("radio", { name: /^Draft/ }));
+    await waitFor(() => expect(tableScope().queryByText("Claims intake")).toBeNull());
+    first.unmount();
+
+    const second = renderTable([
+      agent({ id: "a-1", name: "Claims intake", slug: "claims-intake", published: true }),
+      agent({ id: "a-2", name: "Support desk", slug: "support-desk", published: false }),
+    ]);
+    await waitFor(() => expect(tableScope().getByText("Support desk")).toBeTruthy());
+    expect(tableScope().queryByText("Claims intake")).toBeNull();
+    expect(screen.getByRole("radio", { name: /^Draft/ }).getAttribute("aria-checked")).toBe("true");
+    second.unmount();
+
+    storageData.set("lkap.console.agents.filters.v1", JSON.stringify({ status: "bogus", pack: 42 }));
+    renderTable([
+      agent({ id: "a-1", name: "Claims intake", slug: "claims-intake", published: true }),
+      agent({ id: "a-2", name: "Support desk", slug: "support-desk", published: false }),
+    ]);
+    await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
     expect(tableScope().getByText("Support desk")).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /^All/ }).getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("counts agents per status in the filter", async () => {
+    renderTable([
+      agent({ id: "a-1", name: "Claims intake", slug: "claims-intake", published: true }),
+      agent({ id: "a-2", name: "Support desk", slug: "support-desk", published: false }),
+      agent({ id: "a-3", name: "Old smoke test", slug: "smoke", archived_at: "2026-09-29T07:30:00Z" }),
+    ]);
+    await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
+    expect(screen.getByRole("radio", { name: /^All/ }).textContent).toBe("All2");
+    expect(screen.getByRole("radio", { name: /^Live/ }).textContent).toBe("Live1");
+    expect(screen.getByRole("radio", { name: /^Draft/ }).textContent).toBe("Draft1");
+    expect(screen.getByRole("radio", { name: /^Archived/ }).textContent).toBe("Archived1");
   });
 
   it("filters by status (Live / Draft)", async () => {
@@ -233,15 +348,15 @@ describe("AgentsTable", () => {
 
     await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
 
-    fireEvent.click(screen.getByRole("button", { name: "Live" }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Live/ }));
     await waitFor(() => expect(tableScope().queryByText("Support desk")).toBeNull());
     expect(tableScope().getByText("Claims intake")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Draft" }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Draft/ }));
     await waitFor(() => expect(tableScope().queryByText("Claims intake")).toBeNull());
     expect(tableScope().getByText("Support desk")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    fireEvent.click(screen.getByRole("radio", { name: /^All/ }));
     await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
     expect(tableScope().getByText("Support desk")).toBeTruthy();
   });
@@ -255,11 +370,11 @@ describe("AgentsTable", () => {
 
     await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
     expect(tableScope().queryByText("Old smoke test")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Live" }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Live/ }));
     await waitFor(() => expect(tableScope().getByText("Claims intake")).toBeTruthy());
     expect(tableScope().queryByText("Old smoke test")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Archived" }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Archived/ }));
     await waitFor(() => expect(tableScope().getByText("Old smoke test")).toBeTruthy());
     expect(tableScope().queryByText("Claims intake")).toBeNull();
     expect(tableScope().getByText("Archived", { selector: "[data-tone]" })).toBeTruthy();
@@ -354,17 +469,25 @@ describe("AgentsTable", () => {
   });
 
   // ------------------------------------------------------- V2-20-5: viewer gating
-  it("disables the New agent button for a viewer (no dialog)", async () => {
+  it("replaces the New agent button with a read-only note for a viewer (no dialog)", async () => {
     renderTable([], "viewer");
     await screen.findByText("No agents yet");
     // `builder`+ is required (auth/roles.py::ROUTE_POLICY "/v1/agents" write);
-    // a viewer never even sees the create form's `Link`, just a disabled
-    // button (docs/v2/_asks.md V2-20-5 — a `<Link>` can't be `disabled`).
-    const button = await screen.findByRole("button", { name: "New agent" });
-    expect((button as HTMLButtonElement).disabled).toBe(true);
+    // a viewer reads a note that names the next step instead of an unusable
+    // control (docs/ui/AUDIT.md decision D12).
+    expect(await screen.findByText("Ask a builder or admin to make changes.", { exact: false })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "New agent" })).toBeNull();
     expect(screen.queryByRole("link", { name: "New agent" })).toBeNull();
-    fireEvent.click(button);
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("hides Restore on archived rows for a viewer", async () => {
+    searchParams = new URLSearchParams("status=archived");
+    renderTable([agent({ id: "a-2", name: "Old smoke test", slug: "smoke", archived_at: "2026-09-29T07:30:00Z" })], "viewer");
+    await waitFor(() => expect(tableScope().getByText("Old smoke test")).toBeTruthy());
+    // Give the role query a chance to resolve, then check.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole("button", { name: "Restore Old smoke test" })).toBeNull();
   });
 
   // The row menu's Publish/Delete items are also gated (`disabled={!canWrite}`

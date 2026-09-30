@@ -74,12 +74,12 @@ function FlowEmptyState({ agent }: { agent: AgentOut }) {
             key={part.title}
             className="flex gap-3 border-border p-4 not-last:border-b sm:not-last:border-r sm:not-last:border-b-0"
           >
-            <span className="mt-0.5 text-muted-foreground">
+            <span className="mt-0.5 text-text-secondary">
               <Icon as={part.icon} size="sm" />
             </span>
             <span className="flex flex-col gap-0.5">
               <span className="text-sm font-medium text-foreground">{part.title}</span>
-              <span className="text-[0.8125rem] text-muted-foreground">{part.body}</span>
+              <span className="text-label text-text-secondary">{part.body}</span>
             </span>
           </li>
         ))}
@@ -95,7 +95,7 @@ export function FlowSection({ agent }: { agent: AgentOut }) {
   if (mode !== "flow") return <FlowEmptyState agent={agent} />;
   return (
     <div className="flex flex-col gap-3" data-slot="flow-section">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-text-secondary">
         Each step runs with the agent&apos;s{" "}
         <button
           type="button"

@@ -93,7 +93,7 @@ export function MentionTextarea({ value, onValueChange, variables, className, id
           id={listId}
           role="listbox"
           aria-label="Flow variables"
-          className="absolute inset-x-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md"
+          className="absolute inset-x-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-overlay"
         >
           {matches.map((variable, index) => (
             <li
@@ -103,7 +103,7 @@ export function MentionTextarea({ value, onValueChange, variables, className, id
               aria-selected={index === active}
               className={cn(
                 "flex cursor-pointer items-baseline justify-between gap-2 rounded-sm px-2 py-1 text-sm",
-                index === active ? "bg-muted text-foreground" : "text-muted-foreground",
+                index === active ? "bg-muted text-foreground" : "text-text-secondary",
               )}
               onMouseDown={(event) => {
                 event.preventDefault();

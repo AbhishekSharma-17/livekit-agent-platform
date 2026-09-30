@@ -46,14 +46,14 @@ export function EdgeForm({
   const isToolOutcome = sourceKind === "tool";
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-text-secondary">
         From <span className="font-medium text-foreground">{sourceLabel}</span> to{" "}
         <span className="font-medium text-foreground">{targetLabel}</span>
       </p>
       {isToolOutcome ? (
         <Field label="Taken when the tool" htmlFor={`${id}-outcome`}>
           <Input id={`${id}-outcome`} value={outcome ? TOOL_OUTCOME_LABEL[outcome] : "Not assigned"} readOnly />
-          <p className="mt-1 text-[0.8125rem] text-muted-foreground">
+          <p className="mt-1 text-label text-text-secondary">
             Change this in the tool step&rsquo;s own Outcomes field.
           </p>
         </Field>

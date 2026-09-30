@@ -1,11 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { HistoryIcon, RotateCcwIcon } from "lucide-react";
+import { HistoryIcon, Undo2Icon } from "lucide-react";
 import { useFormContext } from "react-hook-form";
 import { toast } from "sonner";
 
-import { errorMessage } from "@/components/console/shared/error-banner";
+import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
+import { IfCan } from "@/components/console/shared/permission";
 import { Icon } from "@/components/shared/icon";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { StatusChip } from "@/components/shared/status-chip";
@@ -14,18 +16,16 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { AgentOut, ConfigVersionOut } from "@/contracts/lkap-contracts";
 import { cn } from "@/lib/utils";
 
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 
 import { useAgentVersion, useAgentVersions, useRestoreVersion } from "./api";
 import { diffRows, objectHash, preview, type DiffRow } from "./version-diff";
-import { SkeletonRows } from "@/components/shared/loading-state";
+import { LoadingRow, SkeletonRows } from "@/components/shared/loading-state";
 
 /**
  * Version history (V2-16): every saved `config_version` of the agent, a diff
@@ -45,12 +45,12 @@ export function VersionHistory({ agent, variant = "link" }: { agent: AgentOut; v
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="rounded-xs font-medium underline underline-offset-2 hover:text-foreground"
+          className="rounded-sm font-medium underline underline-offset-2 hover:text-foreground"
         >
           History
         </button>
       ) : (
-        <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
+        <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(true)}>
           <Icon as={HistoryIcon} />
           History
         </Button>
@@ -70,26 +70,20 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
   const [confirming, setConfirming] = React.useState(false);
   const version = useAgentVersion(agent.id, selected);
   const restore = useRestoreVersion(agent.id);
-  const { canWrite } = useWriteAccess();
-  const writeReason = writeAccessReason();
   const form = useFormContext() as ReturnType<typeof useFormContext> | null;
   const dirty = Boolean(form?.formState.isDirty);
   const items = versions.data?.items ?? [];
 
+  // A failure throws into the confirmation, which says why in plain words and stays open.
   async function onRestore() {
     if (selected === null) return;
-    try {
-      const updated = await restore.mutateAsync(selected);
-      toast.success(
-        updated.config_version === agent.config_version
-          ? `Version ${selected} matches the current configuration`
-          : `Restored version ${selected} as version ${updated.config_version}`,
-      );
-      setConfirming(false);
-      onDone();
-    } catch (error) {
-      toast.error(`Couldn't restore — ${errorMessage(error)}`);
-    }
+    const updated = await restore.mutateAsync(selected);
+    toast.success(
+      updated.config_version === agent.config_version
+        ? `Version ${selected} matches the current configuration`
+        : `Restored version ${selected} as version ${updated.config_version}`,
+    );
+    onDone();
   }
 
   return (
@@ -105,9 +99,9 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
           {versions.isLoading ? (
             <SkeletonRows label="Loading versions" rows={4} rowClassName="h-12" />
           ) : versions.isError ? (
-            <p className="text-sm text-danger-text">Couldn&apos;t load versions — {errorMessage(versions.error)}</p>
+            <ErrorBanner error={versions.error} context={{ action: "load versions" }} onRetry={() => void versions.refetch()} />
           ) : (
-            <ol aria-label="Versions" className="flex flex-col divide-y divide-border rounded-md border border-border">
+            <ol aria-label="Versions" className="flex flex-col divide-y divide-border rounded border border-border">
               {items.map((item) => {
                 const current = item.config_version === agent.config_version;
                 const active = item.config_version === selected;
@@ -119,13 +113,13 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
                       disabled={current}
                       onClick={() => setSelected(item.config_version)}
                       className={cn(
-                        "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:cursor-default",
-                        active ? "bg-muted" : "hover:bg-muted/60",
+                        "flex min-h-14 w-full items-center justify-between gap-3 px-3 py-2 text-left text-body outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:cursor-default",
+                        active ? "bg-brand-subtle" : "hover:bg-muted",
                       )}
                     >
                       <span className="flex min-w-0 flex-col">
                         <span className="font-medium">Version {item.config_version}</span>
-                        <span className="truncate text-xs text-muted-foreground">
+                        <span className="truncate text-caption text-text-secondary tabular-nums">
                           <RelativeTime iso={item.created_at} />
                           {item.note ? ` · ${item.note}` : ""}
                         </span>
@@ -147,30 +141,36 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
           {selected !== null ? (
             <section aria-labelledby="version-diff-title" className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 id="version-diff-title" className="text-sm font-medium">
+                <h3 id="version-diff-title" className="text-body font-semibold">
                   Version {selected} → current (version {agent.config_version})
                 </h3>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => setConfirming(true)}
-                  disabled={!canWrite || !version.data}
-                  title={canWrite ? undefined : writeReason}
-                >
-                  <Icon as={RotateCcwIcon} />
-                  Restore
-                </Button>
+                <IfCan>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setConfirming(true)}
+                    disabled={!version.data}
+                  >
+                    <Icon as={Undo2Icon} />
+                    Restore
+                  </Button>
+                </IfCan>
               </div>
               {version.data ? (
                 <VersionDiff before={version.data} after={agent} />
               ) : version.isError ? (
-                <p className="text-sm text-danger-text">Couldn&apos;t load version {selected}.</p>
+                <ErrorBanner
+                  error={version.error}
+                  context={{ action: `load version ${selected}` }}
+                  onRetry={() => void version.refetch()}
+                />
               ) : (
                 <SkeletonRows label="Loading this version" rows={4} rowClassName="h-6" />
               )}
             </section>
           ) : (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-label text-text-secondary">
               {items.length > 1
                 ? "Pick a version to see what changed since then."
                 : versions.isLoading
@@ -181,26 +181,16 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
         </div>
       </div>
 
-      <Dialog open={confirming} onOpenChange={(next) => !restore.isPending && setConfirming(next)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Restore version {selected}?</DialogTitle>
-            <DialogDescription>
-              Its configuration is validated and saved as version {agent.config_version + 1}. Nothing is deleted —
-              you can restore the current version the same way.
-              {dirty ? " Unsaved changes in the editor are discarded." : ""}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setConfirming(false)} disabled={restore.isPending}>
-              Cancel
-            </Button>
-            <Button type="button" onClick={() => void onRestore()} disabled={restore.isPending}>
-              {restore.isPending ? "Restoring…" : "Restore"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        destructive={false}
+        title={`Restore version ${selected}?`}
+        description={`Its configuration is validated and saved as version ${agent.config_version + 1}. Nothing is deleted — you can restore the current version the same way.${dirty ? " Unsaved changes in the editor are discarded." : ""}`}
+        confirmLabel="Restore"
+        busyLabel="Restoring…"
+        onConfirm={onRestore}
+      />
     </>
   );
 }
@@ -226,13 +216,19 @@ export function VersionDiff({ before, after }: { before: ConfigVersionOut; after
     };
   }, [before, after]);
 
-  if (failed) return <p className="text-sm text-danger-text">Couldn&apos;t compute the difference.</p>;
-  if (rows === null) return <p className="text-sm text-muted-foreground">Comparing…</p>;
-  if (rows.length === 0) return <p className="text-sm text-muted-foreground">No differences.</p>;
+  if (failed) {
+    return (
+      <p role="alert" className="text-label text-destructive-text">
+        Couldn&apos;t compare the versions. Close the history and open it again.
+      </p>
+    );
+  }
+  if (rows === null) return <LoadingRow label="Comparing…" />;
+  if (rows.length === 0) return <p className="text-label text-text-secondary">No differences.</p>;
   return (
     <ul aria-label="Changes" className="flex flex-col gap-2">
       {rows.map((row, index) => (
-        <li key={`${row.path}-${index}`} className="rounded-md border border-border p-2 text-xs" data-diff-kind={row.kind}>
+        <li key={`${row.path}-${index}`} className="rounded border border-border p-2 text-caption" data-diff-kind={row.kind}>
           <div className="flex items-center gap-2">
             <StatusChip
               size="sm"
@@ -243,7 +239,7 @@ export function VersionDiff({ before, after }: { before: ConfigVersionOut; after
             <code className="truncate font-mono">{row.path || "(config)"}</code>
           </div>
           {row.kind === "changed" || row.kind === "removed" ? (
-            <p className="mt-1 font-mono break-all text-danger-text">− {preview(row.before)}</p>
+            <p className="mt-1 font-mono break-all text-destructive-text">− {preview(row.before)}</p>
           ) : null}
           {row.kind === "changed" || row.kind === "added" ? (
             <p className="mt-1 font-mono break-all text-success-text">+ {preview(row.after)}</p>

@@ -25,7 +25,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useKbs, useKnowledgeConnections } from "@/components/console/lib/api-hooks";
 import { EmptyState } from "@/components/console/shared/empty-state";
-import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { embedderLabel } from "@/components/console/knowledge/embedder-label";
 import { RERANKER_CONNECTION_KINDS } from "@/components/console/settings/knowledge-connection-dialog";
 import { DetailsDisclosure } from "@/components/console/sessions/details-disclosure";
@@ -125,7 +125,7 @@ export function KnowledgeTab() {
           </SectionRow>
         ) : kbsQuery.isError ? (
           <SectionRow>
-            <ErrorBanner message={errorMessage(kbsQuery.error)} onRetry={() => kbsQuery.refetch()} />
+            <ErrorBanner error={kbsQuery.error} context={{ action: "load knowledge bases" }} onRetry={() => kbsQuery.refetch()} />
           </SectionRow>
         ) : allKbs.length === 0 ? (
           <SectionRow>
@@ -134,7 +134,7 @@ export function KnowledgeTab() {
               title="No knowledge bases yet"
               description="Create one under Knowledge, upload documents, then attach it here."
               action={
-                <Link href="/console/knowledge" className="text-sm font-medium text-brand-text hover:underline">
+                <Link href="/console/knowledge" className="text-sm font-medium text-brand hover:underline">
                   Go to Knowledge
                 </Link>
               }
@@ -142,7 +142,7 @@ export function KnowledgeTab() {
           </SectionRow>
         ) : filteredKbs.length === 0 ? (
           <SectionRow>
-            <p className="text-sm text-muted-foreground">No knowledge bases match &quot;{query}&quot;.</p>
+            <p className="text-sm text-text-secondary">No knowledge bases match &quot;{query}&quot;.</p>
           </SectionRow>
         ) : (
           filteredKbs.map((kb) => (
@@ -167,7 +167,7 @@ export function KnowledgeTab() {
         <SectionRow>
           <Link
             href="/console/knowledge"
-            className="text-[0.8125rem] font-medium text-muted-foreground hover:text-foreground hover:underline"
+            className="text-label font-medium text-text-secondary hover:text-foreground hover:underline"
           >
             Manage knowledge bases
           </Link>
@@ -239,7 +239,7 @@ export function KnowledgeTab() {
                   <RadioGroupItem id="knowledge-mode-hybrid" value="hybrid" className="mt-0.5" />
                   <span>
                     Hybrid
-                    <span className="block text-[0.8125rem] text-muted-foreground">
+                    <span className="block text-label text-text-secondary">
                       Also matches exact words, like policy numbers or form names.
                     </span>
                   </span>
@@ -248,7 +248,7 @@ export function KnowledgeTab() {
                   <RadioGroupItem id="knowledge-mode-vector" value="vector" className="mt-0.5" />
                   <span>
                     Vector only
-                    <span className="block text-[0.8125rem] text-muted-foreground">
+                    <span className="block text-label text-text-secondary">
                       Matches by meaning only, even when the wording is different.
                     </span>
                   </span>
@@ -291,7 +291,7 @@ export function KnowledgeTab() {
                   />
                 )}
               />
-              <span className="w-10 shrink-0 text-right text-sm tabular-nums text-muted-foreground">
+              <span className="w-10 shrink-0 text-right text-sm tabular-nums text-text-secondary">
                 {Math.round((minScore ?? 0) * 100)}%
               </span>
             </div>
@@ -365,7 +365,7 @@ export function KnowledgeTab() {
             </Select>
           </Field>
           {hostedUnavailable && (selectedConnectionId || rerankerConnections.length > 0) ? (
-            <p className="text-[0.8125rem] text-muted-foreground">
+            <p className="text-label text-text-secondary">
               A hosted re-ranker works only with the search tool — turn off &quot;Add the best matches to every
               turn&quot; above to use one.
             </p>
@@ -389,7 +389,7 @@ export function KnowledgeTab() {
                   <RadioGroupItem id="knowledge-query-mode-conversation" value="conversation" className="mt-0.5" />
                   <span>
                     This message and what came right before
-                    <span className="block text-[0.8125rem] text-muted-foreground">
+                    <span className="block text-label text-text-secondary">
                       Better for short follow-ups like &quot;and what about theft?&quot;
                     </span>
                   </span>
@@ -398,7 +398,7 @@ export function KnowledgeTab() {
                   <RadioGroupItem id="knowledge-query-mode-last-turn" value="last_turn" className="mt-0.5" />
                   <span>
                     Just this message
-                    <span className="block text-[0.8125rem] text-muted-foreground">
+                    <span className="block text-label text-text-secondary">
                       Simpler, but can miss the point of a short follow-up.
                     </span>
                   </span>
@@ -458,7 +458,7 @@ export function KnowledgeTab() {
 
         <SectionRow>
           <DetailsDisclosure label="How this works">
-            <p className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+            <p className="text-label leading-[1.125rem] text-text-secondary">
               Hybrid mode fuses a keyword search with an embedding (meaning) search and ranks the
               combined list. Turning on re-ranking rescores the closest matches with a second, more
               careful model before the minimum-match floor is applied. The floor compares each

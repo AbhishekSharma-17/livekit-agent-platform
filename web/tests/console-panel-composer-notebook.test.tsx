@@ -217,7 +217,7 @@ describe("panel presets (ask #56)", () => {
     const button = await screen.findByRole("button", { name: "Start from the Notebook preset" });
     fireEvent.click(button);
     // The panel already has blocks: a confirm dialog appears first.
-    expect(screen.getByRole("dialog", { name: "Replace the current blocks?" })).toBeTruthy();
+    expect(screen.getByRole("alertdialog", { name: "Replace the current blocks?" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Replace blocks" }));
     expect(latest?.config.panel.blocks.map((b) => b.id)).toEqual(["status", "notebook", "gallery"]);
     expect(latest?.config.panel.layout).toBe("wide");

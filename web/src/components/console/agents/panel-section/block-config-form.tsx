@@ -134,7 +134,7 @@ function ListEditor({
       <Button
         id={`${idBase}-add-row`}
         type="button"
-        variant="outline"
+        variant="secondary"
         size="sm"
         className="self-start"
         onClick={() => onChange([...value, blank()])}
@@ -161,7 +161,7 @@ function ColumnsEditor({
   return (
     <div className="flex flex-col gap-2" data-slot="columns-editor">
       {value.length > 0 && (
-        <div className="text-muted-foreground grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_7.5rem_2rem] gap-2 text-xs font-medium">
+        <div className="text-text-secondary grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_7.5rem_2rem] gap-2 text-xs font-medium">
           <span>Key</span>
           <span>Label</span>
           <span>Type</span>
@@ -210,7 +210,7 @@ function ColumnsEditor({
       <Button
         id={`${idBase}-add-column`}
         type="button"
-        variant="outline"
+        variant="secondary"
         size="sm"
         className="self-start"
         onClick={() => onChange([...value, { key: `col_${value.length + 1}`, label: `Column ${value.length + 1}`, type: "string" }])}
@@ -318,7 +318,7 @@ function HostsEditor({
               </Button>
             </div>
             {invalid && (
-              <p className="text-danger-text text-[0.75rem]">Write it like example.com or *.example.com</p>
+              <p className="text-destructive-text text-caption">Write it like example.com or *.example.com</p>
             )}
           </div>
         );
@@ -326,7 +326,7 @@ function HostsEditor({
       <Button
         id={`${idBase}-add-site`}
         type="button"
-        variant="outline"
+        variant="secondary"
         size="sm"
         className="self-start"
         onClick={() => onChange([...value, ""])}
@@ -433,7 +433,7 @@ function NotebookSectionsEditor({
       <Button
         id={`${idBase}-add-section`}
         type="button"
-        variant="outline"
+        variant="secondary"
         size="sm"
         className="self-start"
         onClick={() => onChange([...value, { id: `section_${value.length + 1}`, title: "", kind: "text" }])}
@@ -511,7 +511,7 @@ function LayoutChildrenEditor({
       <Button
         id={`${idBase}-add-child`}
         type="button"
-        variant="outline"
+        variant="secondary"
         size="sm"
         className="self-start"
         disabled={available.length === 0}
@@ -524,7 +524,7 @@ function LayoutChildrenEditor({
         Add a block
       </Button>
       {available.length === 0 && value.length === 0 && (
-        <p className="text-muted-foreground text-[0.8125rem]">Add another block to this panel first.</p>
+        <p className="text-text-secondary text-label">Add another block to this panel first.</p>
       )}
     </div>
   );
@@ -696,7 +696,7 @@ export function BlockConfigForm({
                 onChange={(next) => onChange(setBlockConfig(panel, index, field, next))}
               />
               {field.hint ? (
-                <p id={`${id}-hint`} className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                <p id={`${id}-hint`} className="text-label leading-[1.125rem] text-text-secondary">
                   {field.hint}
                 </p>
               ) : null}
@@ -714,7 +714,7 @@ export function BlockConfigForm({
                 onChange={(next) => onChange(setBlockConfig(panel, index, field, next))}
               />
               {field.hint ? (
-                <p id={`${id}-hint`} className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                <p id={`${id}-hint`} className="text-label leading-[1.125rem] text-text-secondary">
                   {field.hint}
                 </p>
               ) : null}
@@ -733,7 +733,7 @@ export function BlockConfigForm({
                 canvasBlocks={canvasBlocks}
               />
               {field.hint ? (
-                <p id={`${id}-hint`} className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                <p id={`${id}-hint`} className="text-label leading-[1.125rem] text-text-secondary">
                   {field.hint}
                 </p>
               ) : null}
@@ -757,7 +757,7 @@ export function BlockConfigForm({
                 otherBlocks={otherBlocks}
               />
               {field.hint ? (
-                <p id={`${id}-hint`} className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                <p id={`${id}-hint`} className="text-label leading-[1.125rem] text-text-secondary">
                   {field.hint}
                 </p>
               ) : null}
@@ -775,7 +775,7 @@ export function BlockConfigForm({
                 onChange={(next) => onChange(setBlockConfig(panel, index, field, next))}
               />
               {field.hint ? (
-                <p id={`${id}-hint`} className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                <p id={`${id}-hint`} className="text-label leading-[1.125rem] text-text-secondary">
                   {field.hint}
                 </p>
               ) : null}
@@ -797,7 +797,7 @@ export function BlockConfigForm({
                 onChange={(next) => onChange(setBlockConfig(panel, index, field, next))}
               />
               {field.hint ? (
-                <p id={`${id}-hint`} className="text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                <p id={`${id}-hint`} className="text-label leading-[1.125rem] text-text-secondary">
                   {field.hint}
                 </p>
               ) : null}
@@ -822,7 +822,7 @@ export function BlockConfigForm({
           </Field>
         );
       })}
-      <p className="text-muted-foreground text-[0.8125rem]">Filled by {entry.filledBy}.</p>
+      <p className="text-text-secondary text-label">Filled by {entry.filledBy}.</p>
     </div>
   );
 }

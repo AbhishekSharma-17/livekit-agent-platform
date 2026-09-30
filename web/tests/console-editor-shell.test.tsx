@@ -200,7 +200,11 @@ function json(status: number, body: unknown): Response {
   return { ok: status < 400, status, statusText: String(status), json: async () => body } as Response;
 }
 
-function stubServer(agent: AgentOut, validation: ValidationResult = { ok: true, errors: [], warnings: [] }): Server {
+function stubServer(
+  agent: AgentOut,
+  validation: ValidationResult = { ok: true, errors: [], warnings: [] },
+  role: "admin" | "viewer" = "admin",
+): Server {
   const server: Server = { agent, validation, rejectConfig: null, puts: [], validateCalls: 0, deleted: false };
   vi.stubGlobal(
     "fetch",
@@ -248,7 +252,7 @@ function stubServer(agent: AgentOut, validation: ValidationResult = { ok: true, 
       if (path === "auth/me") {
         return json(200, {
           user: { id: "u1", email: "admin@example.test" },
-          workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role: "admin" }],
+          workspaces: [{ id: "ws1", name: "Test workspace", slug: "test", role }],
         });
       }
       throw new Error(`Unhandled fetch: ${method} ${url}`);
@@ -257,8 +261,8 @@ function stubServer(agent: AgentOut, validation: ValidationResult = { ok: true, 
   return server;
 }
 
-function renderEditor(agent = makeAgent(), validation?: ValidationResult) {
-  const server = stubServer(agent, validation);
+function renderEditor(agent = makeAgent(), validation?: ValidationResult, role: "admin" | "viewer" = "admin") {
+  const server = stubServer(agent, validation, role);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const view = render(
     <QueryClientProvider client={client}>
@@ -276,13 +280,14 @@ function listNav() {
 }
 
 /**
- * An open dialog or popover (`role="dialog"`), optionally by its accessible
- * name. Queried with selectors: `findByRole` over the whole editor is slow
- * once Radix marks the rest of the page `aria-hidden`.
+ * An open dialog or popover (`role="dialog"`, or `role="alertdialog"` for a
+ * destructive confirmation), optionally by its accessible name. Queried with
+ * selectors: `findByRole` over the whole editor is slow once Radix marks the
+ * rest of the page `aria-hidden`.
  */
 async function findDialog(name?: string | RegExp): Promise<HTMLElement> {
   return waitFor(() => {
-    const dialogs = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]'));
+    const dialogs = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]'));
     const match = dialogs.find((el) => {
       if (name === undefined) return true;
       const labelId = el.getAttribute("aria-labelledby");
@@ -302,13 +307,14 @@ function header() {
 
 async function ready() {
   await screen.findByRole("heading", { level: 1, name: "Claims intake" });
-  // `canWrite` (docs/v2/_asks.md V2-20-5) resolves from a separate `auth/me`
-  // query; wait for it so Save/Publish aren't still showing their
-  // role-disabled state when a test's first action clicks them.
+  // The role (docs/v2/_asks.md V2-20-5) resolves from a separate `auth/me`
+  // query, and Publish / Delete / Save only render once it says the person
+  // can write (decision D12); wait for them before a test's first action.
   await waitFor(() => {
     const trigger = (screen.queryByRole("button", { name: "Publish" }) ??
       screen.queryByRole("button", { name: "Unpublish" })) as HTMLButtonElement | null;
-    if (trigger) expect(trigger.disabled).toBe(false);
+    expect(trigger).toBeTruthy();
+    expect(trigger?.disabled).toBe(false);
   });
 }
 
@@ -339,7 +345,7 @@ describe("editor header", () => {
     // The publish Switch is gone; Publish is a button.
     expect(screen.queryByRole("switch")).toBeNull();
     expect(screen.getByRole("button", { name: "Publish" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Agents/ }).getAttribute("href")).toBe("/console/agents");
+    expect(screen.getByRole("link", { name: "Back to agents" }).getAttribute("href")).toBe("/console/agents");
   });
 
   it("keeps Save disabled until the form is dirty and shows the unsaved indicator", async () => {
@@ -388,14 +394,42 @@ describe("editor header", () => {
   });
 });
 
-describe("overflow menu", () => {
+describe("permissions (decision D12)", () => {
+  it("shows a viewer a read-only note instead of Save, Publish, Delete and rename", async () => {
+    renderEditor(makeAgent(), undefined, "viewer");
+    await screen.findByRole("heading", { level: 1, name: "Claims intake" });
+    expect(await header().findByText("You can view this. Ask a builder or admin to make changes.")).toBeTruthy();
+    expect(header().queryByRole("button", { name: "Save" })).toBeNull();
+    expect(header().queryByRole("button", { name: "Publish" })).toBeNull();
+    expect(header().queryByRole("button", { name: "Delete agent" })).toBeNull();
+    expect(header().queryByRole("button", { name: "Edit name" })).toBeNull();
+    // Reading stays available: the back link, Refresh and the test call.
+    expect(header().getByRole("link", { name: "Back to agents" })).toBeTruthy();
+    expect(header().getByRole("button", { name: "Refresh agent" })).toBeTruthy();
+    expect(header().getByRole("link", { name: /Test call/ })).toBeTruthy();
+  });
+
+  it("marks Save as the one primary action, last in the header", async () => {
+    renderEditor();
+    await ready();
+    const actions = document.querySelector('[data-slot="agent-editor-header"] [data-slot="page-actions"]') as HTMLElement;
+    const primaries = actions.querySelectorAll('[data-variant="primary"]');
+    expect(primaries).toHaveLength(1);
+    expect(primaries[0].textContent).toBe("Save");
+    const buttons = Array.from(actions.querySelectorAll("button, a"));
+    expect(buttons.at(-1)).toBe(primaries[0]);
+    expect(header().getByRole("button", { name: "Delete agent" }).getAttribute("data-variant")).toBe("danger-outline");
+  });
+});
+
+describe("delete", () => {
   it("deletes the agent after confirmation and returns to the list", async () => {
     const { server } = renderEditor();
     await ready();
-    fireEvent.keyDown(screen.getByRole("button", { name: "More agent actions" }), { key: "Enter" });
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete agent" }));
+    fireEvent.click(header().getByRole("button", { name: "Delete agent" }));
 
     const dialog = await findDialog(/Delete/);
+    expect(dialog.getAttribute("role")).toBe("alertdialog");
     expect(within(dialog).getByText(/sessions are kept for the audit trail/)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete agent" }));
     await waitFor(() => expect(server.deleted).toBe(true));
@@ -664,7 +698,7 @@ describe("unsaved guard", () => {
     fireEvent.change(screen.getByLabelText("Instructions"), { target: { value: "Be brief." } });
     await screen.findByText("Unsaved changes");
 
-    fireEvent.click(screen.getByRole("link", { name: /Agents/ }));
+    fireEvent.click(screen.getByRole("link", { name: "Back to agents" }));
     const dialog = await findDialog("Leave without saving?");
     fireEvent.click(within(dialog).getByRole("button", { name: "Leave without saving" }));
     expect(routerPush).toHaveBeenCalledWith("/console/agents");

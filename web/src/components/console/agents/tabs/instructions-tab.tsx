@@ -99,7 +99,7 @@ export function InstructionsTab({ agent }: { agent: AgentOut }) {
           >
             <Textarea
               id="instructions"
-              className="max-h-[60vh] min-h-48 overflow-y-auto text-[0.9375rem] leading-[1.6]"
+              className="max-h-[60vh] min-h-48 overflow-y-auto text-title leading-[1.6]"
               placeholder="You are a helpful assistant for..."
               aria-invalid={instructionsError ? true : undefined}
               data-issue-path="instructions"
@@ -107,13 +107,13 @@ export function InstructionsTab({ agent }: { agent: AgentOut }) {
             />
           </Field>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[0.8125rem] tabular-nums text-muted-foreground">
+            <p className="text-label tabular-nums text-text-secondary">
               {charCount} characters · ~{tokenEstimate} tokens
             </p>
             {pack?.default_instructions ? (
               <ConfirmDialog
                 trigger={
-                  <Button type="button" variant="outline" size="sm">
+                  <Button type="button" variant="secondary" size="sm">
                     Reset to pack default
                   </Button>
                 }
@@ -126,7 +126,7 @@ export function InstructionsTab({ agent }: { agent: AgentOut }) {
             ) : null}
           </div>
           {hasModeInstructions ? (
-            <p className="text-[0.8125rem] text-muted-foreground">
+            <p className="text-label text-text-secondary">
               This pack has mode-specific instructions; the realtime variant is applied automatically.
             </p>
           ) : null}
@@ -159,7 +159,7 @@ export function InstructionsTab({ agent }: { agent: AgentOut }) {
             )}
           />
           {mode === "realtime" || mode === "half_cascade" ? (
-            <p className="text-[0.8125rem] text-muted-foreground">
+            <p className="text-label text-text-secondary">
               For a realtime model with no separate voice, the greeting is spoken by the realtime model itself.
             </p>
           ) : null}
@@ -197,7 +197,7 @@ export function InstructionsTab({ agent }: { agent: AgentOut }) {
               list={timezoneListId}
               autoComplete="off"
               spellCheck={false}
-              className="font-mono text-[0.8125rem]"
+              className="font-mono text-label"
               placeholder="UTC"
               data-issue-path="timezone"
               {...register("config.timezone")}
@@ -298,7 +298,7 @@ export function InstructionsTab({ agent }: { agent: AgentOut }) {
        * cancellation it never showed) moved to its own Conversation section;
        * this tab keeps a link there instead of duplicating it.
        */}
-      <p className="text-[0.8125rem] text-muted-foreground">
+      <p className="text-label text-text-secondary">
         Turn taking, presets, sounds and noise cancellation moved to{" "}
         <Link href={`/console/agents/${agent.id}?section=conversation`} className="underline underline-offset-2">
           Conversation

@@ -14,7 +14,8 @@ export type NewAgentButtonProps = Omit<Extract<NewResourceButtonProps, { onClick
  * "New agent" (every trigger: the agents page header, the agents table's
  * empty state, the overview's setup checklist): opens the New agent dialog
  * in place (R-V4-2) instead of navigating. The role gate stays — a viewer
- * gets the disabled button with its tooltip, and the dialog never mounts.
+ * reads a note naming the next step instead (decision D12), and the dialog
+ * never opens.
  */
 export function NewAgentButton({ children = "New agent", ...props }: NewAgentButtonProps) {
   const [open, setOpen] = React.useState(false);

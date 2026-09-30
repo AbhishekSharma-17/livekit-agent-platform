@@ -21,24 +21,26 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import {
-  AlertCircleIcon,
   BracesIcon,
+  CircleAlertIcon,
   FlagIcon,
   GlobeIcon,
   LayoutGridIcon,
-  type LucideIcon,
   MessageSquareIcon,
   PhoneForwardedIcon,
   PlayIcon,
   PlusIcon,
   StarIcon,
   Trash2Icon,
+  TriangleAlertIcon,
+  type LucideIcon,
   WrenchIcon,
   XIcon,
 } from "lucide-react";
 
 import { useSectionIssues } from "@/components/console/agents/editor/editor-context";
 import { Icon } from "@/components/shared/icon";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -181,13 +183,13 @@ function FlowNodeCard({ data, selected }: NodeProps<FlowRfNode>) {
       data-issue={errors ? "error" : warnings ? "warning" : undefined}
       style={{ width: NODE_WIDTH, minHeight: NODE_HEIGHT }}
       className={cn(
-        "relative flex flex-col gap-1 rounded-md border bg-card px-3 py-2 text-card-foreground shadow-sm",
+        "relative flex flex-col gap-1 rounded border bg-card px-3 py-2 text-foreground",
         kind === "global" || kind === "qa" ? "border-dashed border-border" : "border-border",
         selected && "ring-2 ring-ring ring-offset-1 ring-offset-background",
       )}
     >
       {canHaveIncoming(kind) ? <Handle type="target" position={Position.Top} className="!size-2.5" /> : null}
-      <div className="flex items-center gap-1.5 text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase">
+      <div className="flex items-center gap-1.5 text-caption font-medium tracking-[0.04em] text-text-tertiary uppercase">
         <Icon as={KIND_ICON[kind]} size="sm" />
         {NODE_KIND_LABEL[kind]}
         {kb ? (
@@ -195,8 +197,8 @@ function FlowNodeCard({ data, selected }: NodeProps<FlowRfNode>) {
             data-kb-tag
             title={KB_TAG_TITLE[kb] ?? `Searches ${kb.slice(4)} of the agent's knowledge bases`}
             className={cn(
-              "ml-auto rounded-sm px-1 text-[0.625rem] font-medium tracking-normal normal-case",
-              kb === "KB: none" ? "bg-warning-soft text-warning-text" : "bg-muted text-muted-foreground",
+              "ml-auto rounded-sm px-1 text-caption font-medium tracking-normal normal-case",
+              kb === "KB: none" ? "bg-warning-subtle text-warning-text" : "bg-muted text-text-secondary",
             )}
           >
             {kb}
@@ -207,12 +209,12 @@ function FlowNodeCard({ data, selected }: NodeProps<FlowRfNode>) {
             role="img"
             aria-label={dotLabel}
             title={[...(issues?.errors ?? []), ...(issues?.warnings ?? [])].map((issue) => issue.message).join("\n")}
-            className={cn("size-2 rounded-full", kb ? "ml-1" : "ml-auto", errors ? "bg-danger" : "bg-warning")}
+            className={cn("size-2 rounded-pill", kb ? "ml-1" : "ml-auto", errors ? "bg-destructive-solid" : "bg-warning-solid")}
           />
         ) : null}
       </div>
       <div className="truncate text-sm font-medium">{node.label || node.id}</div>
-      <div className="line-clamp-2 text-xs text-muted-foreground">{subtitle(node)}</div>
+      <div className="line-clamp-2 text-xs text-text-secondary">{subtitle(node)}</div>
       {canHaveOutgoing(kind) ? <Handle type="source" position={Position.Bottom} className="!size-2.5" /> : null}
     </div>
   );
@@ -522,7 +524,7 @@ function FlowCanvasInner({ agent }: FlowCanvasProps) {
           <Panel position="top-left" className="flex flex-wrap items-center gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" size="sm" variant="outline">
+                <Button type="button" size="sm" variant="secondary">
                   <Icon as={PlusIcon} />
                   Add node
                 </Button>
@@ -542,11 +544,11 @@ function FlowCanvasInner({ agent }: FlowCanvasProps) {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button type="button" size="sm" variant="outline" onClick={tidy}>
+            <Button type="button" size="sm" variant="secondary" onClick={tidy}>
               <Icon as={LayoutGridIcon} />
               Tidy layout
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => setVariablesOpen(true)}>
+            <Button type="button" size="sm" variant="secondary" onClick={() => setVariablesOpen(true)}>
               <Icon as={BracesIcon} />
               Variables ({draft.variables.length})
             </Button>
@@ -617,7 +619,7 @@ function IssuesButton({
 }) {
   if (issues.length === 0) {
     return (
-      <span className="text-xs text-muted-foreground" aria-live="polite">
+      <span className="text-xs text-text-secondary" aria-live="polite">
         {checking ? "Checking…" : "No issues"}
       </span>
     );
@@ -631,8 +633,12 @@ function IssuesButton({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button type="button" size="sm" variant="outline" aria-label={`Flow issues: ${label}`}>
-          <Icon as={AlertCircleIcon} className={errorCount ? "text-danger-text" : "text-warning-text"} />
+        <Button type="button" size="sm" variant="secondary" aria-label={`Flow issues: ${label}`}>
+          {errorCount ? (
+            <Icon as={CircleAlertIcon} className="text-destructive-text" />
+          ) : (
+            <Icon as={TriangleAlertIcon} className="text-warning-text" />
+          )}
           {label}
         </Button>
       </PopoverTrigger>
@@ -658,11 +664,11 @@ function IssuesButton({
                   <span className="flex items-center gap-1.5 text-xs font-medium">
                     <span
                       aria-hidden="true"
-                      className={cn("size-1.5 rounded-full", issue.severity === "error" ? "bg-danger" : "bg-warning")}
+                      className={cn("size-1.5 rounded-pill", issue.severity === "error" ? "bg-destructive-solid" : "bg-warning-solid")}
                     />
                     {where}
                   </span>
-                  <span className="text-xs text-muted-foreground">{issue.message}</span>
+                  <span className="text-xs text-text-secondary">{issue.message}</span>
                 </button>
               </li>
             );
@@ -708,7 +714,7 @@ function InspectorFrame({
     if (docked) asideRef.current?.focus({ preventScroll: true });
   }, [docked, title]);
   const deleteButton = onDelete ? (
-    <Button type="button" variant="destructive" onClick={onDelete} className="text-danger-text sm:mr-auto">
+    <Button type="button" variant="danger-outline" onClick={onDelete} className="sm:mr-auto">
       <Icon as={Trash2Icon} />
       {deleteLabel}
     </Button>
@@ -725,7 +731,7 @@ function InspectorFrame({
         <DialogFooter>
           {deleteButton}
           <DialogClose asChild>
-            <Button type="button" variant="outline">
+            <Button type="button" variant="primary">
               Done
             </Button>
           </DialogClose>
@@ -741,17 +747,17 @@ function InspectorFrame({
       data-slot="flow-inspector"
       aria-labelledby={`${uid}-title`}
       aria-describedby={`${uid}-description`}
-      className="flex w-[380px] shrink-0 flex-col border-l border-border bg-popover text-sm text-popover-foreground outline-none"
+      className="flex w-[380px] shrink-0 flex-col border-l border-border bg-popover text-body text-foreground outline-none"
       onKeyDown={(event) => {
         // Radix popovers/selects inside the form handle (and prevent) their own Escape first.
         if (event.key === "Escape" && !event.defaultPrevented) onClose();
       }}
     >
       <header className="relative flex shrink-0 flex-col gap-1 border-b border-border px-4 py-3 pr-12">
-        <h2 id={`${uid}-title`} className="truncate text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em]">
+        <h2 id={`${uid}-title`} className="truncate text-dialog font-semibold tracking-[-0.012em]">
           {title}
         </h2>
-        <p id={`${uid}-description`} className="text-muted-foreground">
+        <p id={`${uid}-description`} className="text-text-secondary">
           {description}
         </p>
         <Button
@@ -767,7 +773,7 @@ function InspectorFrame({
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">{children}</div>
       {deleteButton ? (
-        <footer className="flex shrink-0 border-t border-border bg-muted/50 px-4 py-3">{deleteButton}</footer>
+        <footer className="flex shrink-0 border-t border-border bg-muted px-4 py-3">{deleteButton}</footer>
       ) : null}
     </aside>
   );
@@ -829,7 +835,9 @@ function NodeInspector({
           onManageVariables={onManageVariables}
         />
       ) : specs.isError ? (
-        <p className="text-sm text-danger-text">Couldn&apos;t load the node form. Reload to try again.</p>
+        <Alert tone="danger" title="Couldn't load the node form">
+          Reload the page to try again.
+        </Alert>
       ) : (
         <SkeletonRows label="Loading the node form" rows={4} rowClassName="h-9" />
       )}

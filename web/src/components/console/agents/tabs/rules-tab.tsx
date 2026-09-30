@@ -242,13 +242,13 @@ function ConditionEditor({
           value={value}
           onChange={(event) => onChange(event.target.value)}
         />
-        {parseError ? <p className="text-xs text-danger-text">{conditionErrorMessage(parseError)}</p> : null}
+        {parseError ? <p className="text-xs text-destructive-text">{conditionErrorMessage(parseError)}</p> : null}
         {canBuild ? (
           <Button type="button" variant="link" size="sm" className="self-start px-0" onClick={() => setRawMode(false)}>
             Use the builder instead
           </Button>
         ) : (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-text-secondary">
             This condition combines &ldquo;or&rdquo;, &ldquo;not&rdquo; or parentheses, so it&rsquo;s edited as text here.
           </p>
         )}
@@ -260,7 +260,7 @@ function ConditionEditor({
   const activeRows = rows ?? [];
   return (
     <div className="flex flex-col gap-2">
-      {activeRows.length === 0 ? <p className="text-xs text-muted-foreground">No conditions yet — this rule never fires.</p> : null}
+      {activeRows.length === 0 ? <p className="text-xs text-text-secondary">No conditions yet — this rule never fires.</p> : null}
       {activeRows.map((row, index) => (
         <ConditionRowEditor
           key={index}
@@ -271,11 +271,11 @@ function ConditionEditor({
           onRemove={() => onChange(rowsToCondition(activeRows.filter((_r, i) => i !== index)))}
         />
       ))}
-      {activeRows.length > 1 ? <p className="text-xs text-muted-foreground">All of these must be true.</p> : null}
+      {activeRows.length > 1 ? <p className="text-xs text-text-secondary">All of these must be true.</p> : null}
       <div className="flex items-center gap-3">
         <Button
           type="button"
-          variant="outline"
+          variant="secondary"
           size="sm"
           onClick={() => onChange(rowsToCondition([...activeRows, defaultRow()]))}
         >
@@ -309,7 +309,7 @@ function ActionEditor({
   const variableListId = React.useId();
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+    <div className="flex flex-col gap-2 rounded border border-border p-2.5">
       <div className="flex items-center gap-2">
         <Select value={action.do} onValueChange={(next) => onChange(defaultAction(next as RuleActionForm["do"]))}>
           <SelectTrigger aria-label="Action" className="w-full">
@@ -532,7 +532,7 @@ function RuleRow({
           ))}
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             className="self-start"
             disabled={rule.then.length >= 10}
@@ -591,7 +591,7 @@ export function RulesTab() {
           >
             <SectionRow className="flex flex-col divide-y divide-border">
               {rules.length === 0 ? (
-                <p className="py-1 text-sm text-muted-foreground">No rules yet.</p>
+                <p className="py-1 text-sm text-text-secondary">No rules yet.</p>
               ) : (
                 rules.map((rule, index) => (
                   <RuleRow

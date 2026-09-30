@@ -126,7 +126,7 @@ export function PrivacySection() {
                           <span className="font-medium text-foreground">
                             {option.label}
                           </span>
-                          <span className="text-[0.8125rem] text-muted-foreground">
+                          <span className="text-label text-text-secondary">
                             {option.hint}
                           </span>
                         </span>
@@ -163,7 +163,7 @@ export function PrivacySection() {
                     <label
                       key={tier.value}
                       htmlFor={id}
-                      className="flex items-start gap-2.5 rounded-md border border-border p-3 text-sm has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft/40"
+                      className="flex items-start gap-2.5 rounded border border-border p-3 text-sm has-[:checked]:border-brand-border has-[:checked]:bg-brand-subtle"
                     >
                       <RadioGroupItem
                         id={id}
@@ -174,7 +174,7 @@ export function PrivacySection() {
                         <span className="font-medium text-foreground">
                           {tier.label}
                         </span>
-                        <span className="text-[0.8125rem] text-pretty text-muted-foreground">
+                        <span className="text-label text-pretty text-text-secondary">
                           {tier.hint}
                         </span>
                       </span>

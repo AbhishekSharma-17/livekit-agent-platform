@@ -80,27 +80,27 @@ allowlist.
 
 ## Conversation
 
-How the agent takes turns lives in `config.pipeline`.
-`conversation_preset` picks one of `patient` (waits longer before replying),
-`balanced` (the LiveKit defaults), `snappy` (replies sooner and starts its
-answer while the caller is still finishing), `telephony` (for phone calls:
-harder to interrupt by line noise, a longer wait for slow speakers) or
-`custom` (the default). A named preset is stored by name and expanded when a
-session starts, so choosing one never rewrites `turn_handling`; `custom` uses
-`turn_handling` as saved: `endpointing {mode, min_delay, max_delay}`,
-`interruption {mode, min_duration, min_words, false_interruption_timeout,
-resume_false_interruption}`, `preemptive_generation {enabled, ...}` and
-`user_turn_limit`, with any newer LiveKit key passed through as is.
-`turn_detector {mode: hosted|local, unlikely_threshold}` places the
-end-of-turn model and sets how often it assumes the caller is not done
-(higher waits more). On a phone call the `telephony` preset also switches
-noise cancellation to its phone-tuned variant; that runs on LiveKit Cloud
-only and is billed per minute there (`lkap_describe("provider", id)` shows
-the price line). A realtime model decides turn-taking itself, so
-`agent_validate` warns which preset settings it ignores. Sounds are in
-`config.voice`: `thinking_sound` plays while a tool runs, `ambient_sound`
-(`office_ambience`, `city_ambience`, `crowded_room`, ...) plays under the
-whole call; neither plays on a typed chat.
+How the agent takes turns lives in `config.pipeline`. `conversation_preset` picks one of
+`patient` (waits longer before replying), `balanced` (the LiveKit defaults), `snappy` (replies
+sooner and starts its answer while the caller is still finishing), `telephony` (for phone calls:
+harder to interrupt by line noise, a longer wait for slow speakers), `fast` (suggested for voice:
+with Deepgram Flux it replies 0.1 s after Flux decides the caller has finished, prepares its
+speech early and lets LiveKit Inference Flux end turns; with the turn detector it waits 0.3 s to
+2.5 s and starts its answer early) or `custom` (the default). A named preset is stored by name
+and expanded when a session starts, so choosing one never rewrites `turn_handling`; `custom` uses
+`turn_handling` as saved: `endpointing {mode, min_delay, max_delay}`, `interruption {mode,
+min_duration, min_words, false_interruption_timeout, resume_false_interruption}`,
+`preemptive_generation {enabled, ...}` and `user_turn_limit`, with any newer LiveKit key passed
+through as is. `turn_detector {mode: hosted|local|stt, unlikely_threshold}` places the
+end-of-turn model and sets how often it assumes the caller is not done (higher waits more);
+`stt` lets a Flux model on LiveKit Inference decide instead. A `pipeline.vad` part
+(`silero-vad`, `inference-vad`) takes `min_silence_duration` (at least 0.25 with the turn
+detector). On a phone call the `telephony` preset also switches noise cancellation to its
+phone-tuned variant; that runs on LiveKit Cloud only and is billed per minute there
+(`lkap_describe("provider", id)` shows the price line). A realtime model decides turn-taking
+itself, so `agent_validate` warns which preset settings it ignores. Sounds are in `config.voice`:
+`thinking_sound` plays while a tool runs, `ambient_sound` (`office_ambience`, `city_ambience`,
+`crowded_room`, ...) plays under the whole call; neither plays on a typed chat.
 
 ## Languages and captions
 

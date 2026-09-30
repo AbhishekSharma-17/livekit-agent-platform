@@ -20,7 +20,7 @@ import { useOnlineStatus } from "@/hooks/use-online-status";
 export function OfflineBanner() {
   const online = useOnlineStatus();
   return (
-    <div data-slot="offline-banner" aria-live="polite" className={online ? "contents" : "px-8 pt-4 max-[900px]:px-5 max-[640px]:px-4"}>
+    <div data-slot="offline-banner" aria-live="polite" className={online ? undefined : "px-8 pt-4 max-[900px]:px-5 max-[640px]:px-4"}>
       {online ? null : (
         <Alert tone="warning" title="You're offline" className="mx-auto max-w-[1440px]">
           Changes save when you&rsquo;re back online. Reconnecting&hellip;

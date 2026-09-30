@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AnalyticsView } from "@/components/console/analytics/analytics-view";
+import { agentHealth, AnalyticsView, toCsv } from "@/components/console/analytics/analytics-view";
 
 // jsdom has no `scrollIntoView`; Radix Select calls it when opening (see
 // console-provider-slot.test.tsx for the same stub).
@@ -119,5 +119,50 @@ describe("AnalyticsView", () => {
     fireEvent.click(await screen.findByRole("option", { name: "Today" }));
 
     expect(replace).toHaveBeenCalledWith("/console/analytics?range=today", { scroll: false });
+  });
+
+  it("puts the date range and Refresh in the page header, beside the one h1", async () => {
+    renderView();
+    await screen.findAllByText("12");
+    const header = document.querySelector('[data-slot="page-header"]') as HTMLElement;
+    expect(header.querySelector("h1")?.textContent).toBe("Analytics");
+    expect(header.querySelector('[aria-label="Date range"]')).not.toBeNull();
+    expect(Array.from(header.querySelectorAll("button")).some((b) => b.textContent === "Refresh")).toBe(true);
+  });
+
+  it("marks each agent's health in words, and opens the Agents tab through the URL", async () => {
+    renderView();
+    await screen.findAllByText("12");
+    // Concierge had a failed call in the range.
+    expect(screen.getAllByText("Needs review").length).toBeGreaterThan(0);
+    expect(agentHealth({ failed: 0, sessions: 3 }).label).toBe("Healthy");
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Agents" }));
+    expect(replace).toHaveBeenCalledWith("/console/analytics?tab=agents", { scroll: false });
+  });
+
+  it("shows the full table with Export CSV on a detail tab", async () => {
+    searchParams = new URLSearchParams("tab=drivers");
+    renderView();
+    expect(await screen.findByText("What the money went on, largest first.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Export CSV/ })).toBeTruthy();
+    expect(screen.queryByText("Top cost drivers")).toBeNull();
+  });
+
+  it("builds CSV with quoted fields and blanks for missing values", () => {
+    expect(toCsv(["Agent", "Cost"], [["Claims, desk", null], ['Say "hi"', 2]])).toBe(
+      'Agent,Cost\r\n"Claims, desk",\r\n"Say ""hi""",2',
+    );
+  });
+
+  it("says what went wrong in plain words, with Retry", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 500, json: async () => ({ error: { code: "internal", message: "stack trace here" } }) }) as Response),
+    );
+    renderView();
+    expect(await screen.findByText("Couldn't load analytics")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(screen.queryByText(/stack trace/)).toBeNull();
   });
 });

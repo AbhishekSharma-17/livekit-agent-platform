@@ -2,19 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { LogOutIcon, UserRoundIcon } from "lucide-react";
+import { ChevronsUpDownIcon, LogOutIcon, SlidersHorizontalIcon, UserRoundIcon } from "lucide-react";
 
 import { Icon } from "@/components/shared/icon";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { ThemeSwitcher } from "@/components/shared/theme-switcher";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BREAK_GLASS_USER_ID, signOut } from "@/components/console/lib/sign-out";
 import { useMe } from "./use-me";
+import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /** Up to two initials from a name, else the email's first letter. */
 export function initialsFor(name: string | undefined, email: string): string {
@@ -23,63 +18,127 @@ export function initialsFor(name: string | undefined, email: string): string {
   return (email[0] ?? "?").toUpperCase();
 }
 
-/**
- * The signed-in user's menu in the sidebar footer (ask V2-14-1): who you are,
- * a link to the Account settings and **Sign out**, reachable from every
- * console screen (the rail on desktop, the menu dialog on phones). Hidden while
- * `/v1/auth/me` is unavailable. The break-glass admin token has no session to
- * end, so its menu says so instead of offering a sign-out that does nothing.
- */
-export function AccountMenu() {
-  const { me, unavailable } = useMe();
-  if (unavailable || !me) return null;
+const TRIGGER =
+  "flex w-full min-w-0 items-center gap-2.5 rounded px-2 py-1.5 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-sidebar-hover focus-visible:shadow-focus data-[state=open]:bg-sidebar-hover";
 
-  const { user } = me;
-  const breakGlass = user.id === BREAK_GLASS_USER_ID;
-  const displayName = user.name?.trim() || user.email;
+const ROW =
+  "flex h-[34px] w-full items-center gap-2 rounded-sm px-2 text-left text-control text-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-muted focus-visible:shadow-focus [&>svg]:text-text-secondary";
+
+function Separator() {
+  return <div role="separator" className="-mx-1.5 my-1 h-px bg-border" />;
+}
+
+/**
+ * The account menu at the foot of the sidebar (docs/ui/DESIGN-SYSTEM.md
+ * section 7.1): avatar, name and email, then a popover with the workspace
+ * switcher, the profile link, appearance (the System / Light / Dark theme
+ * switcher) and sign out. It is on every console screen: in the sidebar on
+ * desktop and in the Menu dialog at 820 px and below.
+ *
+ * While `auth/me` isn't available (the admin-token mode), there is no person
+ * to show, but the menu stays so appearance is always reachable. The
+ * break-glass admin token has no session to end, so its menu says so instead
+ * of offering a sign-out that does nothing.
+ */
+export function AccountMenu({ version }: { version?: string }) {
+  const { me, isLoading } = useMe();
+  const [open, setOpen] = React.useState(false);
+
+  if (!me && isLoading) {
+    return <div aria-hidden="true" data-slot="account-menu-placeholder" className="h-11" />;
+  }
+
+  const user = me?.user;
+  const breakGlass = user?.id === BREAK_GLASS_USER_ID;
+  const displayName = user ? user.name?.trim() || user.email : undefined;
+  const close = () => setOpen(false);
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        data-testid="account-menu-trigger"
-        aria-label={`Account: ${displayName}`}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-sidebar-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        data-testid={user ? "account-menu-trigger" : "preferences-menu-trigger"}
+        aria-label={displayName ? `Account: ${displayName}` : "Preferences"}
+        className={TRIGGER}
       >
-        <span
-          aria-hidden="true"
-          className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[0.6875rem] font-semibold text-muted-foreground"
-        >
-          {initialsFor(user.name, user.email)}
-        </span>
-        <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-          <span className="block truncate font-medium">{displayName}</span>
-          {user.name ? <span className="block truncate text-xs text-muted-foreground">{user.email}</span> : null}
-        </span>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="right" className="w-60">
-        <DropdownMenuLabel className="font-normal">
-          <span className="block truncate text-sm font-medium text-foreground">{displayName}</span>
-          <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/console/settings?tab=workspace#account">
-            <Icon as={UserRoundIcon} size="sm" />
-            Account settings
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        {breakGlass ? (
-          <p className="px-2 py-1.5 text-xs text-pretty text-muted-foreground">
-            Signed in with the break-glass admin token — there is no session to sign out of.
-          </p>
+        {user ? (
+          <span
+            aria-hidden="true"
+            className="flex size-7 shrink-0 items-center justify-center rounded-pill bg-muted-strong text-caption font-semibold text-text-secondary"
+          >
+            {initialsFor(user.name, user.email)}
+          </span>
         ) : (
-          <DropdownMenuItem onSelect={() => void signOut()}>
-            <Icon as={LogOutIcon} size="sm" />
-            Sign out
-          </DropdownMenuItem>
+          <span
+            aria-hidden="true"
+            className="flex size-7 shrink-0 items-center justify-center rounded-pill bg-muted-strong text-text-secondary"
+          >
+            <Icon as={SlidersHorizontalIcon} size="sm" />
+          </span>
         )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-label font-medium text-foreground">{displayName ?? "Preferences"}</span>
+          {user?.name ? <span className="block truncate text-caption text-text-secondary">{user.email}</span> : null}
+        </span>
+        <Icon as={ChevronsUpDownIcon} size="md" className="text-text-tertiary" />
+      </PopoverTrigger>
+      <PopoverContent
+        data-slot="account-menu"
+        side="top"
+        align="start"
+        className="w-[min(calc(100vw-32px),260px)] gap-0"
+      >
+        {user ? (
+          <>
+            <div className="px-2 py-1.5">
+              <p className="truncate text-label font-medium text-foreground">{displayName}</p>
+              <p className="truncate text-caption text-text-secondary">{user.email}</p>
+            </div>
+            {me?.workspaces && me.workspaces.length > 0 ? (
+              <>
+                <Separator />
+                <WorkspaceSwitcher workspaces={me.workspaces} />
+              </>
+            ) : null}
+            <Separator />
+            <Link href="/console/settings?tab=workspace#account" className={ROW} onClick={close}>
+              <Icon as={UserRoundIcon} size="md" />
+              Account settings
+            </Link>
+          </>
+        ) : null}
+        {user ? <Separator /> : null}
+        <div className="flex items-center justify-between gap-3 px-2 py-1">
+          <span className="text-control text-foreground">
+            Appearance
+          </span>
+          <ThemeSwitcher />
+        </div>
+        {user ? (
+          <>
+            <Separator />
+            {breakGlass ? (
+              <p className="px-2 py-1.5 text-caption text-pretty text-text-secondary">
+                Signed in with the break-glass admin token. There is no session to sign out of.
+              </p>
+            ) : (
+              <button
+                type="button"
+                className={ROW}
+                onClick={() => {
+                  close();
+                  void signOut();
+                }}
+              >
+                <Icon as={LogOutIcon} size="md" />
+                Sign out
+              </button>
+            )}
+          </>
+        ) : null}
+        {version ? (
+          <p className="px-2 pt-1.5 pb-1 text-caption text-text-tertiary tabular-nums">Version {version}</p>
+        ) : null}
+      </PopoverContent>
+    </Popover>
   );
 }

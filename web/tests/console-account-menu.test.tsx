@@ -80,7 +80,11 @@ describe("initialsFor", () => {
   });
 });
 
-/** Ask V2-14-1: sign out from every console screen, not just Settings. */
+/**
+ * Ask V2-14-1: sign out from every console screen, not just Settings. Spec
+ * 7.1: the account popover holds the workspace switcher, profile, the theme
+ * switcher and sign out.
+ */
 describe("AccountMenu", () => {
   it("shows the signed-in user and signs out from the menu", async () => {
     stubFetch(ADA);
@@ -89,29 +93,76 @@ describe("AccountMenu", () => {
     expect(trigger.textContent).toContain("AL");
     expect(trigger.textContent).toContain("ada@example.com");
 
-    fireEvent.keyDown(trigger, { key: "Enter" });
-    // Text queries, not `*ByRole`: role queries over an open Radix menu cost
+    fireEvent.click(trigger);
+    // Text queries, not `*ByRole`: role queries over an open Radix layer cost
     // seconds each in jsdom.
     const settings = await screen.findByText("Account settings");
-    expect(settings.closest('[role="menuitem"]')?.getAttribute("href")).toBe("/console/settings?tab=workspace#account");
+    expect(settings.closest("a")?.getAttribute("href")).toBe("/console/settings?tab=workspace#account");
     fireEvent.click(screen.getByText("Sign out"));
 
     await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+  });
+
+  it("holds the theme switcher (System, Light, Dark) in the popover", async () => {
+    stubFetch(ADA);
+    renderMenu();
+    fireEvent.click(await screen.findByRole("button", { name: "Account: Ada Lovelace" }));
+    await screen.findByText("Appearance");
+    const switcher = document.querySelector('[data-slot="theme-switcher"]');
+    expect(switcher?.getAttribute("aria-label")).toBe("Theme");
+    expect(Array.from(switcher?.querySelectorAll("[role='radio']") ?? []).map((radio) => radio.getAttribute("aria-label"))).toEqual([
+      "System",
+      "Light",
+      "Dark",
+    ]);
+  });
+
+  it("shows the workspace, and switches between several", async () => {
+    stubFetch({
+      ...ADA,
+      workspaces: [
+        { id: "w1", name: "Acme", role: "admin", slug: "acme" },
+        { id: "w2", name: "Globex", role: "viewer", slug: "globex" },
+      ],
+    });
+    renderMenu();
+    fireEvent.click(await screen.findByRole("button", { name: "Account: Ada Lovelace" }));
+    const acme = await screen.findByLabelText("Workspace: Acme");
+    expect(acme.getAttribute("aria-current")).toBe("true");
+    const globex = screen.getByLabelText("Workspace: Globex");
+    expect(globex.getAttribute("aria-current")).toBeNull();
+    expect(globex.textContent).toContain("viewer");
+  });
+
+  it("names a single workspace without offering a switch", async () => {
+    stubFetch({ ...ADA, workspaces: [{ id: "w1", name: "Acme", role: "builder", slug: "acme" }] });
+    renderMenu();
+    fireEvent.click(await screen.findByRole("button", { name: "Account: Ada Lovelace" }));
+    expect(await screen.findByText("Acme")).toBeTruthy();
+    expect(screen.queryByLabelText(/^Workspace:/)).toBeNull();
   });
 
   it("offers no sign-out for the break-glass admin token", async () => {
     stubFetch(BREAK_GLASS);
     renderMenu();
     const trigger = await screen.findByRole("button", { name: "Account: Break-glass admin" });
-    fireEvent.keyDown(trigger, { key: "Enter" });
+    fireEvent.click(trigger);
     expect(await screen.findByText(/no session to sign out of/)).toBeTruthy();
     expect(screen.queryByText("Sign out")).toBeNull();
   });
 
-  it("renders nothing while auth/me is unavailable", async () => {
+  it("keeps only appearance while auth/me is unavailable: no account, no sign-out", async () => {
     const calls = stubFetch({ error: { code: "not_found", message: "not found" } }, 404);
     const { container } = renderMenu();
     await waitFor(() => expect(calls.length).toBeGreaterThan(0));
+    const trigger = await screen.findByRole("button", { name: "Preferences" });
     expect(container.querySelector('[data-testid="account-menu-trigger"]')).toBeNull();
+
+    fireEvent.click(trigger);
+    await screen.findByText("Appearance");
+    expect(document.querySelector('[data-slot="theme-switcher"]')).not.toBeNull();
+    expect(screen.queryByText("Sign out")).toBeNull();
+    expect(screen.queryByText("Account settings")).toBeNull();
+    expect(screen.queryByText(/@/)).toBeNull();
   });
 });

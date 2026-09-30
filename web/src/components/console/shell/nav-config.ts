@@ -15,10 +15,11 @@ import {
 } from "lucide-react";
 
 /**
- * Console IA (docs/UI_UX_SPEC.md §3.2, docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §1).
- * Single source of truth for the sidebar, the mobile menu dialog and the
- * breadcrumb fallback label — tests assert against this list rather than a
- * hard-coded count.
+ * Console IA (docs/ui/DESIGN-SYSTEM.md section 7.1, docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §1).
+ * Single source of truth for the sidebar, the Menu dialog, the phone tab bar
+ * and the breadcrumb fallback label — tests assert against this list rather
+ * than a hard-coded count. Items are grouped by job: Build, Connect, Observe,
+ * Settings.
  *
  * Credentials (v1) drops out of the sidebar per the amendments: Providers is
  * now the entry point, and `/console/keys` (the credentials list) remains reachable only as
@@ -111,4 +112,39 @@ export function navLabelForPath(pathname: string): string {
     (a, b) => b.href.length - a.href.length,
   )[0];
   return match?.label ?? "Console";
+}
+
+/**
+ * Phone bottom tab bar (docs/ui/DESIGN-SYSTEM.md section 7.2, decision D8):
+ * the most-used destinations for the person's role, then "More", which opens
+ * the Menu dialog. Builders, admins and owners build; viewers watch.
+ */
+export type TabBarAudience = "builder" | "viewer";
+
+const TAB_BAR_HREFS: Record<TabBarAudience, readonly string[]> = {
+  builder: ["/console", "/console/agents", "/console/sessions", "/console/knowledge"],
+  viewer: ["/console", "/console/sessions", "/console/analytics"],
+};
+
+export function tabBarItems(audience: TabBarAudience): NavItem[] {
+  return TAB_BAR_HREFS[audience]
+    .map((href) => NAV_ITEMS.find((item) => item.href === href))
+    .filter((item): item is NavItem => item !== undefined);
+}
+
+/**
+ * Full-screen task pages with their own bottom action bar: the phone tab bar
+ * is not rendered there (section 7.2). None exists yet. A page can also opt
+ * out at runtime with `<HideBottomTabBar />` (`bottom-tab-bar.tsx`).
+ */
+export const FULL_SCREEN_TASK_ROUTES: ReadonlyArray<(pathname: string) => boolean> = [];
+
+export function isFullScreenTaskRoute(pathname: string): boolean {
+  return FULL_SCREEN_TASK_ROUTES.some((matches) => matches(pathname));
+}
+
+/** A live count as a badge: "9+" past nine; nothing for zero. */
+export function formatNavCount(count: number | undefined): string | undefined {
+  if (!count || count <= 0) return undefined;
+  return count > 9 ? "9+" : String(count);
 }

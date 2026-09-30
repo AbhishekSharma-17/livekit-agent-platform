@@ -1,12 +1,11 @@
-import { cookies } from "next/headers";
 import type { Metadata } from "next";
 
 import { ConsoleShell } from "@/components/console/shell/console-shell";
 
 /**
- * Admin console layout (docs/UI_UX_SPEC.md §3, §7.2). Server component so
- * `metadata` and the sidebar cookie read work; everything interactive lives
- * in `ConsoleShell`. The theme provider is mounted by the root layout.
+ * Console layout (docs/ui/DESIGN-SYSTEM.md section 7). A server component so
+ * `metadata` works; everything interactive lives in `ConsoleShell`. The theme
+ * provider is mounted by the root layout.
  */
 export const metadata: Metadata = {
   title: {
@@ -15,18 +14,13 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function ConsoleLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const cookieStore = await cookies();
-  const sidebarState = cookieStore.get("sidebar_state")?.value;
-  const defaultSidebarOpen = sidebarState !== "false";
+/**
+ * The console renders per request, as it did while this layout read the old
+ * sidebar-state cookie: its screens read the query string on the client
+ * (`useSearchParams`) and must not be prerendered at build time.
+ */
+export const dynamic = "force-dynamic";
 
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <ConsoleShell defaultSidebarOpen={defaultSidebarOpen}>{children}</ConsoleShell>
-    </div>
-  );
+export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
+  return <ConsoleShell>{children}</ConsoleShell>;
 }

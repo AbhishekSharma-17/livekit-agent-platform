@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as React from "react";
 
+import type { BreadcrumbEntry } from "@/components/shared/page-header";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -13,48 +14,62 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { useActiveWorkspace } from "@/components/console/settings/use-settings-queries";
+import { cn } from "@/lib/utils";
 import { navLabelForPath } from "./nav-config";
 import { useBreadcrumbTrail } from "./breadcrumb-context";
-import { ThemeMenu } from "./theme-menu";
 
 /**
- * < 1024 px top bar (docs/UI_UX_SPEC.md §3.1): 56 px, menu button opening
- * the sidebar as a modal menu, current page title. On ≥ 1024 px the sidebar rail
- * is always visible, so this bar collapses to just the breadcrumb trail
- * (each page's own `PageHeader` still owns its title/actions inline, per
- * §3.2 "the page's primary action lives in the PageHeader on desktop and in
- * the top bar on mobile").
+ * The top bar (docs/ui/DESIGN-SYSTEM.md sections 7.1 and 7.2): 56 px, sticky,
+ * the frosted `--scrim` with a 12 px backdrop blur and a bottom hairline.
+ * Left: the hamburger (820 px and below) and the breadcrumb: the workspace as
+ * context, then the page's own trail (set with `ConsoleBreadcrumbs`) or the
+ * nav label, the current page last with `aria-current`. The workspace crumb
+ * is dropped on phones to leave the page name room.
+ *
+ * Search lives on each list, not here; there are no notifications yet, so
+ * there is no bell.
  */
 export function TopBar() {
   const pathname = usePathname() ?? "/console";
   const trail = useBreadcrumbTrail();
-  const items = trail ?? [{ label: navLabelForPath(pathname) }];
+  const { workspace } = useActiveWorkspace();
+  const pages: BreadcrumbEntry[] = trail ?? [{ label: navLabelForPath(pathname) }];
+  const items: (BreadcrumbEntry & { context?: boolean })[] = workspace
+    ? [{ label: workspace.name, href: "/console", context: true }, ...pages]
+    : pages;
 
   return (
-    <div className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-border bg-background px-4 lg:h-12 lg:px-6">
-      <SidebarTrigger className="lg:hidden" />
+    <header
+      data-slot="top-bar"
+      className="sticky top-0 z-30 flex h-topbar shrink-0 items-center gap-2 border-b border-border bg-scrim px-5 backdrop-blur-md min-[821px]:rounded-t-lg max-[820px]:px-4"
+    >
+      <SidebarTrigger className="-ml-1.5" />
       <Breadcrumb className="min-w-0 flex-1">
-        <BreadcrumbList className="flex-nowrap">
+        <BreadcrumbList className="flex-nowrap gap-2 text-control text-text-secondary">
           {items.map((item, index) => {
             const last = index === items.length - 1;
             return (
               <React.Fragment key={`${item.label}-${index}`}>
-                <BreadcrumbItem className="truncate">
+                <BreadcrumbItem className={cn("min-w-0", item.context && "shrink-0 max-[640px]:hidden", last && "truncate")}>
                   {item.href && !last ? (
-                    <BreadcrumbLink asChild>
+                    <BreadcrumbLink asChild className="truncate">
                       <Link href={item.href}>{item.label}</Link>
                     </BreadcrumbLink>
                   ) : (
-                    <BreadcrumbPage className="truncate">{item.label}</BreadcrumbPage>
+                    <BreadcrumbPage className="truncate font-medium">{item.label}</BreadcrumbPage>
                   )}
                 </BreadcrumbItem>
-                {!last ? <BreadcrumbSeparator /> : null}
+                {!last ? (
+                  <BreadcrumbSeparator className={cn("text-text-tertiary", item.context && "max-[640px]:hidden")}>
+                    /
+                  </BreadcrumbSeparator>
+                ) : null}
               </React.Fragment>
             );
           })}
         </BreadcrumbList>
       </Breadcrumb>
-      <ThemeMenu compact className="w-auto lg:hidden" />
-    </div>
+    </header>
   );
 }

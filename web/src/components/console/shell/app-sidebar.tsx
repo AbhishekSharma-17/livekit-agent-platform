@@ -12,101 +12,117 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
+  SidebarMenuDialog,
   SidebarMenuItem,
-  SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { useHealth } from "@/components/console/lib/api-hooks";
-import { NAV_GROUPS, isNavItemActive } from "./nav-config";
+import { NAV_GROUPS, isNavItemActive, type NavItem } from "./nav-config";
+import { useLiveSessionCount } from "./nav-state";
 import { AccountMenu } from "./account-menu";
-import { ThemeMenu } from "./theme-menu";
-import { WorkspaceSwitcher } from "./workspace-switcher";
+
+/** The Sessions link's live indicator: a 7 px pulsing dot with its count for screen readers. */
+function LiveDot({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-auto flex items-center">
+      <span aria-hidden="true" data-slot="status-dot" data-pulse="" className="size-[7px] rounded-pill bg-brand" />
+      <span className="sr-only">, {count} live</span>
+    </span>
+  );
+}
 
 /**
- * docs/UI_UX_SPEC.md §3.2 (wordmark, footer) + §7.2 item 2; nav groups per
- * docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §1. Rendered both as the ≥1024px rail
- * and, via shadcn `Sidebar`'s own mobile mode, inside the phone-width menu dialog —
- * one component, so the footer (workspace switcher, theme, docs link)
- * never has to be built twice.
+ * The sidebar's content (docs/ui/DESIGN-SYSTEM.md section 7.1): the
+ * wordmark, the nav grouped by job, then the account menu at the foot above a
+ * hairline. Rendered twice from one component: in the desktop sidebar, and in
+ * the full-screen Menu dialog at 820 px and below (48 px rows there).
  */
-export function AppSidebar() {
+function SidebarBody({ touch = false }: { touch?: boolean }) {
   const pathname = usePathname() ?? "/console";
   const { data: health } = useHealth();
+  const liveCount = useLiveSessionCount();
+  const { setMenuOpen } = useSidebar();
   const docsUrl = process.env.NEXT_PUBLIC_DOCS_URL;
+  // In the Menu dialog, following a link closes it (focus goes back to the hamburger).
+  const onNavigate = touch ? () => setMenuOpen(false) : undefined;
+
+  const renderItem = (item: NavItem) => {
+    const active = isNavItemActive(item, pathname);
+    return (
+      <SidebarMenuItem key={item.href}>
+        <SidebarMenuButton asChild isActive={active} size={touch ? "touch" : "default"}>
+          <Link href={item.href} onClick={onNavigate}>
+            <Icon as={item.icon} size="nav" />
+            <span>{item.label}</span>
+            {item.href === "/console/sessions" ? <LiveDot count={liveCount} /> : null}
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  };
 
   return (
-    <Sidebar collapsible="icon" role="navigation" aria-label="Console">
-      <SidebarHeader>
+    <>
+      <SidebarHeader className={touch ? "pr-12" : undefined}>
         <Link
           href="/console"
-          className="flex items-center gap-2 rounded-md px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={onNavigate}
+          className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded px-2 outline-none focus-visible:shadow-focus"
         >
           <StateMeter state="idle" size="sm" bars={4} />
-          <span className="min-w-0 flex-1 truncate text-sm group-data-[collapsible=icon]:hidden">
-            <span className="font-semibold text-sidebar-foreground">LKAP</span>{" "}
-            <span className="font-normal text-muted-foreground">Console</span>
+          <span className="min-w-0 flex-1 truncate text-control">
+            <span className="font-semibold text-foreground">LKAP</span>{" "}
+            <span className="font-normal text-text-secondary">Console</span>
           </span>
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        {NAV_GROUPS.map((group, index) => {
-          const items = group.items.filter((item) => !item.hidden);
-          if (items.length === 0) return null;
-          return (
-            <SidebarGroup key={group.label ?? `ungrouped-${index}`}>
-              {group.label ? <SidebarGroupLabel>{group.label}</SidebarGroupLabel> : null}
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {items.map((item) => {
-                    const active = isNavItemActive(item, pathname);
-                    return (
-                      <SidebarMenuItem key={item.href}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={active}
-                          tooltip={item.label}
-                          className="data-[active=true]:bg-brand-soft data-[active=true]:text-brand-text data-[active=true]:font-medium"
-                        >
-                          <Link href={item.href}>
-                            <Icon as={item.icon} size="lg" />
-                            <span>{item.label}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          );
-        })}
+        <nav aria-label="Console" className="flex flex-col gap-4">
+          {NAV_GROUPS.map((group, index) => {
+            const items = group.items.filter((item) => !item.hidden);
+            if (items.length === 0) return null;
+            const labelId = group.label ? `sidebar-group-${group.label.toLowerCase()}${touch ? "-menu" : ""}` : undefined;
+            return (
+              <SidebarGroup key={group.label ?? `ungrouped-${index}`}>
+                {group.label ? <SidebarGroupLabel id={labelId}>{group.label}</SidebarGroupLabel> : null}
+                <SidebarMenu aria-labelledby={labelId}>{items.map(renderItem)}</SidebarMenu>
+              </SidebarGroup>
+            );
+          })}
+        </nav>
       </SidebarContent>
       <SidebarFooter>
-        <WorkspaceSwitcher />
-        <AccountMenu />
-        <SidebarSeparator className="my-1" />
-        <ThemeMenu />
         {docsUrl ? (
           <a
             href={docsUrl}
             target="_blank"
             rel="noreferrer noopener"
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-[34px] items-center gap-2.5 rounded px-2.5 text-control font-medium text-text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-sidebar-hover hover:text-foreground focus-visible:shadow-focus"
           >
-            <Icon as={ExternalLinkIcon} size="md" />
-            <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">Documentation</span>
+            <Icon as={ExternalLinkIcon} size="nav" />
+            <span className="min-w-0 flex-1 truncate">Documentation</span>
           </a>
         ) : null}
-        {health?.version ? (
-          <p className="truncate px-2 pb-1 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-            v{health.version}
-          </p>
-        ) : null}
+        <AccountMenu version={health?.version} />
       </SidebarFooter>
-    </Sidebar>
+    </>
+  );
+}
+
+export function AppSidebar() {
+  return (
+    <>
+      <Sidebar>
+        <SidebarBody />
+      </Sidebar>
+      <SidebarMenuDialog>
+        <SidebarBody touch />
+      </SidebarMenuDialog>
+    </>
   );
 }

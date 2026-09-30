@@ -494,7 +494,35 @@ S2, S3 and S5 are independent of wave A at file level. Visual coupling exists (t
 - **Exclusive files.** `web/e2e/*`, final edits to the scripts UI-1 created (`web/scripts/check-contrast.mjs`,
   `web/scripts/design-lint.mjs` and its allowlist), `web/scripts/ui-capture.mjs`, `web/tests/design-lint.test.ts`.
 
+### Status (2026-10-01, after V)
+
+Every package is merged. Details, open decisions and what was left alone: `docs/ui/REPORT.md`.
+
+| Package | Status |
+|---|---|
+| UI-1 Tokens | Done. Tokens, bridge, Inter, system default, reduced motion, icon rule, contrast gate and design lint landed. The two dark destructive deviations stay (V re-measured them; `docs/ui/TOKENS.md`). |
+| UI-2 Primitives | Done. Styleguide at `/console/preview/styleguide`; V added the caller-page (D3) specimen. `GatedButton` survives as a shim with one caller (`registry/model-test-panel.tsx`). |
+| UI-3 Shell | Done. V added the app-wide offline notice under the top bar. |
+| S1 Agents | Done. V fixed two sideways scrolls on the editor found by the render check: the phone section bar's escaping `sr-only` label (786 px at 390) and the sticky header's bleed past the 20 px gutter (4 px at 768). |
+| S2 Connect | Done, apart from the `GatedButton` above (D12 says hide it for viewers; its test asserts the disabled button). |
+| S3 Telephony | Done. The numbers section's width cap went once `Section`'s action slot could wrap (V). |
+| S4 Build library | Done. Its shared helpers moved to `components/shared` / `components/console/shared`; its list search folded into the shared one; its status overrides are now map states (V). |
+| S5 Observe | Done. |
+| S6 Settings | Done. |
+| S7 Caller-facing | Done. `caller-error.ts` now borrows the busy and server sentences from `src/lib/friendly-error.ts`; the in-call banner also covers "offline" (V). |
+| S8 Sign-in and public | Done. D9 (forgot password) still waits for an api endpoint. |
+| V Verification | Done with limits: the render check ran against the dev server on :3000, which serves the main checkout (not the V branch) with the admin bypass on, so it saw one role (owner) and main's code. Legacy token aliases are **not** deleted: `panels/**` (210 uses) and `agents-ui/**` (56) still read them, and 50 uses remain in 24 other files (follow-up in REPORT). |
+
 ## 7. Tests that will need selector or expectation updates
+
+Status after V: every row is done. The telephony tests drive the custom Select (no native selects left);
+`shared-primitives` asserts the new classes (V added the `Section` action slot); `theme-provider` asserts the
+system default; `ui-dialog` covers `alertdialog`; `login-page` asserts the plain "That email and password don't
+match" copy and that the raw message is absent; the stage tests still find `bg-stage` and keep captions out of
+`opacity-60`; `contrast-script` pins the new pairs (V added the search highlight). The insurance notebook snapshot
+is unchanged since the baseline. V also updated `ui-data-display` (segmented names are now "Failed (2)"),
+`console-settings-search` (new `lkap:list:` key plus a migration case), `console-list-search` and
+`agents-list-search` (the shared helper), and made `panel-blocks`' composite order test deterministic.
 
 | Test | Why | Package |
 |---|---|---|

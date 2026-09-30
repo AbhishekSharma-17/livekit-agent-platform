@@ -10,6 +10,8 @@
  */
 import { useEffect } from "react";
 import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provider";
+import { LoadingRow } from "@/components/shared/loading-state";
+import { Alert } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
 import type { ConnectResponse } from "@/contracts/lkap-contracts";
@@ -48,11 +50,15 @@ export function TextSessionView({
 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
+      {/* §8: connecting is said out loud; an error says what happened and
+          what to do next (`callerConnectError`), above the transcript. */}
       {error ? (
-        <p role="alert" className="text-danger-text p-3 text-sm">
-          {error}
-        </p>
-      ) : null}
+        <div className="p-3 pb-0">
+          <Alert tone="danger">{error}</Alert>
+        </div>
+      ) : details ? null : (
+        <LoadingRow label="Connecting…" className="px-3" />
+      )}
       <AgentSessionProvider session={session}>
         <TextSessionInner
           session={session}

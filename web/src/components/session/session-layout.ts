@@ -8,7 +8,7 @@
  *
  * | region     | mobile (<768)            | tablet (768–1023)        | desktop (≥1024)            |
  * |------------|--------------------------|--------------------------|----------------------------|
- * | side       | stage 45vh → panel       | stage → panel            | stage over transcript,     |
+ * | side       | stage 45dvh → panel      | stage → panel            | stage over transcript,     |
  * |            |                          |                          | panel 400 px right         |
  * | wide       | stage strip 72 px → panel| panel → stage            | 340 px rail (stage over    |
  * |            |                          |                          | transcript), panel right   |
@@ -22,6 +22,13 @@ export type SessionLayout = "side" | "wide";
 /** Reserved space under the mobile scroll region for the fixed control bar. */
 export const MOBILE_CONTROLS_SPACE =
   "calc(88px + env(safe-area-inset-bottom, 0px))";
+
+/**
+ * Caller actions reach 48 px below `lg`, where the session is a touch surface
+ * (docs/ui/DESIGN-SYSTEM.md section 10). Layout only: a minimum height on top
+ * of the button primitive's own size.
+ */
+export const PHONE_TOUCH_TARGET = "max-lg:min-h-12";
 
 export interface SessionLayoutModel {
   /** The regions in DOM order, with their visual order per breakpoint. */
@@ -40,19 +47,22 @@ const ROOT_BASE =
 const GRID_BASE =
   "flex min-h-0 flex-1 flex-col gap-3 p-3 lg:grid lg:gap-4 lg:p-4";
 
-const REGION_BASE = "border-border bg-card flex min-h-0 flex-col rounded-xl border";
+const REGION_BASE = "border-border bg-card flex min-h-0 flex-col rounded-lg border";
 
 /** Bottom sheet below `lg`, plain column region at `lg` (§5.3). */
 const TRANSCRIPT_BASE = [
   REGION_BASE,
   "overflow-hidden",
   // sheet
-  "fixed inset-x-3 bottom-[calc(88px+env(safe-area-inset-bottom,0px))] z-40 h-[60vh]",
-  "shadow-lg transition-[transform,opacity] duration-(--dur-4) ease-(--ease-drawer) motion-reduce:transition-none",
-  "data-[open=false]:pointer-events-none data-[open=false]:translate-y-[calc(100%+96px)] data-[open=false]:opacity-0",
+  "fixed inset-x-3 bottom-[calc(88px+env(safe-area-inset-bottom,0px))] z-40 h-[60dvh]",
+  // a floating layer, so it takes the sheet shadow (spec 2.4); the easing is the
+  // sheet's own (decision D3 keeps the bottom sheet)
+  "shadow-modal transition-[transform,opacity,visibility] duration-(--duration-slow) ease-(--ease-drawer) motion-reduce:transition-none",
+  // closed: out of sight, out of the tab order and the accessibility tree
+  "data-[open=false]:pointer-events-none data-[open=false]:invisible data-[open=false]:translate-y-[calc(100%+96px)] data-[open=false]:opacity-0",
   // in-column
   "lg:static lg:inset-auto lg:z-auto lg:h-auto lg:translate-y-0 lg:opacity-100 lg:shadow-none",
-  "lg:data-[open=false]:pointer-events-auto lg:data-[open=false]:translate-y-0 lg:data-[open=false]:opacity-100",
+  "lg:data-[open=false]:pointer-events-auto lg:data-[open=false]:visible lg:data-[open=false]:translate-y-0 lg:data-[open=false]:opacity-100",
   "lg:col-start-1 lg:row-start-2",
 ].join(" ");
 
@@ -86,16 +96,16 @@ export function sessionLayoutModel(layout: SessionLayout): SessionLayoutModel {
         : "lg:grid-cols-[minmax(0,1fr)_400px] lg:grid-rows-[minmax(320px,1fr)_minmax(200px,1fr)_auto]",
     ].join(" "),
     stage: [
-      "bg-stage text-stage-foreground relative flex min-h-0 shrink-0 items-center justify-center overflow-hidden rounded-xl",
+      "bg-stage text-stage-foreground relative flex min-h-0 shrink-0 items-center justify-center overflow-hidden rounded-lg",
       "order-1 lg:order-none lg:col-start-1 lg:row-start-1 lg:h-full",
       isWide
         ? "min-h-[72px] md:order-2 md:min-h-[200px] lg:min-h-0"
-        : "h-[45vh] md:order-1 lg:h-full",
+        : "h-[45dvh] md:order-1 lg:h-full",
     ].join(" "),
     panel: [
       PANEL_BASE,
       "order-2 lg:order-none",
-      isWide ? "min-h-[60vh] md:order-1" : "min-h-[50vh] md:order-2 lg:min-h-0",
+      isWide ? "min-h-[60dvh] md:order-1" : "min-h-[50dvh] md:order-2 lg:min-h-0",
     ].join(" "),
     transcript: TRANSCRIPT_BASE,
     controls: CONTROLS_BASE,

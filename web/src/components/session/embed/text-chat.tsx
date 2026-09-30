@@ -18,6 +18,7 @@ import { useChat, useSessionMessages, type UseSessionReturn } from "@livekit/com
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PHONE_TOUCH_TARGET } from "@/components/session/session-layout";
 import { cn } from "@/lib/utils";
 
 import { isUserMessage, turnIndexByMessageId } from "./turns";
@@ -79,9 +80,13 @@ export function TextChat({ session, agentName, actions, className }: TextChatPro
 
   return (
     <div className={cn("flex h-full min-h-0 flex-col", className)} data-slot="text-chat">
-      <ol aria-live="polite" className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
+      <ol
+        aria-live="polite"
+        aria-label="Conversation"
+        className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3"
+      >
         {messages.length === 0 ? (
-          <li className="text-muted-foreground py-8 text-center text-sm">
+          <li className="text-text-secondary text-body py-8 text-center">
             Say hello to start the conversation.
           </li>
         ) : null}
@@ -110,18 +115,18 @@ export function TextChat({ session, agentName, actions, className }: TextChatPro
                     onChange={(event) => setEditValue(event.target.value)}
                     aria-label={`Edit your message (turn ${turnIndex ?? ""})`}
                   />
-                  <Button type="submit" size="sm" disabled={busyTurn !== null}>
-                    Save
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => setEditingId(null)}>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setEditingId(null)}>
                     Cancel
+                  </Button>
+                  <Button type="submit" size="sm" variant="secondary" disabled={busyTurn !== null}>
+                    Save
                   </Button>
                 </form>
               ) : (
                 <p
                   className={cn(
-                    "max-w-[85%] rounded-lg px-3 py-1.5 text-sm leading-snug break-words",
-                    isUser ? "bg-muted" : "bg-brand-soft text-foreground",
+                    "text-body max-w-[85%] rounded-lg px-3 py-1.5 leading-snug break-words",
+                    isUser ? "bg-muted" : "bg-brand-subtle text-foreground",
                   )}
                 >
                   <span className="sr-only">{isUser ? "You: " : `${agentName}: `}</span>
@@ -129,26 +134,26 @@ export function TextChat({ session, agentName, actions, className }: TextChatPro
                 </p>
               )}
               {actions && !isEditing ? (
-                <div className="flex gap-2 text-xs">
+                <div className="flex gap-3">
                   {isUser && turnIndex !== null ? (
-                    <button
+                    <Button
                       type="button"
-                      className="text-muted-foreground hover:text-foreground underline underline-offset-2 disabled:opacity-50"
+                      variant="link-neutral"
                       onClick={() => startEdit(message.id, message.message)}
                       disabled={busyTurn !== null}
                     >
                       Edit
-                    </button>
+                    </Button>
                   ) : null}
                   {!isUser && turnIndex !== null ? (
-                    <button
+                    <Button
                       type="button"
-                      className="text-muted-foreground hover:text-foreground underline underline-offset-2 disabled:opacity-50"
+                      variant="link-neutral"
                       onClick={() => void replay(turnIndex)}
                       disabled={busyTurn !== null}
                     >
                       {busyTurn === turnIndex ? "Replaying…" : "Replay"}
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
               ) : null}
@@ -158,7 +163,7 @@ export function TextChat({ session, agentName, actions, className }: TextChatPro
       </ol>
       <form
         onSubmit={(event) => void submitComposer(event)}
-        className="border-border flex items-center gap-2 border-t p-3"
+        className="border-border flex items-center gap-2 border-t p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]"
         data-slot="text-chat-composer"
       >
         <Input
@@ -168,7 +173,14 @@ export function TextChat({ session, agentName, actions, className }: TextChatPro
           aria-label="Message"
           disabled={isSending}
         />
-        <Button type="submit" disabled={isSending || draft.trim() === ""}>
+        <Button
+          type="submit"
+          variant="primary"
+          className={PHONE_TOUCH_TARGET}
+          busy={isSending}
+          busyLabel="Sending…"
+          disabled={draft.trim() === ""}
+        >
           Send
         </Button>
       </form>

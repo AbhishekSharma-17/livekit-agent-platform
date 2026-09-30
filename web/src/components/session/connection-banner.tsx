@@ -1,18 +1,22 @@
 "use client";
 
 /**
- * Connection banner for the session surface (docs/UI_UX_SPEC.md §5.4).
+ * Connection banner for the session surface (docs/UI_UX_SPEC.md §5.4;
+ * docs/ui/DESIGN-SYSTEM.md section 8.8, "offline or unavailable").
  *
- * Only one state gets a banner now: **reconnecting** — a slim warning strip
- * with no button. Connecting is the top-strip chip, a failure is the stage
- * overlay, and the end of a call is the end-of-call card, so the banner no
- * longer competes with any of them.
+ * Only one state gets a banner: **reconnecting**, a slim warning strip with
+ * no button that says what happened and what happens next. Connecting is the
+ * top-strip chip, a failure is the stage overlay, and the end of a call is the
+ * end-of-call card, so the banner never competes with any of them.
+ *
+ * The `role="status"` wrapper is always mounted, so screen readers hear the
+ * banner when it appears; the spinner is the shared primitive (decorative,
+ * still under reduced motion).
  */
 import * as React from "react";
-import { Loader2Icon } from "lucide-react";
 
-import { Icon } from "@/components/shared/icon";
 import type { AgentUiState } from "@/components/shared/agent-state";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 export interface ConnectionBannerProps {
@@ -33,12 +37,12 @@ export function ConnectionBanner({
         <div
           data-testid="connection-banner"
           className={cn(
-            "bg-warning-soft text-warning-text flex items-center justify-center gap-2 px-4 py-1.5 text-sm",
+            "border-warning-border bg-warning-subtle text-warning-text text-body flex items-center justify-center gap-2 border-y px-4 py-1.5 text-center",
             className,
           )}
         >
-          <Icon as={Loader2Icon} size="md" className="animate-spin motion-reduce:animate-none" />
-          <span>Connection lost — reconnecting</span>
+          <Spinner />
+          <span>Connection lost. Reconnecting… your call continues when it&rsquo;s back.</span>
         </div>
       )}
     </div>

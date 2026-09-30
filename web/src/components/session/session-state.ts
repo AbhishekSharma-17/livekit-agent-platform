@@ -244,6 +244,49 @@ export const MIC_STATUS_MESSAGE: Record<MicCheckStatus, string> = {
   unsupported: "This browser can't capture audio. Try Chrome, Safari or Firefox.",
 };
 
+/* -------------------------------------------------------------------------- */
+/* In-call device errors (§5.4)                                               */
+/* -------------------------------------------------------------------------- */
+
+export type DeviceKey = "microphone" | "camera" | "screenShare";
+
+/** The toast title when a device fails to start: what happened. */
+export const DEVICE_ERROR_MESSAGE: Record<DeviceKey, string> = {
+  microphone: "Couldn't start your microphone",
+  camera: "Couldn't start your camera",
+  screenShare: "Couldn't share your screen",
+};
+
+const DEVICE_NOUN: Record<DeviceKey, string> = {
+  microphone: "microphone",
+  camera: "camera",
+  screenShare: "screen",
+};
+
+/**
+ * The toast's second line: what to do next, keyed on the `DOMException` name
+ * `getUserMedia` / `getDisplayMedia` throw. The browser's own message is
+ * never shown to a caller (docs/ui/DESIGN-SYSTEM.md section 3).
+ */
+export function deviceErrorHint(device: DeviceKey, error: { name?: string } | null | undefined): string {
+  const noun = DEVICE_NOUN[device];
+  switch (error?.name) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return device === "screenShare"
+        ? "Sharing was cancelled or blocked. Try again when you're ready."
+        : `Allow the ${noun} for this site in your browser's settings, then try again.`;
+    case "NotFoundError":
+    case "OverconstrainedError":
+      return `We couldn't find a ${noun}. Check it's connected, then try again.`;
+    case "NotReadableError":
+    case "AbortError":
+      return `Another app may be using your ${noun}. Close it, then try again.`;
+    default:
+      return "Try again in a moment.";
+  }
+}
+
 /**
  * The per-browser "how to unblock" sentence of §5.1. Sniffing the UA string
  * is the only way to tell the visitor where the setting lives; it only

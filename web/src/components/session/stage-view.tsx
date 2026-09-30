@@ -31,7 +31,7 @@
 import * as React from "react";
 import { useState } from "react";
 import { VideoTrack, type TrackReference } from "@livekit/components-react";
-import { PhoneOffIcon, RotateCcwIcon, Volume2Icon } from "lucide-react";
+import { PhoneOffIcon, RefreshCwIcon, Volume2Icon } from "lucide-react";
 
 import { Icon } from "@/components/shared/icon";
 import { StateMeter } from "@/components/shared/state-meter";
@@ -39,8 +39,10 @@ import {
   toMeterState,
   type AgentUiState,
 } from "@/components/shared/agent-state";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { AGENT_STATE_CAPTION, formatElapsed } from "@/components/session/session-state";
+import { PHONE_TOUCH_TARGET } from "@/components/session/session-layout";
 import {
   aspectRatioStyle,
   resolveFrame,
@@ -129,7 +131,9 @@ export function StageView({
   // the stage *media* dims — the video and the meter. The agent name and the
   // "Reconnecting…" caption (a live announcement) keep full contrast.
   const dimmed = agentState === "reconnecting";
-  const mediaDim = dimmed ? "opacity-60 transition-opacity duration-(--dur-3)" : "transition-opacity duration-(--dur-3)";
+  const mediaDim = dimmed
+    ? "opacity-60 transition-opacity duration-(--duration-slow)"
+    : "transition-opacity duration-(--duration-slow)";
 
   // V6-26: the well's own aspect and the video's fit/position, from the real
   // track dimensions once known (see `avatar-framing.ts` for the fallback
@@ -173,7 +177,8 @@ export function StageView({
           data-measured={frame.measured ? "" : undefined}
           style={compactUnexpanded ? { aspectRatio: aspectRatioStyle(frame.aspectRatio) } : undefined}
           className={cn(
-            "bg-stage focus-visible:ring-ring cursor-pointer transition-opacity duration-(--dur-3) focus-visible:ring-2 focus-visible:outline-none",
+            // The well fills a clipped stage, so its focus outline sits inside.
+            "bg-stage cursor-pointer transition-opacity duration-(--duration-slow) focus-visible:-outline-offset-2",
             dimmed && "opacity-60",
             compactUnexpanded ? "mx-auto h-full max-w-full" : "size-full",
           )}
@@ -222,13 +227,13 @@ export function StageView({
               compact ? "text-left lg:text-center" : "text-center",
             )}
           >
-            <span className="text-foreground block truncate text-base font-medium">
+            <span className="text-foreground block truncate font-medium">
               {agentName}
             </span>
             <span
               data-testid="stage-caption"
               aria-live="polite"
-              className="text-muted-foreground block text-sm"
+              className="text-text-secondary text-body block"
             >
               {caption}
             </span>
@@ -240,7 +245,7 @@ export function StageView({
       {elapsedMs !== undefined && videoTrack && !failed && (
         <span
           data-testid="stage-elapsed"
-          className="bg-background/70 text-muted-foreground absolute top-2 left-2 rounded-xs px-1.5 py-0.5 font-mono text-xs tabular-nums"
+          className="bg-scrim text-text-secondary text-caption absolute top-2 left-2 rounded-sm px-1.5 py-0.5 font-mono tabular-nums"
         >
           {formatElapsed(elapsedMs)}
         </span>
@@ -257,7 +262,11 @@ export function StageView({
           }
           onClick={() => setSelfViewLarge((value) => !value)}
           className={cn(
-            "border-border focus-visible:ring-ring absolute right-3 bottom-3 overflow-hidden rounded-md border bg-black shadow-md transition-[width] duration-(--dur-3) ease-out focus-visible:ring-2 focus-visible:outline-none motion-reduce:transition-none",
+            // `bg-black` is the video letterbox behind the camera frame, the one
+            // allowlisted palette class on this surface (docs/ui/AUDIT.md S7,
+            // scripts/design-lint-allowlist.txt). A floating tile, so it takes the
+            // overlay shadow; the size change is instant (never animate width).
+            "border-border shadow-overlay absolute right-3 bottom-3 overflow-hidden rounded border bg-black",
             selfViewLarge ? "w-1/2" : "w-24 sm:w-36",
           )}
         >
@@ -265,7 +274,7 @@ export function StageView({
             trackRef={localTrack}
             className="aspect-video w-full object-cover"
           />
-          <span className="bg-background/80 text-muted-foreground absolute top-1 left-1 rounded-xs px-1 py-px text-[0.6875rem] leading-[0.875rem] font-medium">
+          <span className="bg-scrim text-text-secondary text-caption absolute top-1 left-1 rounded-sm px-1 py-px leading-none font-medium">
             {localLabel}
           </span>
         </button>
@@ -275,12 +284,13 @@ export function StageView({
       {audioBlocked && !failed && (
         <div
           data-testid="audio-blocked-overlay"
-          className="bg-stage/85 absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center backdrop-blur-[2px]"
+          className="bg-scrim absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center backdrop-blur-sm"
         >
           <StateMeter state="ended" size={compact ? "md" : "lg"} />
           <Button
-            variant="brand"
+            variant="primary"
             size={compact ? "default" : "xl"}
+            className={PHONE_TOUCH_TARGET}
             onClick={onEnableAudio}
           >
             <Icon as={Volume2Icon} size={compact ? "md" : "xl"} />
@@ -289,38 +299,46 @@ export function StageView({
         </div>
       )}
 
-      {/* §5.4 — the agent never joined, or the connect call failed. */}
+      {/* §5.4 — the agent never joined, or the connect call failed: say so,
+          then the next step (Leave, then the primary Try again, last). The
+          danger Alert is the live region (`role="alert"`). */}
       {failed && (
         <div
           data-testid="stage-failure-overlay"
-          role="alert"
-          className="bg-stage absolute inset-0 flex flex-col items-center justify-center p-4"
+          className="bg-stage absolute inset-0 flex flex-col items-center justify-center gap-3 overflow-y-auto p-4"
         >
-          <div className="bg-danger-soft text-danger-text flex flex-col items-center gap-3 rounded-lg p-4 text-center">
-          <p className="max-w-[46ch]">
-            <span className="block text-base font-medium">
-              {agentName} couldn&rsquo;t join the call
-            </span>
-            {failureReasons && failureReasons.length > 0 && (
-              <span className="mt-1 block text-sm">
-                {failureReasons.join("; ")}
-              </span>
-            )}
-          </p>
+          <Alert
+            tone="danger"
+            title={<>{agentName} couldn&rsquo;t join the call</>}
+            className="text-body w-auto max-w-[46ch]"
+          >
+            {failureReasons && failureReasons.length > 0
+              ? failureReasons.join("; ")
+              : "Check your connection, then try again."}
+          </Alert>
           <div className="flex flex-wrap items-center justify-center gap-2">
-            {onRetry && (
-              <Button variant="brand" size={compact ? "default" : "lg"} onClick={onRetry}>
-                <Icon as={RotateCcwIcon} size="md" />
-                Try again
-              </Button>
-            )}
             {onLeave && (
-              <Button variant="secondary" size={compact ? "default" : "lg"} onClick={onLeave}>
+              <Button
+                variant="secondary"
+                size={compact ? "default" : "lg"}
+                className={PHONE_TOUCH_TARGET}
+                onClick={onLeave}
+              >
                 <Icon as={PhoneOffIcon} size="md" />
                 Leave
               </Button>
             )}
-          </div>
+            {onRetry && (
+              <Button
+                variant="primary"
+                size={compact ? "default" : "lg"}
+                className={PHONE_TOUCH_TARGET}
+                onClick={onRetry}
+              >
+                <Icon as={RefreshCwIcon} size="md" />
+                Try again
+              </Button>
+            )}
           </div>
         </div>
       )}

@@ -32,11 +32,8 @@ import { Room } from "livekit-client";
 import type { AgentPublicOut, ConnectResponse } from "@/contracts/lkap-contracts";
 import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provider";
 import { SessionRoom } from "@/components/session/session-room";
-import {
-  ConnectError,
-  createConnectTokenSource,
-  describeConnectError,
-} from "@/lib/livekit";
+import { callerConnectError } from "@/components/session/caller-error";
+import { ConnectError, createConnectTokenSource } from "@/lib/livekit";
 
 export interface LiveSessionProps {
   slug: string;
@@ -109,7 +106,7 @@ export function LiveSession({
               setError("The console's admin token is not accepted by the API.");
               return;
             }
-            setError(describeConnectError(cause));
+            setError(callerConnectError(cause, { testMode }));
           },
         },
         { viaConsole: testMode },
@@ -122,6 +119,8 @@ export function LiveSession({
   sessionRef.current = session;
   const freezeRef = useRef(freeze);
   freezeRef.current = freeze;
+  const testModeRef = useRef(testMode);
+  testModeRef.current = testMode;
 
   useEffect(() => {
     let cancelled = false;
@@ -136,7 +135,7 @@ export function LiveSession({
       })
       .catch((cause: unknown) => {
         if (!cancelled && !controller.signal.aborted) {
-          setError(describeConnectError(cause));
+          setError(callerConnectError(cause, { testMode: testModeRef.current }));
         }
       });
 

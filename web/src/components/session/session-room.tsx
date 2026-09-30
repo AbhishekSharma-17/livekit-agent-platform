@@ -33,7 +33,7 @@ import type {
   UiRequest,
   UiRequestResult,
 } from "@/contracts/lkap-contracts";
-import { StatusChip } from "@/components/shared/status-chip";
+import { StatusPill } from "@/components/shared/status-chip";
 import { AgentChatTranscript } from "@/components/agents-ui/agent-chat-transcript";
 import { AgentStage, useLocalTrackRef } from "@/components/session/agent-stage";
 import { ConnectionBanner } from "@/components/session/connection-banner";
@@ -41,8 +41,11 @@ import { SessionControls } from "@/components/session/session-controls";
 import { SessionShell } from "@/components/session/session-shell";
 import { TestModeBar } from "@/components/session/test-mode-bar";
 import {
+  DEVICE_ERROR_MESSAGE,
+  deviceErrorHint,
   screenShareSupported,
   toAgentUiState,
+  type DeviceKey,
 } from "@/components/session/session-state";
 import {
   stageAvatarFraming,
@@ -62,18 +65,11 @@ import {
 } from "@/panels/registry";
 
 type VideoSource = "camera" | "screen" | "none";
-type DeviceKey = "microphone" | "camera" | "screenShare";
 
 const DEVICE_KEY: Record<string, DeviceKey> = {
   [Track.Source.Microphone]: "microphone",
   [Track.Source.Camera]: "camera",
   [Track.Source.ScreenShare]: "screenShare",
-};
-
-const DEVICE_MESSAGE: Record<DeviceKey, string> = {
-  microphone: "Couldn't start your microphone — check permissions",
-  camera: "Couldn't start your camera — check permissions",
-  screenShare: "Couldn't share your screen",
 };
 
 export interface SessionRoomProps {
@@ -336,7 +332,15 @@ export function SessionRoom({
     ({ source, error: deviceError }: { source: Track.Source; error: Error }) => {
       const key = DEVICE_KEY[source] ?? "microphone";
       setDeviceErrors((prev) => ({ ...prev, [key]: true }));
-      toast.error(DEVICE_MESSAGE[key], { description: deviceError.message });
+      // Never the browser's own error text: a plain next step instead.
+      const toastOptions = { description: deviceErrorHint(key, deviceError) };
+      // Closing the screen picker is the caller's own choice, not a fault, so
+      // it doesn't get an error toast that stays until dismissed.
+      if (key === "screenShare" && deviceError.name === "NotAllowedError") {
+        toast.info(DEVICE_ERROR_MESSAGE[key], toastOptions);
+      } else {
+        toast.error(DEVICE_ERROR_MESSAGE[key], toastOptions);
+      }
     },
     [],
   );
@@ -361,9 +365,7 @@ export function SessionRoom({
       panelTitle={panel.title}
       panelStatus={
         layout === "wide" && status ? (
-          <StatusChip tone={status.tone ?? "neutral"} dot>
-            {status.label}
-          </StatusChip>
+          <StatusPill tone={status.tone ?? "neutral"}>{status.label}</StatusPill>
         ) : undefined
       }
       agentName={agent.name}
@@ -400,8 +402,8 @@ export function SessionRoom({
       }
       transcript={
         messages.length === 0 ? (
-          <p className="text-muted-foreground p-4 text-sm">
-            Say hello — the transcript appears here
+          <p className="text-text-secondary text-body p-4">
+            Say hello. What you both say appears here.
           </p>
         ) : (
           <AgentChatTranscript

@@ -5,7 +5,36 @@ Contract source: `docs/UI_UX_SPEC.md` §5 (+ `docs/v2/UI_UX_SPEC-V2-AMENDMENTS.m
 embed layouts into the `StageView` seam described below).
 
 Nothing here imports from `components/console/**` — the session bundle stays
-console-free (`/s/[slug]` budget: Size ≤ 400 kB).
+console-free (`/s/[slug]` budget: Size ≤ 400 kB; `tests/flow-bundle-split.test.ts`
+checks the static import graph).
+
+## Design system (S7, decision D3)
+
+The caller page follows `docs/ui/DESIGN-SYSTEM.md` (tokens, intent-map icons,
+the `components/shared` / `components/ui` primitives, the section 8 states,
+plain copy) with three documented exceptions from `docs/ui/AUDIT.md` D3:
+
+- **Always dark.** The root `ThemeProvider` forces `dark` on `/s/*`
+  (`lib/theme.ts`); the `.dark` wrapper in `app/(session)/layout.tsx` is the
+  first-paint guarantee.
+- **16 px body text** (`text-base` on the layout).
+- **The transcript is a bottom sheet** below `lg` (not a dialog): it is the
+  caller's own transcript, not console editing. Escape closes it; closed, it
+  leaves the tab order.
+
+Rules that are easy to miss here:
+
+- Toasts use the app's one `Toaster` policy (no `richColors`, no position
+  override).
+- Caller actions get `PHONE_TOUCH_TARGET` (48 px below `lg`); the vendored
+  control bar gets `CONTROL_BAR_TOUCH`.
+- Errors a caller reads go through `callerConnectError` (`caller-error.ts`)
+  or `deviceErrorHint` (`session-state.ts`), never raw api or browser text.
+  `friendlyError` lives under `components/console/**`, so it can't be used.
+- The only raw colour is the self-view's `bg-black` letterbox
+  (`stage-view.tsx`, allowlisted in `scripts/design-lint-allowlist.txt`).
+- `web/src/panels/**` is exempt (caller content); this package styles only
+  the chrome around it.
 
 ## Composition
 
@@ -117,8 +146,9 @@ api's value. A `null` value keeps the crop-free `auto` + `contain` default.
 `components/agents-ui/**` is never forked. `session-controls.tsx` restyles it
 from outside with descendant arbitrary variants
 (`CONTROL_BAR_BRAND_ON`: brand tokens replacing the hard-coded `blue-500`
-"on" state, and a ring instead of a darker fill on "END CALL" hover, which
-would otherwise drop to 4.07:1), hides controls a state does not allow
+"on" state, and "END CALL" on the destructive status tokens with a ring on
+hover instead of a darker fill; `CONTROL_BAR_TOUCH`: 48 px targets below
+`lg`), hides controls a state does not allow
 (`visibleControls`), and makes the rest inert while connecting/reconnecting
 (`lockedControls` + a capture-phase click guard, because the vendored bar takes
 no per-control `disabled`).

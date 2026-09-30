@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { DatabaseIcon, PlusIcon } from "lucide-react";
+import { PlugIcon, PlusIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ import { StatusPill } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
-import { IfCan, readOnlyCopy } from "@/components/console/shared/permission";
+import { IfCan, readOnlyCopy, useCan } from "@/components/console/shared/permission";
 import { RequireWrite } from "@/components/shared/require-write";
 import {
   useDeleteKnowledgeConnection,
@@ -105,11 +105,10 @@ function KnowledgeConnectionsTabInner() {
     toast.success(`Deleted "${connection.name}"`);
   }
 
-  const rowActions = (connection: KnowledgeConnectionOut) => (
-    <IfCan min="admin">
-      <RowActions connection={connection} onTest={setTesting} onEdit={setEditing} onDelete={onDelete} />
-    </IfCan>
-  );
+  // Builders read the list; only admins get row actions (and the column that holds them).
+  const { can: canWrite } = useCan("admin");
+  const rowActions = (connection: KnowledgeConnectionOut) =>
+    canWrite ? <RowActions connection={connection} onTest={setTesting} onEdit={setEditing} onDelete={onDelete} /> : null;
 
   const columns: ResponsiveTableColumn<KnowledgeConnectionOut>[] = [
     {
@@ -167,7 +166,17 @@ function KnowledgeConnectionsTabInner() {
           <span className="text-text-secondary">Never</span>
         ),
     },
-    { id: "actions", header: <span className="sr-only">Actions</span>, align: "end", interactive: true, cell: rowActions },
+    ...(canWrite
+      ? [
+          {
+            id: "actions",
+            header: <span className="sr-only">Actions</span>,
+            align: "end" as const,
+            interactive: true,
+            cell: rowActions,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -196,7 +205,7 @@ function KnowledgeConnectionsTabInner() {
         ) : connections.length === 0 ? (
           <EmptyState
             variant="plain"
-            icon={DatabaseIcon}
+            icon={PlugIcon}
             title="No knowledge connections yet"
             description="Every knowledge base keeps its vectors on this platform until you add one."
           />

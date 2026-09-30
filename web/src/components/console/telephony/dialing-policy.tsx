@@ -5,8 +5,11 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Field, Section, StatusChip } from "@/components/shared";
-import { SectionRow } from "@/components/shared/section";
+import { Field, FieldRow, FormError } from "@/components/shared/field";
+import { ReadOnlyNote } from "@/components/shared/read-only-note";
+import { Section, SectionRow } from "@/components/shared/section";
+import { StatusPill } from "@/components/shared/status-chip";
+import { lifecycleStatus } from "@/components/shared/status-map";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import {
   useActiveWorkspace,
@@ -132,6 +135,7 @@ export function DialingPolicyCard() {
   const [draft, setDraft] = React.useState<Draft>(() => draftOf(stored));
   const [errors, setErrors] = React.useState<Partial<Record<keyof Draft, string>>>({});
   const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setDraft(draftOf(JSON.parse(storedKey) as DialingPolicy));
@@ -147,6 +151,7 @@ export function DialingPolicyCard() {
     if (!membership) return;
     const parsed = parseDraft(draft);
     setErrors(parsed.errors);
+    setSaveError(null);
     if (!parsed.policy) return;
     setSaving(true);
     try {
@@ -154,7 +159,8 @@ export function DialingPolicyCard() {
       invalidate(membership.id);
       toast.success("Dialing policy saved");
     } catch (err) {
-      toast.error(`Couldn't save the dialing policy — ${errorMessage(err)}`);
+      // Inline, so the draft stays in the fields (docs/ui/DESIGN-SYSTEM.md section 8.4).
+      setSaveError(errorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -169,15 +175,15 @@ export function DialingPolicyCard() {
       title="Outbound dialing policy"
       description="Which numbers calls and transfers may reach. Premium-rate and satellite numbers are always blocked."
       aside={
-        <StatusChip tone={enabled ? "success" : "warning"} size="sm">
+        <StatusPill tone={lifecycleStatus(enabled ? "ready" : "waiting").tone} size="sm">
           {enabled ? "Outbound calls on" : "Outbound calls off"}
-        </StatusChip>
+        </StatusPill>
       }
     >
       <form onSubmit={onSave} aria-label="Outbound dialing policy">
         <SectionRow className="flex flex-col gap-4">
           {!enabled ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-label text-text-secondary">
               No number prefix is allowed yet, so nobody can place or transfer a call from this workspace.
             </p>
           ) : null}
@@ -192,14 +198,14 @@ export function DialingPolicyCard() {
               value={draft.prefixes}
               onChange={set("prefixes")}
               placeholder="+1, +4420"
-              className="font-mono text-[0.8125rem]"
+              className="font-mono tabular-nums"
               autoComplete="off"
               spellCheck={false}
               readOnly={!canEdit}
             />
           </Field>
           {warnPlusOne ? (
-            <p role="note" className="text-[0.8125rem] text-pretty text-warning-text">
+            <p role="note" className="text-label text-pretty text-warning-text">
               {PLUS_ONE_WARNING}
             </p>
           ) : null}
@@ -215,19 +221,20 @@ export function DialingPolicyCard() {
               value={draft.hosts}
               onChange={set("hosts")}
               placeholder="pbx.example.com"
-              className="font-mono text-[0.8125rem]"
+              className="font-mono"
               autoComplete="off"
               spellCheck={false}
               readOnly={!canEdit}
             />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <FieldRow>
             <Field label="Calls per minute" htmlFor={ids.perMin} error={errors.perMin}>
               <Input
                 id={ids.perMin}
                 value={draft.perMin}
                 onChange={set("perMin")}
                 inputMode="numeric"
+                className="tabular-nums"
                 readOnly={!canEdit}
               />
             </Field>
@@ -237,18 +244,23 @@ export function DialingPolicyCard() {
                 value={draft.concurrent}
                 onChange={set("concurrent")}
                 inputMode="numeric"
+                className="tabular-nums"
                 readOnly={!canEdit}
               />
             </Field>
-          </div>
+          </FieldRow>
           {canEdit ? (
-            <div>
-              <Button type="submit" disabled={saving || !membership}>
-                {saving ? "Saving…" : "Save policy"}
-              </Button>
-            </div>
+            <>
+              <FormError>{saveError}</FormError>
+              <div className="flex justify-end">
+                {/* Secondary: "Add trunk" is the page's one primary action. */}
+                <Button type="submit" variant="secondary" busy={saving} busyLabel="Saving…" disabled={!membership}>
+                  Save policy
+                </Button>
+              </div>
+            </>
           ) : (
-            <p className="text-[0.8125rem] text-muted-foreground">Only admins and owners can change the policy.</p>
+            <ReadOnlyNote variant="block">Only admins and owners can change the policy.</ReadOnlyNote>
           )}
         </SectionRow>
       </form>

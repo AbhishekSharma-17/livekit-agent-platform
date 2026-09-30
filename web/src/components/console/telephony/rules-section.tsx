@@ -4,7 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { PlusIcon, SplitIcon, Trash2Icon } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button, IconButton } from "@/components/ui/button";
 import {
   Dialog,
   DialogBody,
@@ -16,15 +16,26 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { SimpleSelect } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState, Field, Icon, ResponsiveTable, Section, StatusChip } from "@/components/shared";
-import type { ResponsiveTableColumn } from "@/components/shared/responsive-table";
+import { busyLabelFor } from "@/components/shared/busy-label";
+import { EmptyState } from "@/components/shared/empty-state";
+import { Field, FieldRow, FormError } from "@/components/shared/field";
+import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "@/components/shared/list-search";
+import { SkeletonRows } from "@/components/shared/loading-state";
+import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
+import { Section, SectionRow } from "@/components/shared/section";
+import { Tag } from "@/components/shared/tag";
+import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { IfCan, useCan } from "@/components/console/shared/permission";
 import type { AgentOut, DispatchRuleOut } from "@/contracts/lkap-contracts";
 
 import { useCreateDispatchRule, useDeleteDispatchRule, useDispatchRules, useTrunks } from "./hooks";
 import { E164_PATTERN, splitNumbers } from "./model";
+
+function sourceLabel(rule: DispatchRuleOut): string {
+  return rule.managed_by_number ? "From number" : rule.has_pin ? "Manual · PIN" : "Manual";
+}
+
 /**
  * Dispatch rules (V2-17): LiveKit's inbound routing. Each call gets its own
  * room (`<prefix>_<caller>_<random>`) and the agent's worker is dispatched with
@@ -33,9 +44,10 @@ import { E164_PATTERN, splitNumbers } from "./model";
  */
 export function RulesSection({ agents }: { agents: AgentOut[] }) {
   const { data, isLoading, isError, error, refetch } = useDispatchRules();
-  const trunks = useTrunks().data?.items ?? [];
+  const trunksData = useTrunks().data;
+  const trunks = React.useMemo(() => trunksData?.items ?? [], [trunksData]);
   const [creating, setCreating] = React.useState(false);
-  const rules = data?.items ?? [];
+  const rules = React.useMemo(() => data?.items ?? [], [data]);
   const agentName = (id: string) => agents.find((a) => a.id === id)?.name ?? "Unknown agent";
   // A LiveKit-hosted number's rule has no trunk (V4-05): name the number instead.
   const trunkLabel = (rule: DispatchRuleOut) =>
@@ -45,43 +57,46 @@ export function RulesSection({ agents }: { agents: AgentOut[] }) {
         ? `LiveKit number ${rule.managed_by_number}`
         : "LiveKit number";
   const inboundTrunks = trunks.filter((t) => t.direction === "inbound");
-  // Telephony config needs `admin` server-side (`auth/roles.py::ROUTE_POLICY`).
-  const { canWrite } = useWriteAccess("admin");
-  const writeReason = writeAccessReason("admin");
+  const search = useListSearch("telephony-rules", rules, (rule) => [
+    agentName(rule.agent_id),
+    trunkLabel(rule),
+    sourceLabel(rule),
+    ...(rule.numbers ?? []),
+  ]);
+  const query = search.query;
 
   const columns: ResponsiveTableColumn<DispatchRuleOut>[] = [
     {
       id: "agent",
       header: "Agent",
-      cell: (rule) => <span className="font-medium">{agentName(rule.agent_id)}</span>,
+      cell: (rule) => (
+        <span className="font-medium text-foreground">
+          <Highlight text={agentName(rule.agent_id)} query={query} />
+        </span>
+      ),
     },
     {
       id: "trunk",
       header: "Trunk",
-      cell: (rule) => <span className="text-sm text-muted-foreground">{trunkLabel(rule)}</span>,
+      cell: (rule) => (
+        <span className="text-label text-text-secondary">
+          <Highlight text={trunkLabel(rule)} query={query} />
+        </span>
+      ),
     },
     {
       id: "numbers",
       header: "Called numbers",
       cell: (rule) => (
-        <span className="font-mono text-[0.8125rem] text-muted-foreground">
-          {rule.numbers?.length ? rule.numbers.join(", ") : "Every number on the trunk"}
+        <span className="font-mono text-label text-text-secondary tabular-nums">
+          {rule.numbers?.length ? <Highlight text={rule.numbers.join(", ")} query={query} /> : "Every number on the trunk"}
         </span>
       ),
     },
     {
       id: "kind",
       header: "Source",
-      cell: (rule) =>
-        rule.managed_by_number ? (
-          <StatusChip tone="info" size="sm">
-            From number
-          </StatusChip>
-        ) : (
-          <StatusChip tone="neutral" size="sm">
-            {rule.has_pin ? "Manual · PIN" : "Manual"}
-          </StatusChip>
-        ),
+      cell: (rule) => <Tag>{sourceLabel(rule)}</Tag>,
     },
     {
       id: "actions",
@@ -98,51 +113,76 @@ export function RulesSection({ agents }: { agents: AgentOut[] }) {
       title="Dispatch rules"
       description="Route calls on an inbound trunk to an agent. A catch-all rule answers every number on the trunk."
       aside={
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={!canWrite || inboundTrunks.length === 0}
-          title={canWrite ? undefined : writeReason}
-          onClick={() => setCreating(true)}
-        >
-          <Icon as={PlusIcon} size="sm" />
-          Add rule
-        </Button>
+        // Telephony config needs `admin` server-side (`auth/roles.py::ROUTE_POLICY`).
+        <IfCan min="admin">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={inboundTrunks.length === 0}
+            onClick={() => setCreating(true)}
+          >
+            <PlusIcon aria-hidden="true" />
+            Add rule
+          </Button>
+        </IfCan>
       }
     >
       {isLoading ? (
-        <div className="p-5">
-          <Skeleton className="h-10 w-full" />
-        </div>
+        <SectionRow>
+          <SkeletonRows label="Loading dispatch rules" rows={2} rowClassName="h-12" />
+        </SectionRow>
       ) : isError ? (
-        <div className="p-5">
-          <ErrorBanner message={`Couldn't load dispatch rules: ${errorMessage(error)}`} onRetry={() => refetch()} />
-        </div>
+        <SectionRow>
+          <ErrorBanner error={error} context={{ action: "load dispatch rules" }} onRetry={() => void refetch()} />
+        </SectionRow>
       ) : rules.length === 0 ? (
-        <EmptyState
-          compact
-          icon={SplitIcon}
-          title="No dispatch rules"
-          description="Routing a number to an agent creates one; add a catch-all rule here."
-          className="p-5"
-        />
+        <SectionRow>
+          <EmptyState
+            variant="plain"
+            icon={SplitIcon}
+            title="No dispatch rules"
+            description={
+              inboundTrunks.length === 0
+                ? "Routing a number to an agent creates one; a catch-all rule needs an inbound trunk first."
+                : "Routing a number to an agent creates one; add a catch-all rule here."
+            }
+          />
+        </SectionRow>
       ) : (
-        <ResponsiveTable<DispatchRuleOut>
-          columns={columns}
-          rows={rules}
-          label="Dispatch rules"
-          getRowKey={(rule) => rule.id}
-          renderCard={(rule) => (
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="font-medium">{agentName(rule.agent_id)}</p>
-                <p className="font-mono text-xs text-muted-foreground">{(rule.numbers ?? []).join(", ") || "Every number"}</p>
-              </div>
-              <DeleteRuleButton rule={rule} />
-            </div>
+        <>
+          {search.showSearch ? (
+            <SectionRow>
+              <ListSearchField search={search} label="Search dispatch rules" total={rules.length} className="mb-0" />
+            </SectionRow>
+          ) : null}
+          {search.noMatches ? (
+            <SectionRow>
+              <ListNoMatches search={search} items="dispatch rules" />
+            </SectionRow>
+          ) : (
+            <ResponsiveTable<DispatchRuleOut>
+              columns={columns}
+              rows={search.filtered}
+              label="Dispatch rules"
+              getRowKey={(rule) => rule.id}
+              renderCard={(rule) => (
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <p className="font-medium text-foreground">
+                      <Highlight text={agentName(rule.agent_id)} query={query} />
+                    </p>
+                    <p className="text-caption text-text-secondary">{trunkLabel(rule)}</p>
+                    <p className="font-mono text-caption break-all text-text-secondary tabular-nums">
+                      {(rule.numbers ?? []).join(", ") || "Every number"}
+                    </p>
+                  </div>
+                  <DeleteRuleButton rule={rule} />
+                </div>
+              )}
+            />
           )}
-        />
+        </>
       )}
       <RuleDialog open={creating} onOpenChange={setCreating} agents={agents} />
     </Section>
@@ -151,25 +191,32 @@ export function RulesSection({ agents }: { agents: AgentOut[] }) {
 
 function DeleteRuleButton({ rule }: { rule: DispatchRuleOut }) {
   const remove = useDeleteDispatchRule();
-  const { canWrite } = useWriteAccess("admin");
-  const label = rule.managed_by_number ? `Stop routing ${rule.managed_by_number}` : "Delete rule";
+  const [confirming, setConfirming] = React.useState(false);
+  const { can } = useCan("admin");
+  if (!can) return null;
+  const number = rule.managed_by_number;
+  const label = number ? `Stop routing ${number}` : "Delete rule";
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      aria-label={label}
-      title={canWrite ? label : writeAccessReason("admin")}
-      disabled={!canWrite || remove.isPending}
-      onClick={() =>
-        remove.mutate(rule.id, {
-          onSuccess: () => toast.success("Dispatch rule deleted"),
-          onError: (err) => toast.error(errorMessage(err)),
-        })
-      }
-    >
-      <Icon as={Trash2Icon} size="sm" />
-    </Button>
+    <>
+      <IconButton label={label} disabled={remove.isPending} onClick={() => setConfirming(true)}>
+        <Trash2Icon />
+      </IconButton>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={number ? `Stop routing ${number}?` : "Delete this dispatch rule?"}
+        description={
+          number
+            ? "Its dispatch rule is deleted in LiveKit and calls to the number stop reaching an agent."
+            : "The rule is deleted in LiveKit. Calls it matched stop reaching an agent unless another rule matches them."
+        }
+        confirmLabel={number ? "Stop routing" : "Delete rule"}
+        onConfirm={async () => {
+          await remove.mutateAsync(rule.id);
+          toast.success("Dispatch rule deleted");
+        }}
+      />
+    </>
   );
 }
 
@@ -229,7 +276,7 @@ function RuleDialog({
             <DialogDescription>Calls on the trunk (optionally only to some numbers) reach this agent.</DialogDescription>
           </DialogHeader>
           <DialogBody className="gap-4">
-            <Field label="Inbound trunk" htmlFor="rule-trunk" required>
+            <Field label="Inbound trunk" htmlFor="rule-trunk">
               <SimpleSelect
                 id="rule-trunk"
                 value={chosenTrunk}
@@ -237,7 +284,7 @@ function RuleDialog({
                 options={trunks.map((t) => ({ value: t.id, label: t.name }))}
               />
             </Field>
-            <Field label="Agent" htmlFor="rule-agent" required>
+            <Field label="Agent" htmlFor="rule-agent">
               <SimpleSelect
                 id="rule-agent"
                 value={chosenAgent}
@@ -246,27 +293,41 @@ function RuleDialog({
               />
             </Field>
             <Field label="Called numbers" htmlFor="rule-numbers" optional hint="Empty = every number on the trunk">
-              <Input id="rule-numbers" value={numbers} onChange={(e) => setNumbers(e.target.value)} />
+              <Input
+                id="rule-numbers"
+                value={numbers}
+                inputMode="tel"
+                className="font-mono tabular-nums"
+                onChange={(e) => setNumbers(e.target.value)}
+              />
             </Field>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <FieldRow>
               <Field label="Room prefix" htmlFor="rule-prefix">
                 <Input id="rule-prefix" value={prefix} onChange={(e) => setPrefix(e.target.value)} />
               </Field>
               <Field label="PIN" htmlFor="rule-pin" optional hint="Callers must enter it first">
-                <Input id="rule-pin" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} />
+                <Input
+                  id="rule-pin"
+                  inputMode="numeric"
+                  className="tabular-nums"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                />
               </Field>
-            </div>
-            {error ? (
-              <p role="alert" className="text-sm text-danger-text">
-                {error}
-              </p>
-            ) : null}
+            </FieldRow>
+            <FormError>{error}</FormError>
           </DialogBody>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={create.isPending || !chosenTrunk || !chosenAgent}>
+            <Button
+              type="submit"
+              variant="primary"
+              busy={create.isPending}
+              busyLabel={busyLabelFor("Create rule")}
+              disabled={!chosenTrunk || !chosenAgent}
+            >
               Create rule
             </Button>
           </DialogFooter>

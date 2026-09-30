@@ -231,20 +231,24 @@ describe("TelephonyPage", () => {
     renderWithClient(<TelephonyPage />);
 
     expect(await screen.findByText(/None of your connections reports SIP/)).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Add trunk" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(((await screen.findByRole("button", { name: "Add trunk" })) as HTMLButtonElement).disabled).toBe(true);
   });
 
   // -------------------------------------------------- V2-20-5: role gating
-  it("disables Add trunk/Add number/Add rule for a builder (below the admin floor)", async () => {
+  it("offers a builder (below the admin floor) no Add trunk/Add number/Add rule, only a read-only note", async () => {
     stubApi(meWith("builder"));
     renderWithClient(<TelephonyPage />);
     await screen.findByRole("table", { name: "Phone numbers" });
 
     // `/v1/telephony` writes need `admin` (auth/roles.py::ROUTE_POLICY),
-    // stricter than every other console page's `builder` floor.
-    expect((screen.getByRole("button", { name: "Add trunk" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Add number" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Add rule" }) as HTMLButtonElement).disabled).toBe(true);
+    // stricter than every other console page's `builder` floor. Decision D12:
+    // controls the person can't use are not rendered; the page's primary
+    // becomes a note that names the next step.
+    expect(await screen.findByText(/Ask an admin to change trunks, numbers or rules/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add trunk" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add number" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add rule" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: /Inbound agent for/ })).toBeNull();
   });
 
   it("enables Add trunk/Add number/Add rule for an admin", async () => {
@@ -252,8 +256,9 @@ describe("TelephonyPage", () => {
     renderWithClient(<TelephonyPage />);
     await screen.findByRole("table", { name: "Phone numbers" });
 
-    expect((screen.getByRole("button", { name: "Add number" }) as HTMLButtonElement).disabled).toBe(false);
-    expect((screen.getByRole("button", { name: "Add rule" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(((await screen.findByRole("button", { name: "Add trunk" })) as HTMLButtonElement).disabled).toBe(false);
+    expect(((await screen.findByRole("button", { name: "Add number" })) as HTMLButtonElement).disabled).toBe(false);
+    expect(((await screen.findByRole("button", { name: "Add rule" })) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("hangs up a live call from the calls log", async () => {
@@ -295,6 +300,50 @@ describe("TelephonyPage", () => {
 
     expect(calls.queryByText(/Answered by:/)).toBeNull();
     expect(calls.queryByRole("button", { name: "View summary" })).toBeNull();
+  });
+
+  // ------------------------------------------------ S3: calls search and the viewer's read-only log
+  it("shows a live call's status but no call controls to a viewer (calls writes need a builder)", async () => {
+    stubApi(meWith("viewer"));
+    renderWithClient(<TelephonyPage />);
+    const calls = within(await screen.findByRole("table", { name: "Calls" }));
+
+    expect(await calls.findByText("In call")).toBeTruthy();
+    await screen.findByText(/Ask an admin to change trunks, numbers or rules/);
+    expect(calls.queryByRole("button", { name: "Hang up" })).toBeNull();
+    expect(calls.queryByRole("button", { name: "Transfer" })).toBeNull();
+  });
+
+  it("searches the calls log once it has 6 calls, with a no-matches state", async () => {
+    const data = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      get length() {
+        return data.size;
+      },
+      clear: () => data.clear(),
+      getItem: (key: string) => data.get(key) ?? null,
+      key: (index: number) => Array.from(data.keys())[index] ?? null,
+      removeItem: (key: string) => void data.delete(key),
+      setItem: (key: string, value: string) => void data.set(key, String(value)),
+    } satisfies Storage);
+    const many: CallOut[] = Array.from({ length: 6 }, (_, index) => ({
+      ...CALL,
+      id: `call-${index}`,
+      status: "completed",
+      to_e164: `+1555765432${index}`,
+    }));
+    stubApi({ "GET calls": { items: many, total: many.length } });
+    renderWithClient(<TelephonyPage />);
+    const search = await screen.findByRole("searchbox", { name: "Search calls" });
+
+    fireEvent.change(search, { target: { value: "+15557654324" } });
+    await waitFor(() =>
+      expect(within(screen.getByRole("table", { name: "Calls" })).getAllByRole("row")).toHaveLength(2),
+    );
+
+    fireEvent.change(search, { target: { value: "+4420" } });
+    expect(await screen.findByText("No calls match “+4420”")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeTruthy();
   });
 });
 

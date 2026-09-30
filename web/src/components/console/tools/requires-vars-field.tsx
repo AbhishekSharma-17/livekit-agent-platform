@@ -59,7 +59,7 @@ export function RequiresVarsField({
       {values.length > 0 ? (
         <ul className="flex flex-wrap gap-1.5">
           {values.map((name) => (
-            <li key={name} className="flex items-center gap-1 rounded-pill border border-border bg-muted/50 py-0.5 pr-1 pl-2.5 text-caption">
+            <li key={name} className="flex items-center gap-1 rounded-pill border border-border bg-muted py-0.5 pr-1 pl-2.5 text-caption">
               <span className="font-mono">{name}</span>
               <span className="sr-only"> — {variableLabel(name)}</span>
               <button

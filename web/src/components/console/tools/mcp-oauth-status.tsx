@@ -187,7 +187,7 @@ export function McpOauthStatusPanel({
             then paste the client ID above and try again.
           </p>
           <div className="flex items-center gap-1.5">
-            <code className="min-w-0 flex-1 truncate rounded-sm bg-background/60 px-1.5 py-0.5 font-mono">
+            <code className="min-w-0 flex-1 truncate rounded-sm bg-card px-1.5 py-0.5 font-mono">
               {registerAt.redirectUri}
             </code>
             <CopyButton value={registerAt.redirectUri} label="Copy the return address" size="xs" />

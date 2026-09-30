@@ -26,7 +26,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useCreateTool, useUpdateTool } from "@/components/console/lib/api-hooks";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { readOnlyCopy } from "@/components/console/shared/permission";
+import { ReadOnlyNote } from "@/components/shared/read-only-note";
+import { useWriteGate } from "@/components/console/tools/write-gate";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import {
@@ -156,7 +158,7 @@ export function HttpToolEditorDialog({
   // Binding a credential needs `admin` server-side (REVIEW-V2 R2-03,
   // docs/v2/_asks.md V2-21-2) — stricter than the `builder` floor for the
   // rest of the tool editor.
-  const { canWrite: canBindCredential } = useWriteAccess("admin");
+  const credentialGate = useWriteGate("admin");
   const agentContext = useAgentToolContextOptions(agentId);
   const urlField = useInsertableField<HTMLInputElement>(draft.url, (url) =>
     setDraft((d) => {
@@ -302,7 +304,7 @@ export function HttpToolEditorDialog({
 
           <DialogBody className="gap-6">
             <section className="flex flex-col gap-4">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Basics</h3>
+              <h3 className="text-body font-semibold text-foreground">Basics</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Name" htmlFor={`${uid}-name`} required error={errors.name}>
                   <Input
@@ -338,7 +340,7 @@ export function HttpToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Request</h3>
+              <h3 className="text-body font-semibold text-foreground">Request</h3>
               <Field label="Method" htmlFor={`${uid}-method`}>
                 <Select value={draft.method} onValueChange={(v) => setDraft((d) => ({ ...d, method: v as HttpMethod }))}>
                   <SelectTrigger id={`${uid}-method`} className="w-full sm:w-48">
@@ -430,7 +432,7 @@ export function HttpToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Auth</h3>
+              <h3 className="text-body font-semibold text-foreground">Auth</h3>
               <Field
                 label="Headers"
                 htmlFor={`${uid}-headers`}
@@ -445,22 +447,20 @@ export function HttpToolEditorDialog({
                 />
               </Field>
               {secretBagSpec ? (
-                <div
-                  className={canBindCredential ? undefined : "pointer-events-none opacity-50"}
-                  aria-disabled={!canBindCredential}
-                  title={canBindCredential ? undefined : writeAccessReason("admin")}
-                >
+                credentialGate.show ? (
                   <CredentialPicker
                     spec={secretBagSpec}
                     value={draft.credential_id}
                     onChange={(id) => setDraft((d) => ({ ...d, credential_id: id }))}
                   />
-                </div>
+                ) : (
+                  <ReadOnlyNote variant="block">{readOnlyCopy("admin", "attach a key to this tool")}</ReadOnlyNote>
+                )
               ) : null}
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Response</h3>
+              <h3 className="text-body font-semibold text-foreground">Response</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field
                   label="Result JSON pointer"
@@ -509,7 +509,7 @@ export function HttpToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-5 border-t border-border pt-5">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Session and variables</h3>
+              <h3 className="text-body font-semibold text-foreground">Session and variables</h3>
               <RequiresVarsField
                 uid={uid}
                 values={draft.requires_vars}
@@ -537,7 +537,7 @@ export function HttpToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Execution</h3>
+              <h3 className="text-body font-semibold text-foreground">Execution</h3>
               <ExecutionFields
                 uid={uid}
                 draft={draft.execution}
@@ -547,7 +547,7 @@ export function HttpToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Safety</h3>
+              <h3 className="text-body font-semibold text-foreground">Safety</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field
                   label="Allowed hosts"
@@ -582,7 +582,7 @@ export function HttpToolEditorDialog({
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={pending || executionConflict}>
+            <Button type="submit" variant="primary" disabled={pending || executionConflict}>
               {pending ? "Saving…" : "Save tool"}
             </Button>
           </DialogFooter>

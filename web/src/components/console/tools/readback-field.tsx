@@ -75,7 +75,7 @@ export function ReadbackField({
             <label key={name} className="flex items-center gap-2 text-body">
               <input
                 type="checkbox"
-                className="size-3.5 rounded-sm border-input"
+                className="size-4"
                 checked={values.includes(name)}
                 disabled={!values.includes(name) && atCap}
                 onChange={(e) => toggle(name, e.target.checked)}
@@ -89,7 +89,7 @@ export function ReadbackField({
           {values.length > 0 ? (
             <ul className="flex flex-wrap gap-1.5">
               {values.map((name) => (
-                <li key={name} className="flex items-center gap-1 rounded-pill border border-border bg-muted/50 px-2.5 py-0.5 font-mono text-caption">
+                <li key={name} className="flex items-center gap-1 rounded-pill border border-border bg-muted px-2.5 py-0.5 font-mono text-caption">
                   {name}
                   <button
                     type="button"

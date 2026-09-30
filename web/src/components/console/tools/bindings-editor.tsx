@@ -6,6 +6,7 @@ import { PlusIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PhoneLabel, STACKED_TABLE } from "@/components/console/tools/stacked-table";
 import {
   Select,
   SelectContent,
@@ -147,7 +148,7 @@ export function BindingsEditor({
         </p>
       </div>
       {rows.length > 0 ? (
-        <Table>
+        <Table className={STACKED_TABLE}>
           <TableHeader>
             <TableRow>
               <TableHead>Which part of the result</TableHead>
@@ -160,24 +161,26 @@ export function BindingsEditor({
             {rows.map((row, index) => (
               <TableRow key={index}>
                 <TableCell>
+                  <PhoneLabel>Which part of the result</PhoneLabel>
                   <Input
                     value={row.path}
                     onChange={(e) => patchRow(index, { path: e.target.value })}
                     placeholder="/policy/holder"
                     aria-label={`Binding ${index + 1} — which part of the result`}
                     aria-invalid={bindingPathIssue(row.path) !== null}
-                    className="w-40 font-mono text-caption"
+                    className="w-40 max-sm:w-full font-mono text-caption"
                   />
                   {bindingPathIssue(row.path) ? (
                     <p className="mt-1 text-caption text-destructive-text">Leave it blank for the whole result, or start with &apos;/&apos;.</p>
                   ) : null}
                 </TableCell>
                 <TableCell>
+                  <PhoneLabel>Goes to</PhoneLabel>
                   <Select
                     value={row.kind}
                     onValueChange={(value) => patchRow(index, { kind: value as BindingKind, rawTo: undefined, blockId: "", key: "" })}
                   >
-                    <SelectTrigger className="w-40" aria-label={`Binding ${index + 1} — goes to`}>
+                    <SelectTrigger className="w-40 max-sm:w-full" aria-label={`Binding ${index + 1} — goes to`}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -190,6 +193,7 @@ export function BindingsEditor({
                   </Select>
                 </TableCell>
                 <TableCell>
+                  <PhoneLabel>Where</PhoneLabel>
                   <BindingWhere
                     uid={uid}
                     row={row}
@@ -200,8 +204,8 @@ export function BindingsEditor({
                   />
                 </TableCell>
                 <TableCell>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => removeRow(index)} aria-label={`Remove binding ${index + 1}`}>
-                    <Trash2Icon className="size-4" aria-hidden="true" />
+                  <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeRow(index)} aria-label={`Remove binding ${index + 1}`}>
+                    <Trash2Icon aria-hidden="true" />
                   </Button>
                 </TableCell>
               </TableRow>
@@ -246,7 +250,7 @@ function BindingWhere({
       <div className="flex flex-col gap-1.5 sm:flex-row">
         {detailsBlocks.length > 0 ? (
           <Select value={row.blockId} onValueChange={(value) => onChange({ blockId: value })}>
-            <SelectTrigger className="w-36" aria-label={`Binding ${rowIndex + 1} — card`}>
+            <SelectTrigger className="w-36 max-sm:w-full" aria-label={`Binding ${rowIndex + 1} — card`}>
               <SelectValue placeholder="Card…" />
             </SelectTrigger>
             <SelectContent>
@@ -263,7 +267,7 @@ function BindingWhere({
             onChange={(e) => onChange({ blockId: e.target.value })}
             placeholder="card"
             aria-label={`Binding ${rowIndex + 1} — card`}
-            className="w-28 font-mono text-caption"
+            className="w-28 max-sm:w-full font-mono text-caption"
           />
         )}
         <Input
@@ -272,7 +276,7 @@ function BindingWhere({
           placeholder="field key"
           list={block && block.fieldKeys.length > 0 ? `${uid}-binding-${rowIndex}-details-keys` : undefined}
           aria-label={`Binding ${rowIndex + 1} — field key`}
-          className="w-28 font-mono text-caption"
+          className="w-28 max-sm:w-full font-mono text-caption"
         />
         {block && block.fieldKeys.length > 0 ? (
           <datalist id={`${uid}-binding-${rowIndex}-details-keys`}>
@@ -287,7 +291,7 @@ function BindingWhere({
   if (row.kind === "table") {
     return tableBlocks.length > 0 ? (
       <Select value={row.blockId} onValueChange={(value) => onChange({ blockId: value })}>
-        <SelectTrigger className="w-40" aria-label={`Binding ${rowIndex + 1} — table`}>
+        <SelectTrigger className="w-40 max-sm:w-full" aria-label={`Binding ${rowIndex + 1} — table`}>
           <SelectValue placeholder="Table…" />
         </SelectTrigger>
         <SelectContent>
@@ -304,7 +308,7 @@ function BindingWhere({
         onChange={(e) => onChange({ blockId: e.target.value })}
         placeholder="table"
         aria-label={`Binding ${rowIndex + 1} — table`}
-        className="w-32 font-mono text-caption"
+        className="w-32 max-sm:w-full font-mono text-caption"
       />
     );
   }
@@ -315,7 +319,7 @@ function BindingWhere({
         onChange={(e) => onChange({ key: e.target.value })}
         placeholder="item id"
         aria-label={`Binding ${rowIndex + 1} — checklist item id`}
-        className="w-32 font-mono text-caption"
+        className="w-32 max-sm:w-full font-mono text-caption"
       />
     );
   }
@@ -328,7 +332,7 @@ function BindingWhere({
           onChange={(e) => onChange({ key: e.target.value })}
           placeholder="variable_name"
           aria-label={`Binding ${rowIndex + 1} — variable name`}
-          className="w-32 font-mono text-caption"
+          className="w-32 max-sm:w-full font-mono text-caption"
         />
         {invalid ? <span className="text-caption text-destructive-text">Lower case, digits, _.</span> : null}
       </div>

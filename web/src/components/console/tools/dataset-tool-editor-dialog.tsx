@@ -230,7 +230,7 @@ export function DatasetToolEditorDialog({
 
           <DialogBody className="gap-6">
             <section className="flex flex-col gap-4">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Basics</h3>
+              <h3 className="text-body font-semibold text-foreground">Basics</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Name" htmlFor={`${uid}-name`} required error={errors.name}>
                   <Input
@@ -263,7 +263,7 @@ export function DatasetToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Lookup table</h3>
+              <h3 className="text-body font-semibold text-foreground">Lookup table</h3>
               <Field label="Table" htmlFor={`${uid}-dataset`} required error={errors.dataset}>
                 <Select value={draft.datasetId || undefined} onValueChange={chooseDataset}>
                   <SelectTrigger id={`${uid}-dataset`} className="w-full">
@@ -345,7 +345,7 @@ export function DatasetToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-5 border-t border-border pt-5">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Session and variables</h3>
+              <h3 className="text-body font-semibold text-foreground">Session and variables</h3>
               <RequiresVarsField
                 uid={uid}
                 values={draft.requiresVars}
@@ -380,7 +380,7 @@ export function DatasetToolEditorDialog({
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" variant="primary" disabled={pending}>
               {pending ? "Saving…" : "Save tool"}
             </Button>
           </DialogFooter>

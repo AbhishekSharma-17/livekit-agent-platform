@@ -299,7 +299,7 @@ export function ProviderToolEditorDialog({
           </DialogHeader>
 
           <DialogBody className="gap-6">
-            <section className="flex flex-col gap-3 rounded-lg border border-border bg-muted/40 p-3">
+            <section className="flex flex-col gap-3 rounded-lg border border-border bg-muted p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
                   <VendorMark vendor={appName} />
@@ -340,7 +340,7 @@ export function ProviderToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Basics</h3>
+              <h3 className="text-body font-semibold text-foreground">Basics</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Name" htmlFor={`${uid}-name`} required error={errors.name}>
                   <Input
@@ -367,7 +367,7 @@ export function ProviderToolEditorDialog({
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Parameters</h3>
+                <h3 className="text-body font-semibold text-foreground">Parameters</h3>
                 <Button
                   type="button"
                   variant="secondary"
@@ -435,7 +435,7 @@ export function ProviderToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Response</h3>
+              <h3 className="text-body font-semibold text-foreground">Response</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <RunsField
                   uid={uid}
@@ -494,7 +494,7 @@ export function ProviderToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Execution</h3>
+              <h3 className="text-body font-semibold text-foreground">Execution</h3>
               <ExecutionFields
                 uid={uid}
                 draft={draft.execution}
@@ -504,7 +504,7 @@ export function ProviderToolEditorDialog({
             </section>
 
             <section className="flex flex-col gap-5 border-t border-border pt-5">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Session and variables</h3>
+              <h3 className="text-body font-semibold text-foreground">Session and variables</h3>
               <RequiresVarsField
                 uid={uid}
                 values={draft.requires_vars}
@@ -542,7 +542,7 @@ export function ProviderToolEditorDialog({
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={pending || executionConflict}>
+            <Button type="submit" variant="primary" disabled={pending || executionConflict}>
               {pending ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>

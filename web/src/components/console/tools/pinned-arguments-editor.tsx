@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PhoneLabel, STACKED_TABLE } from "@/components/console/tools/stacked-table";
 import {
   Select,
   SelectContent,
@@ -105,7 +106,7 @@ export function PinnedArgumentsEditor({
         <p className="text-label text-pretty text-text-secondary">{description}</p>
       </div>
       {entries.length > 0 ? (
-        <Table>
+        <Table className={STACKED_TABLE}>
           <TableHeader>
             <TableRow>
               <TableHead>Argument</TableHead>
@@ -138,7 +139,7 @@ export function PinnedArgumentsEditor({
           onChange={(e) => setDraftName(e.target.value)}
           placeholder="argument_name"
           aria-label="New fixed argument name"
-          className="w-48 font-mono text-body"
+          className="w-48 max-sm:w-full font-mono text-body"
           disabled={atCap}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -199,17 +200,19 @@ function PinnedRow({
   return (
     <TableRow>
       <TableCell>
+        <PhoneLabel>Argument</PhoneLabel>
         <Input
           defaultValue={name}
           onBlur={(e) => onRename(e.target.value.trim())}
           aria-label={`Fixed argument name (${name})`}
           aria-invalid={nameInvalid}
-          className="w-36 font-mono text-caption"
+          className="w-36 max-sm:w-full font-mono text-caption"
         />
       </TableCell>
       <TableCell>
+        <PhoneLabel>Type</PhoneLabel>
         <Select value={type} onValueChange={(v) => onTypeChange(v as PinnedType)}>
-          <SelectTrigger className="w-28" aria-label={`${name} — type`}>
+          <SelectTrigger className="w-28 max-sm:w-full" aria-label={`${name} — type`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -221,6 +224,7 @@ function PinnedRow({
         </Select>
       </TableCell>
       <TableCell>
+        <PhoneLabel>Value</PhoneLabel>
         {type === "string" ? (
           <div className="flex items-center gap-1.5">
             <Input
@@ -231,7 +235,7 @@ function PinnedRow({
               onClick={field.trackCaret}
               onKeyUp={field.trackCaret}
               aria-label={`${name} — value`}
-              className="w-40 font-mono text-caption"
+              className="w-40 max-sm:w-full font-mono text-caption"
             />
             <InsertValueMenu variableNames={variableNames} onInsert={field.insert} label="Insert" />
           </div>
@@ -241,7 +245,7 @@ function PinnedRow({
             value={typeof value === "number" ? value : 0}
             onChange={(e) => onValueChange(Number(e.target.value))}
             aria-label={`${name} — value`}
-            className="w-32"
+            className="w-32 max-sm:w-full"
           />
         ) : type === "boolean" ? (
           <Switch checked={value === true} onCheckedChange={(checked) => onValueChange(checked)} aria-label={`${name} — value`} />
@@ -250,8 +254,8 @@ function PinnedRow({
         )}
       </TableCell>
       <TableCell>
-        <Button type="button" variant="ghost" size="icon" onClick={onRemove} aria-label={`Remove ${name}`}>
-          <Trash2Icon className="size-4" aria-hidden="true" />
+        <Button type="button" variant="ghost" size="icon-sm" onClick={onRemove} aria-label={`Remove ${name}`}>
+          <Trash2Icon aria-hidden="true" />
         </Button>
       </TableCell>
     </TableRow>

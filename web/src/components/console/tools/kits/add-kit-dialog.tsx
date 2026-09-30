@@ -38,7 +38,10 @@ import {
 } from "@/components/console/lib/api-hooks";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
+import { readOnlyCopy } from "@/components/console/shared/permission";
+import { ReadOnlyNote } from "@/components/shared/read-only-note";
+import { Alert } from "@/components/ui/alert";
+import { useWriteGate } from "@/components/console/tools/write-gate";
 import { KIT_PREFIX_PATTERN } from "@/components/console/tools/kits/constants";
 import type {
   AgentOut,
@@ -142,8 +145,7 @@ export function AddKitDialog({
   const providersQuery = useProviders({ enabled: open });
   const connectionsQuery = useToolProviderConnections({ enabled: open });
   const datasetsQuery = useDatasets({ enabled: open });
-  const { canWrite: canAdmin } = useWriteAccess("admin");
-  const adminReason = writeAccessReason("admin");
+  const adminGate = useWriteGate("admin");
 
   React.useEffect(() => {
     if (open) {
@@ -303,11 +305,7 @@ export function AddKitDialog({
 
             {requires.secretNames.length > 0 ? (
               secretBagSpec ? (
-                <div
-                  className={canAdmin ? undefined : "pointer-events-none opacity-50"}
-                  aria-disabled={!canAdmin}
-                  title={canAdmin ? undefined : adminReason}
-                >
+                adminGate.show ? (
                   <CredentialPicker
                     spec={secretBagSpec}
                     value={draft.credentialId}
@@ -315,7 +313,9 @@ export function AddKitDialog({
                     required={false}
                     label="Key"
                   />
-                </div>
+                ) : (
+                  <ReadOnlyNote variant="block">{readOnlyCopy("admin", "attach a key to this kit")}</ReadOnlyNote>
+                )
               ) : null
             ) : null}
             {requires.secretNames.length > 0 && !draft.credentialId ? (
@@ -325,7 +325,7 @@ export function AddKitDialog({
             ) : null}
 
             {variant.source === "composio_action" ? (
-              canAdmin ? (
+              adminGate.show ? (
                 <Field label="Connected app" htmlFor={`${uid}-connection`} required>
                   <Select value={draft.connectionId ?? undefined} onValueChange={(next) => set("connectionId", next)}>
                     <SelectTrigger id={`${uid}-connection`} className="w-full">
@@ -346,9 +346,7 @@ export function AddKitDialog({
                   ) : null}
                 </Field>
               ) : (
-                <p className="text-label text-text-secondary">
-                  Connecting an app needs an admin — {adminReason}.
-                </p>
+                <ReadOnlyNote variant="block">{readOnlyCopy("admin", "choose the connected app for this kit")}</ReadOnlyNote>
               )
             ) : null}
 
@@ -432,7 +430,7 @@ export function AddKitDialog({
 
           {preview ? (
             <section className="flex flex-col gap-4 border-t border-border pt-5">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">What this adds</h3>
+              <h3 className="text-body font-semibold text-foreground">What this adds</h3>
               {CHANGE_GROUPS.map((group) => {
                 const rows = preview.changes.filter((change) => group.kinds.includes(change.kind));
                 if (rows.length === 0) return null;
@@ -465,16 +463,13 @@ export function AddKitDialog({
               ) : null}
 
               {!preview.validation.ok ? (
-                <div className="rounded border border-destructive-border bg-destructive-subtle p-2.5 text-label">
-                  <p className="font-medium text-destructive-text">This would leave the agent&rsquo;s configuration invalid.</p>
-                  <ul className="mt-1 flex flex-col gap-0.5">
+                <Alert tone="danger" title="This would leave the agent’s configuration invalid.">
+                  <ul className="flex flex-col gap-0.5">
                     {(preview.validation.errors ?? []).map((message) => (
-                      <li key={message} className="text-destructive-text">
-                        {message}
-                      </li>
+                      <li key={message}>{message}</li>
                     ))}
                   </ul>
-                </div>
+                </Alert>
               ) : (preview.validation.warnings ?? []).length > 0 ? (
                 <ul className="flex flex-col gap-0.5">
                   {(preview.validation.warnings ?? []).map((message) => (
@@ -506,11 +501,11 @@ export function AddKitDialog({
             Cancel
           </Button>
           {preview === null ? (
-            <Button type="button" disabled={!canPreview} onClick={() => void handlePreview()}>
+            <Button type="button" variant="primary" disabled={!canPreview} onClick={() => void handlePreview()}>
               {instantiate.isPending ? "Checking…" : "Preview"}
             </Button>
           ) : (
-            <Button type="button" disabled={!canAdd || instantiate.isPending} onClick={() => void handleAdd()}>
+            <Button type="button" variant="primary" disabled={!canAdd || instantiate.isPending} onClick={() => void handleAdd()}>
               {instantiate.isPending ? "Adding…" : "Add"}
             </Button>
           )}

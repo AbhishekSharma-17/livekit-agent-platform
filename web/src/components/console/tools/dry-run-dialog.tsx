@@ -69,7 +69,7 @@ export function DryRunDialog({ toolId, trigger }: { toolId: string; trigger: Rea
             />
           </Field>
           {result ? (
-            <div className="rounded-lg border border-border bg-muted/40 p-3 text-caption">
+            <div className="rounded-lg border border-border bg-muted p-3 text-caption">
               <div className="mb-1.5 flex items-center gap-2">
                 <StatusPill tone={result.ok ? "success" : "danger"}>{result.ok ? "OK" : "Failed"}</StatusPill>
                 <span className="text-text-secondary">
@@ -85,7 +85,7 @@ export function DryRunDialog({ toolId, trigger }: { toolId: string; trigger: Rea
           <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
             Close
           </Button>
-          <Button type="button" onClick={handleRun} disabled={dryRun.isPending}>
+          <Button type="button" variant="primary" onClick={handleRun} disabled={dryRun.isPending}>
             {dryRun.isPending ? "Running…" : "Run"}
           </Button>
         </DialogFooter>

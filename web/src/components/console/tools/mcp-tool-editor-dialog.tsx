@@ -563,7 +563,7 @@ export function McpToolEditorDialog({
                     key={kind}
                     htmlFor={`${uid}-auth-${kind}`}
                     className={`flex cursor-pointer items-center gap-2 rounded border p-2.5 text-body font-normal ${
-                      draft.authKind === kind ? "border-brand bg-muted/50" : "border-border"
+                      draft.authKind === kind ? "border-brand bg-muted" : "border-border"
                     }`}
                   >
                     <RadioGroupItem id={`${uid}-auth-${kind}`} value={kind} />
@@ -603,7 +603,7 @@ export function McpToolEditorDialog({
               <>
                 {draft.authKind === "own_oauth" ? (
                   <>
-                    <p className="rounded bg-muted/50 px-3 py-2 text-label text-text-secondary">
+                    <p className="rounded bg-muted px-3 py-2 text-label text-text-secondary">
                       Register an app with the vendor first — its return address is the api&apos;s own address
                       (not this console&apos;s) with <code className="font-mono">/v1/oauth/mcp/callback</code>{" "}
                       appended. Once you have a client id, save this server, then use Sign in below.
@@ -678,7 +678,7 @@ export function McpToolEditorDialog({
 
             <div className="flex flex-col gap-2 border-t border-border pt-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Test connection</h3>
+                <h3 className="text-body font-semibold text-foreground">Test connection</h3>
                 <Button type="button" variant="secondary" size="sm" onClick={() => void handleTest()} disabled={Boolean(testDisabledReason) || testMcp.isPending} title={testDisabledReason}>
                   {testMcp.isPending ? "Testing…" : "Test connection"}
                 </Button>
@@ -704,7 +704,7 @@ export function McpToolEditorDialog({
                         <label key={name} className="flex items-center gap-1.5 text-caption">
                           <input
                             type="checkbox"
-                            className="size-3.5 rounded-sm border-input"
+                            className="size-4"
                             checked={checked}
                             onChange={(e) => toggleDiscoveredTool(name, e.target.checked)}
                           />
@@ -718,7 +718,7 @@ export function McpToolEditorDialog({
             </div>
 
             <div className="flex flex-col gap-2 border-t border-border pt-4">
-              <h3 className="text-caption font-semibold tracking-wide text-text-secondary">How each tool runs</h3>
+              <h3 className="text-body font-semibold text-foreground">How each tool runs</h3>
               <p className="text-label text-text-secondary">
                 Left at &quot;Blocking&quot; until edited — an MCP tool never runs in the background unless it opts in here.
               </p>
@@ -844,7 +844,7 @@ export function McpToolEditorDialog({
 
             {optionRows.length > 0 ? (
               <div className="flex flex-col gap-2 border-t border-border pt-4">
-                <h3 className="text-caption font-semibold tracking-wide text-text-secondary">Tool context</h3>
+                <h3 className="text-body font-semibold text-foreground">Tool context</h3>
                 <p className="text-label text-text-secondary">
                   Per tool: session values it can use, what it needs first, what it reads back, where a result goes,
                   and any fixed values.
@@ -869,7 +869,7 @@ export function McpToolEditorDialog({
                         <CollapsibleTrigger asChild>
                           <Button type="button" variant="secondary" size="sm" className="w-fit justify-start gap-1.5 text-caption">
                             <ChevronRightIcon
-                              className={`size-3.5 shrink-0 transition-transform ${openContextRow === name ? "rotate-90" : ""}`}
+                              className={`size-3.5 shrink-0 transition-transform duration-(--duration-fast) ${openContextRow === name ? "rotate-90" : ""}`}
                               aria-hidden="true"
                             />
                             {`Tool context — ${name}`}
@@ -909,7 +909,7 @@ export function McpToolEditorDialog({
               </div>
             ) : null}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Timeout" htmlFor={`${uid}-timeout`} hint="Seconds.">
                 <Input
                   id={`${uid}-timeout`}
@@ -942,7 +942,7 @@ export function McpToolEditorDialog({
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" variant="primary" disabled={pending}>
               {pending ? "Saving…" : "Save server"}
             </Button>
           </DialogFooter>

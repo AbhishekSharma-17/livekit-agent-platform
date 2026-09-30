@@ -22,9 +22,11 @@ import { Field } from "@/components/shared/field";
 import { StatusPill } from "@/components/shared/status-chip";
 import { CredentialPicker } from "@/components/console/registry/credential-picker";
 import { useInstantiateToolTemplate, useTools, useToolTemplates } from "@/components/console/lib/api-hooks";
-import { useWriteAccess, writeAccessReason } from "@/components/console/lib/roles";
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
+import { readOnlyCopy } from "@/components/console/shared/permission";
+import { ReadOnlyNote } from "@/components/shared/read-only-note";
+import { useWriteGate } from "@/components/console/tools/write-gate";
 import type { ProviderSpec, ToolTemplate, ToolTemplateDefault, ToolTemplateInstantiated } from "@/contracts/lkap-contracts";
 
 export interface ToolTemplateDialogProps {
@@ -77,8 +79,7 @@ export function ToolTemplateDialog({ agentId, secretBagSpec, businessTimezone, o
   const templatesQuery = useToolTemplates();
   const toolsQuery = useTools();
   const instantiate = useInstantiateToolTemplate();
-  const { canWrite } = useWriteAccess("admin");
-  const writeReason = writeAccessReason("admin");
+  const adminGate = useWriteGate("admin");
 
   const groups = React.useMemo(() => groupTemplates(templatesQuery.data?.items ?? []), [templatesQuery.data]);
   const [groupId, setGroupId] = React.useState<string | null>(null);
@@ -186,7 +187,7 @@ export function ToolTemplateDialog({ agentId, secretBagSpec, businessTimezone, o
             {templatesQuery.isLoading ? (
               <Skeleton className="h-40 w-full" />
             ) : templatesQuery.isError ? (
-              <ErrorBanner message={errorMessage(templatesQuery.error)} onRetry={() => templatesQuery.refetch()} />
+              <ErrorBanner error={templatesQuery.error} context={{ action: "load templates" }} onRetry={() => templatesQuery.refetch()} />
             ) : !activeGroup ? (
               <EmptyState compact title="No templates yet" description="Nothing to add from a template right now." />
             ) : (
@@ -254,7 +255,7 @@ export function ToolTemplateDialog({ agentId, secretBagSpec, businessTimezone, o
 
                 {defaultSpecs.size > 0 ? (
                   <div className="flex flex-col gap-3 border-t border-border pt-4">
-                    <h4 className="text-caption font-semibold tracking-wide text-text-secondary">Fixed values</h4>
+                    <h4 className="text-body font-semibold text-foreground">Fixed values</h4>
                     {Array.from(defaultSpecs.values()).map((spec) => (
                       <Field key={spec.name} label={spec.label} htmlFor={`tool-template-default-${spec.name}`} hint={spec.help ?? undefined} required={spec.required}>
                         <Input
@@ -292,13 +293,17 @@ export function ToolTemplateDialog({ agentId, secretBagSpec, businessTimezone, o
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={!canWrite || !activeGroup || nothingToAdd || instantiate.isPending}
-              title={canWrite ? undefined : writeReason}
-            >
-              {instantiate.isPending ? "Adding…" : nothingToAdd ? "Nothing to add" : `Add ${chosen.length} tool${chosen.length === 1 ? "" : "s"}`}
-            </Button>
+            {adminGate.show ? (
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={adminGate.pending || !activeGroup || nothingToAdd || instantiate.isPending}
+              >
+                {instantiate.isPending ? "Adding…" : nothingToAdd ? "Nothing to add" : `Add ${chosen.length} tool${chosen.length === 1 ? "" : "s"}`}
+              </Button>
+            ) : (
+              <ReadOnlyNote>{readOnlyCopy("admin", "add tools from a template, since it binds a key")}</ReadOnlyNote>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

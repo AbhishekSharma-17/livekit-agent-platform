@@ -43,7 +43,7 @@ belonging to another connection on the same LiveKit project.
 ## 4. Who runs the worker
 
 `deployment_mode="external"` (the default) means the user runs the worker
-process themselves; `connection_get(id, include_worker_env=true)` gives the
+process themselves. `connection_get(id, include_worker_env=true)` gives the
 exact command template (secrets redacted) to hand back to them. For a
 platform-managed pool, create with `deployment_mode="supervised"` instead
 and follow with `connection_fleet(id, action="start", replicas=1,

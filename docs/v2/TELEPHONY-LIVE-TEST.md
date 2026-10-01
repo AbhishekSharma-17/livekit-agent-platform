@@ -1,10 +1,10 @@
 # Telephony live test (stage L12b, V2-17)
 
-V2-17 was built and unit-tested with LiveKit mocked at the boundary: there is no SIP trunk yet, and nothing was created on the LiveKit Cloud project. V2-19 wired the worker side (R-V2-20), moved transfer destinations into `config.telephony` (R-V2-21) and added the workspace's outbound dialing policy (R-V2-23, default deny). Run this procedure once you have a carrier trunk and a phone number. It proves PLAN-V2 stage **L12b**:
+V2-17 was built and unit-tested with LiveKit mocked at the boundary. There is no SIP trunk yet, and nothing was created on the LiveKit Cloud project. V2-19 wired the worker side (R-V2-20), moved transfer destinations into `config.telephony` (R-V2-21) and added the workspace's outbound dialing policy (R-V2-23, default deny). Run this procedure once you have a carrier trunk and a phone number. It proves PLAN-V2 stage **L12b**:
 
-- an inbound call reaches the agent, and a session with `channel=sip_in` appears;
-- an outbound call from the console rings your phone;
-- DTMF digits are logged;
+- an inbound call reaches the agent, and a session with `channel=sip_in` appears.
+- an outbound call from the console rings your phone.
+- DTMF digits are logged.
 - a cold transfer reaches a second number.
 
 Record the results in `docs/v2/LIVE-RESULTS.md` (V2-20).
@@ -30,7 +30,7 @@ Safety:
 
 ## 1. Carrier side
 
-Follow your carrier's docs; the values below are the ones LKAP needs.
+Follow your carrier's docs. The values below are the ones LKAP needs.
 
 - **Inbound (carrier → LiveKit).** Point the trunk's origination / inbound URI at the project's SIP URI. On Twilio this is Elastic SIP Trunk → Origination → `sip:<id>.sip.livekit.cloud`. Assign number A to the trunk.
 - **Outbound (LiveKit → carrier).** Note the trunk's termination SIP address (Twilio: `<name>.pstn.twilio.com`). Create a credential (username and password) for it.
@@ -38,9 +38,9 @@ Follow your carrier's docs; the values below are the ones LKAP needs.
 
 ## 2. Create the LKAP objects (Console → Telephony)
 
-0. **Set the outbound dialing policy** (Console → Telephony → **Outbound dialing policy**; admins and owners only). Until `allowed_prefixes` is set, every outbound call, console transfer and `transfer_call` is refused (422 `destination_not_allowed`), and an agent with transfer destinations can't be saved.
-   - Allowed number prefixes: the narrowest prefixes that cover phone 1 and phone 2, for example `+1555` or the full numbers. **`+1` on its own admits only the United States and Canada** (R-V2-29): a Caribbean or US-territory phone (`+1876` Jamaica, `+1787` Puerto Rico, `+1809` Dominican Republic, …) needs its own prefix, and the card warns while `+1` is the only NANP entry.
-   - Allowed SIP hosts: leave empty unless you transfer to a `sip:` address. **Any `sip:` target needs its host listed**, including one whose user is a phone number (`sip:+15551230000@pbx.example.com`, R-V2-28): the number must pass the prefix rules and the host must be listed. To transfer to a phone number, use `+E.164`; use `sip:` only for a listed SIP host.
+0. **Set the outbound dialing policy** (Console → Telephony → **Outbound dialing policy**, admins and owners only). Until `allowed_prefixes` is set, every outbound call, console transfer and `transfer_call` is refused (422 `destination_not_allowed`), and an agent with transfer destinations can't be saved.
+   - Allowed number prefixes: the narrowest prefixes that cover phone 1 and phone 2, for example `+1555` or the full numbers. **`+1` on its own admits only the United States and Canada** (R-V2-29). A Caribbean or US-territory phone (`+1876` Jamaica, `+1787` Puerto Rico, `+1809` Dominican Republic, …) needs its own prefix, and the card warns while `+1` is the only NANP entry.
+   - Allowed SIP hosts: leave empty unless you transfer to a `sip:` address. **Any `sip:` target needs its host listed**, including one whose user is a phone number (`sip:+15551230000@pbx.example.com`, R-V2-28). The number must pass the prefix rules and the host must be listed. To transfer to a phone number, use `+E.164`. Use `sip:` only for a listed SIP host.
    - Keep the defaults for calls per minute (10) and outbound calls at once (5).
    - Check: the card shows **Outbound calls on**. The same policy is `settings.telephony` in `GET /v1/workspaces`.
    - Premium-rate and satellite ranges (`+1900`, `+449`, `+881`, `+882`, `+870`, `+979`, …) and the NANP pay-per-call exchange (`+1 NPA 976 xxxx`, e.g. `+12129765555`) stay blocked whatever you list.
@@ -65,9 +65,9 @@ Follow your carrier's docs; the values below are the ones LKAP needs.
    - Its metadata must be `{"v":2,"session_id":null,"agent_id":"…","config_version":0,"participant_identity":"","channel":"sip_in",…}`.
    - If `lk` prints the filter as `inbound_numbers` instead, stop. That field is the *caller* filter, so the rule would only accept calls *from* A. Report it.
 4. On the test agent, set a transfer destination and turn keypad input on:
-   - Agent editor → **Tools** → **Phone calls** → **Transfer destinations**: add `Phone 2` → phone 2's number. This is `config.telephony.transfer_targets` (`[{"label": "Phone 2", "to": "+1…"}]`). Save; a number outside the dialing policy is refused at `telephony.transfer_targets[0].to`.
+   - Agent editor → **Tools** → **Phone calls** → **Transfer destinations**: add `Phone 2` → phone 2's number. This is `config.telephony.transfer_targets` (`[{"label": "Phone 2", "to": "+1…"}]`). Save. A number outside the dialing policy is refused at `telephony.transfer_targets[0].to`.
    - Leave **Transfer calls** and **Press phone keys** on (they are `tools.builtin_disabled` switches).
-   - Turn on `capabilities.dtmf` (PUT `/v1/agents/{id}`; the editor does not show it yet).
+   - Turn on `capabilities.dtmf` (PUT `/v1/agents/{id}`, because the editor does not show it yet).
 
 ## 3. Inbound call (L12b.1)
 
@@ -141,10 +141,10 @@ Telephony → delete the number, then both trunks. This deletes the LiveKit rule
 | Check | Code |
 |---|---|
 | Trunk ids and the rule's shape on LiveKit | `api/src/lkap_api/telephony/service.py` |
-| `sip_in` session and `caller` | Dispatch-rule metadata; worker `telephony.TelephonySession` → `POST /internal/v1/telephony/calls/report`; webhook `participant_joined` |
+| `sip_in` session and `caller` | Dispatch-rule metadata. Worker `telephony.TelephonySession` → `POST /internal/v1/telephony/calls/report`. Webhook `participant_joined` |
 | Outbound dial and status | `telephony/calls.py::run_dial` (dispatch first, `wait_until_answered`, `failover=False`) |
 | Status transitions | `telephony/calls.py::advance` (forward-only), fed by webhooks, the dial result and worker reports |
-| DTMF | Worker `DtmfCollector` / `sip_dtmf_received`; console → `RoomService.SendData` on topic `lkap.telephony.dtmf` → `publish_dtmf` |
-| Transfer | `SipService.transfer_sip_participant` (SIP REFER) via the api, from the console or the worker tool; destinations from `config.telephony.transfer_targets` |
-| Dialing policy | `api/src/lkap_api/telephony/policy.py::check_destination` on every dial, transfer and save; per-minute bucket and open-call caps on `POST /v1/calls`; `call.*` audit rows |
+| DTMF | Worker `DtmfCollector` / `sip_dtmf_received`. Console → `RoomService.SendData` on topic `lkap.telephony.dtmf` → `publish_dtmf` |
+| Transfer | `SipService.transfer_sip_participant` (SIP REFER) via the api, from the console or the worker tool. Destinations from `config.telephony.transfer_targets` |
+| Dialing policy | `api/src/lkap_api/telephony/policy.py::check_destination` on every dial, transfer and save. Per-minute bucket and open-call caps on `POST /v1/calls`. `call.*` audit rows |
 | Stuck calls | `telephony/calls.py::sweep_stuck_calls` from `sessions_sweep.sweep_loop`: an outbound dial older than 195 s → `failed` |

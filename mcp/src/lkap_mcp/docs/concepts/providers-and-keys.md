@@ -9,7 +9,7 @@ HTTP tool headers/URLs/bodies. See `lkap_explain("tools-http")`). Each entry
 `capabilities`, `requires_credential`, `secret_fields`, `availability`
 (`available`/preview/deprecated), `verification` and `worker_image`.
 
-`provider_list(kind=, enabled=, installed_on=, query=)` returns compact rows;
+`provider_list(kind=, enabled=, installed_on=, query=)` returns compact rows.
 `lkap_describe("provider", id)` returns the full spec. The console's word
 for a stored vendor credential is "key". The api's path (and the tool
 family) is `credentials`.
@@ -25,7 +25,7 @@ provider (`deepgram-stt`, `openai-llm`, `elevenlabs-tts`, `google-realtime`,
 ## One key per vendor
 
 A vendor account key works for every entry of that vendor that takes the same
-key, so the entries share it: one entry is the key's **home** and the others
+key, so the entries share it. One entry is the key's **home** and the others
 name it in `credential_provider`. A key created for any member is stored under
 the home, and `provider_key_list(provider_id=)` for any member lists it (a key
 stored under another member before the vendor's entries shared one home is
@@ -38,7 +38,7 @@ listed and accepted too). A key of another vendor is always refused.
 | `cartesia-tts` | `cartesia-stt` |
 | `elevenlabs-tts` | `elevenlabs-stt` |
 | `openai-llm` | `openai-realtime`, `openai-gptlive-realtime`, `openai-responses-llm`, `openai-stt`, `openai-tts`, `openai-embedding`, `openai-image-gen` |
-| `google-llm` | `google-realtime`, `google-image-gen` (the Gemini API key; `google-stt`/`google-tts` take a service account) |
+| `google-llm` | `google-realtime`, `google-image-gen` (the Gemini API key. `google-stt`/`google-tts` take a service account) |
 | `groq-llm`, `baseten-llm`, `xai-llm`, `mistral-llm`, `aws-bedrock-llm` | that vendor's speech (and, for xAI, realtime) entries |
 | `gnani-stt`, `gradium-stt`, `sarvam-stt`, `slng-stt`, `smallestai-stt`, `speechmatics-stt` | that vendor's `-tts` entry |
 
@@ -50,7 +50,7 @@ Soniox, Telnyx, NVIDIA and Azure speech keep one key per entry for now.
 OpenRouter's `openrouter-stt` (batch transcription, each turn uploaded after
 end-of-speech) and `openrouter-tts` (one request per sentence) do not stream,
 which adds seconds to every spoken reply, so they are **unlisted**
-(`listed: false`, with `unlisted_note`): the console no longer offers them or
+(`listed: false`, with `unlisted_note`). The console no longer offers them or
 counts them on the key's tags. They still validate and run for an agent that
 already uses one. For the lowest latency keep LiveKit Inference (or Deepgram
 and Cartesia keys) for speech and use OpenRouter for the LLM.
@@ -73,7 +73,7 @@ existing keys. Every test is recorded on the key (`last_test_at`,
 `last_test_ok` (`null` when the provider has no automatic test)
 `last_test_message`), including the one `test=true` runs, and `last_used_at`
 says when a session, a tool call, a catalog read or an embed last used it (to
-within a minute); `provider_settings(provider_id, enabled=, default_key_id=)`
+within a minute). `provider_settings(provider_id, enabled=, default_key_id=)`
 turns a provider off workspace-wide or sets which key an agent uses when it
 doesn't pick one explicitly.
 
@@ -86,13 +86,13 @@ model, search_vendor, refresh)` (`kind` is
 `"models"|"voices"|"avatars"|"personas"`) returns a `CatalogResponse` whose
 labels are `Untrusted` (vendor-supplied) and whose `meta` is trimmed to
 pricing, context length, modalities, supported parameters and deprecation.
-`query` searches the cached list; `search_vendor=true` forwards it to
-OpenRouter's own search (OpenRouter entries only); `model` keeps one model's
-voices; `total` counts the matches before paging.
+`query` searches the cached list. `search_vendor=true` forwards it to
+OpenRouter's own search (OpenRouter entries only). `model` keeps one model's
+voices. `total` counts the matches before paging.
 
 ## Custom model ids and Test model
 
-The registry's `models` list is a suggestion list, never an allowlist: any id
+The registry's `models` list is a suggestion list, never an allowlist. Any id
 the vendor accepts can go in a slot. One rule checks every id (the console,
 the api and these tools share it): 1 to 200 printable characters, no spaces,
 no URL, and nothing that looks like an API key. A key-shaped value is
@@ -103,10 +103,10 @@ until it is tested.
 `provider_test_model(provider_id, model, key_id, fields, probes, force)`
 makes one real, capped vendor call from the api and records the result on
 the workspace (`ModelTestResult`): an LLM answers one word within 4 tokens
-(`probes=["basic","tools"]` also forces one tool call; `"vision"` sends a
+(`probes=["basic","tools"]` also forces one tool call. `"vision"` sends a
 1x1 image), speech-to-text transcribes a bundled 1 s clip, text-to-speech
 says "Hello.", a realtime model completes its handshake, an avatar id is
-read. Image models are never generated against. It spends vendor money: at
+read. Image models are never generated against. It spends vendor money. At
 most 10 tests per workspace per minute and 2 at once (a `rate_limited` error
 carries `retry_after`). A repeat within 10 minutes with the same key answers
 `cached=true` unless `force=true`. `sample` and every `message` are
@@ -118,7 +118,7 @@ signs the request (default: the workspace's default connection).
 `provider_model_declare(provider_id, model, capabilities)` records what a
 model can do (`ModelCapabilities`: vision, tools, audio in/out). Declared
 values win over the probe, the live catalog and the registry, and the worker
-uses the result: a custom LLM declared or detected text-only stops
+uses the result. A custom LLM declared or detected text-only stops
 receiving camera frames. `lkap_describe("model", "openrouter-llm/openai/gpt-4.1-mini")`
 shows the merged view: registry entry, workspace record, catalog item and
 capabilities.
@@ -130,7 +130,7 @@ ids). The worker leaves out an option the model refuses (`temperature` on
 GPT-6 Luna) instead of failing, and with no `reasoning_effort` field set it
 sends the lowest effort the model lists, which is what a voice call wants.
 Set `fields.reasoning_effort` on `openrouter-llm`, `openai-llm` or
-`livekit-inference-llm` to override; `agent_validate` warns when medium or
+`livekit-inference-llm` to override. `agent_validate` warns when medium or
 higher would add seconds to every spoken reply.
 
 A model that disappears upstream becomes a warning, never an error.

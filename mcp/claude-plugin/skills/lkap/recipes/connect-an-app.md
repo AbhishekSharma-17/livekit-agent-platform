@@ -13,7 +13,7 @@ calendar) through Composio. Needs a key with `providers:write`.
   "secrets": { "api_key": "env:COMPOSIO_KEY" }
 }
 ```
-The result includes a key test; `ok=false` means Composio rejected the key.
+The result includes a key test. `ok=false` means Composio rejected the key.
 
 ## 2. Find the app
 
@@ -29,7 +29,7 @@ Note the app's `slug` and its `auth` list (`oauth_managed`, `api_key`, …).
 ```json
 { "toolkit": "googlecalendar", "method": "managed" }
 ```
-The result's `redirect_url` is for the **user**: ask them to open it in their
+The result's `redirect_url` is for the **user**. Ask them to open it in their
 browser and sign in (it expires in about ten minutes). Never open it
 yourself. For an app that takes a key instead, use `"method": "api_key"` with
 `"fields": { "api_key": "env:APP_KEY" }`. It connects at once.
@@ -40,7 +40,7 @@ yourself. For an app that takes a key instead, use `"method": "api_key"` with
 ```json
 { "id": "<connection_id from step 3>" }
 ```
-Repeat until `status` is `active`; `expired` or `failed` means start step 3
+Repeat until `status` is `active`. `expired` or `failed` means start step 3
 again.
 
 ## 5. Pick actions

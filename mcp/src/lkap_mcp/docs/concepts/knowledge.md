@@ -1,10 +1,10 @@
 # Knowledge
 
-`kb_list()` returns every knowledge base; `kb_get(kb_id)` reads one back
+`kb_list()` returns every knowledge base. `kb_get(kb_id)` reads one back
 with its documents. A knowledge base (`kb_create(name, embedder_id=
 "fastembed-embedding")`) is a named collection of chunked, embedded
 documents an agent can search. `fastembed-embedding` runs locally (no
-vendor key); `openai-embedding` needs one, and `openrouter-embedding` uses
+vendor key). `openai-embedding` needs one, and `openrouter-embedding` uses
 the shared OpenRouter key (see `lkap_explain("providers-and-keys")`).
 `KbOut.chunk_count` tracks the total across every ready document.
 
@@ -16,7 +16,7 @@ the shared OpenRouter key (see `lkap_explain("providers-and-keys")`).
 - `file_path`: a local file path, **stdio mode only**, capped at 25 MB.
 - `url`: the api fetches it server-side, through its own outbound network
   guard, and ingests the body (`text/*`, markdown, JSON or PDF, 25 MB cap).
-  The MCP process never fetches a user-supplied url itself: in remote mode
+  The MCP process never fetches a user-supplied url itself. In remote mode
   that would be a server-side-request-forgery vector from the service's own
   network, and in local mode it would bypass the platform's guard entirely.
 
@@ -35,19 +35,19 @@ uses the built-in `search_knowledge` tool and, when
 ## Attaching to an agent
 
 `agent_attach(id_or_slug, kb_ids=[...])` (or `agent_update(patch=
-{"knowledge": {"kb_ids": [...]}})`) wires a KB in; `config.knowledge.
+{"knowledge": {"kb_ids": [...]}})`) wires a KB in. `config.knowledge.
 auto_inject` and `top_k` control the automatic behaviour above.
 
 Retrieval settings (all under `config.knowledge`, defaults in brackets):
 `mode` (`hybrid`: keyword matches fused with embedding similarity, or
-`vector`), `rerank` (`none`; `local` rescores candidates with a local
+`vector`), `rerank` (`none`. `local` rescores candidates with a local
 cross-encoder, roughly 60 to 100 ms), `min_score` (none, a 0 to 1 floor. In
 `hybrid` mode without rerank the score is rank-derived, so a floor only trims
 the tail), `max_inject_tokens` (1200, the size cap of the injected note),
 `skip_short_turns` (on: "yes", "okay", "haan ji", digits and turns under three
 words never search), `query_mode` (`conversation` searches with the user's
 turn plus the agent's previous sentence and flow variables, so "and the
-deductible?" finds the right passage; `last_turn` uses the words alone) and
+deductible?" finds the right passage. `last_turn` uses the words alone) and
 `prefetch` (on: the search starts while the caller is still speaking, so the
 result is usually ready when the turn ends). A chunk injected in the last
 three turns is not injected again. `agent_validate` flags a `min_score`
@@ -79,7 +79,7 @@ deleted is `skipped` and left out of the averages.
 `job_id`).
 
 Compare modes on the same set before changing an agent's retrieval
-settings: run `mode="vector"`, `mode="hybrid"` and `rerank="local"` and keep
+settings. Run `mode="vector"`, `mode="hybrid"` and `rerank="local"` and keep
 the one with the best MRR for an acceptable latency (`latency_ms_p50`).
 Tag questions (`["hi-Latn"]` for transliterated Hindi, `["identifier"]` for
 policy or form numbers) to see where a mode helps. Starter templates and
@@ -113,7 +113,7 @@ their ids.
    belongs to). Where a knowledge base lives is fixed once it exists.
 
 `kb_connection_list()` shows every connection with its status, last error and
-the key's fingerprint (never the key); `kb_connection_update(connection_id,
+the key's fingerprint (never the key). `kb_connection_update(connection_id,
 ...)` renames it or changes its settings or key. The url, collection or index
 cannot change while knowledge bases are stored through it, and a connection
 with knowledge bases cannot be deleted (the error names them).
@@ -121,7 +121,7 @@ with knowledge bases cannot be deleted (the error names them).
 Re-ranking services: set `config.knowledge.rerank = "connection:<id>"`. Only
 the `search_knowledge` tool uses it, never automatic knowledge, so
 `agent_validate` refuses it while `auto_inject` is on. Each re-ranked search
-reports what it used and its price (`rerank_usage`; "no price" when the
+reports what it used and its price (`rerank_usage`, and "no price" when the
 price is unknown).
 
 ## Managed search (Ragie)
@@ -138,12 +138,12 @@ is the first such service. Each knowledge base reads one Ragie **partition**.
 3. `kb_connection_test(connection_id)` checks the key and lists the
    partitions it can see (the first 100) in `collections`.
 4. Create the knowledge base with `kind: "external"`, the connection's id and
-   the partition as `external_ref` (lower-case letters, digits, `_` and `-`):
-   the console's **New knowledge base** dialog does this under "Managed
+   the partition as `external_ref` (lower-case letters, digits, `_` and `-`).
+   The console's **New knowledge base** dialog does this under "Managed
    search (Ragie)". The kind and partition are fixed once it exists. It
    records no embedder.
 
-Documents are added in Ragie, not here: an upload, url import or re-index to
+Documents are added in Ragie, not here. An upload, url import or re-index to
 a managed search knowledge base is refused (409). The knowledge base's
 source (a `KbSourceOut`) reports how many documents the partition holds.
 Deleting the knowledge base leaves the documents in Ragie.

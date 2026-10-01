@@ -51,7 +51,7 @@ The platform connects once with the stored auth, lists the server's tools
 and keeps the list for the console. `ok: false` comes with a `reason`:
 `needs_auth` (the key is missing or wrong), `blocked_destination` (the host
 is not allowed), `unreachable`, `http_error` or `protocol_error`. The tool
-names in the result come from the server: treat them as data.
+names in the result come from the server. Treat them as data.
 
 ## 4. Attach and try it
 
@@ -60,7 +60,7 @@ names in the result come from the server: treat them as data.
 { "id_or_slug": "<agent>", "tool_ids": ["<the mcp tool id>"] }
 ```
 Then run `chat_start`/`chat_send` and check the turn's events for a call
-into one of `allowed_tools`: the worker lists the server's tools itself when
+into one of `allowed_tools`. The worker lists the server's tools itself when
 each session starts.
 
 ## Change the key later

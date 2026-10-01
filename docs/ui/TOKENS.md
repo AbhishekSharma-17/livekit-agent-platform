@@ -23,7 +23,7 @@ the `@theme inline` bridge generates.
 | `--layout-topbar`, `--layout-panel-inset`, `--layout-bottombar` | `h-topbar`, `p-panel-inset`, `h-bottombar` (spacing namespace) |
 | `--type-*` (spec section 3) | `text-tab` 11, `text-nav` 11.5, `text-caption` 12, `text-stat-label` 12.5, `text-label` 13, `text-control` 13.5, `text-body` 14, `text-title` 15, `text-dialog` 17, `text-page` 22, `text-stat` 24, `text-display` 26 |
 
-Tabular figures use Tailwind's built-in `tabular-nums`. Merge classes with `cn` from `@/lib/utils`: it
+Tabular figures use Tailwind's built-in `tabular-nums`. Merge classes with `cn` from `@/lib/utils`. It
 is configured with this type scale, `shadow-raised|overlay|modal|focus` and `rounded-dialog|pill`, so a
 `text-label` is not mistaken for a colour.
 
@@ -44,11 +44,11 @@ is configured with this type scale, `shadow-raised|overlay|modal|focus` and `rou
   `--brand-foreground` recipe.
 - **Chart values.** The spec gives only the order (slate, blue, amber, teal, violet, green, orange,
   grey). Each series is at least 3:1 on card and on background in both themes.
-- **Dark elevation.** These are the spec's shadows in black at 30–75% opacity.
+- **Dark elevation.** These are the spec's shadows in black at 30 to 75% opacity.
 
 ## Accent: indigo (UI-R1)
 
-The accent moved from teal (hue 188–190) to indigo (hue 280), following the spec's own recipe (section 2.2):
+The accent moved from teal (hue 188 to 190) to indigo (hue 280), following the spec's own recipe (section 2.2):
 a 48% fill under white text, hover and active 5 points darker on the same hue, a 96% subtle and an 86% border,
 and a 75% accent with a near-black foreground in dark mode. Chroma steps down slightly as lightness drops, as the
 teal scale did. The light subtle stays at `.018` chroma, the most that hue 280 holds in sRGB at 96% L.
@@ -74,21 +74,21 @@ Ratios from `pnpm check:contrast` (212/212 pairs pass):
 | `--foreground` on `--brand-subtle` (list-search highlight) | 15.92 | 13.54 | 4.5 |
 | `--ring` on card / background / popover / muted / sidebar | 4.86 / 4.67 / 4.86 / 4.41 / 4.43 | 7.05 / 7.46 / 6.64 / 6.38 / 7.79 | 3 |
 
-**Apart from the status colours.** Info stays at hue 250 and success stays green; neither scale changed.
+**Apart from the status colours.** Info stays at hue 250 and success stays green. Neither scale changed.
 `tests/design-tokens.test.ts` holds the accent to one hue and to a CIEDE2000 distance of at least 10 from
 `--info-solid`, `--info-text`, `--success-solid` and `--success-text` in both themes (the closest pair today is
-the light accent against the info text, at 11.2; the rest read 12.1 to 17.2 against info and 45 or more against success).
+the light accent against the info text, at 11.2. The rest read 12.1 to 17.2 against info and 45 or more against success).
 
 **Charts.** `--chart-4` stays teal. It was never read as the accent, and the categorical set still needs a hue
-between blue (`--chart-2`, 255) and green (`--chart-6`, 150); an indigo series would sit between `--chart-2` and
+between blue (`--chart-2`, 255) and green (`--chart-6`, 150). An indigo series would sit between `--chart-2` and
 `--chart-5` (violet, 295) and blur both.
 
 **Browser chrome.** `src/lib/browser-colors.ts` mirrors the new `--brand` as `#504cb4` (light) and `#9fa5f9`
-(dark); `--background` is unchanged.
+(dark). `--background` is unchanged.
 
 ## Deviations from the spec's literal values
 
-Every fix moves lightness only; chroma, hue and targets are unchanged. `pnpm check:contrast` checks 212
+Every fix moves lightness only. Chroma, hue and targets are unchanged. `pnpm check:contrast` checks 212
 pairs across both themes (V added the list-search highlight, `--foreground` on `--brand-subtle`).
 
 | Theme | Token | Spec | Shipped | Pair it fixes | Before | After |
@@ -101,9 +101,9 @@ pairs across both themes (V added the list-search highlight, `--foreground` on `
 | Dark | `--info-foreground` | white | `19% .03 250` | text on the info solid (4.5:1) | 2.47 | 7.48 |
 | Dark | `--destructive-foreground` | white | `17% .03 27` | text on the destructive solid (4.5:1) | 3.66 | 6.65 |
 | Dark | `--destructive-solid` | `64% .18 27` | `70% .18 27` | legacy `text-destructive` on its resting `bg-destructive/20` tint over card (4.5:1) | 3.87 | 4.63 |
-| Dark | `--destructive-hover` | `59% .18 27` | `65% .18 27` | foreground on the hover fill (4.5:1); keeps the spec's 5-point step below the solid | 4.49 (white) | 5.47 |
+| Dark | `--destructive-hover` | `59% .18 27` | `65% .18 27` | foreground on the hover fill (4.5:1), keeps the spec's 5-point step below the solid | 4.49 (white) | 5.47 |
 
-The two dark destructive rows were meant to be **transitional**: the spec's values failed a legacy style
+The two dark destructive rows were meant to be **transitional**. The spec's values failed a legacy style
 (the vendored destructive button, badge and menu item put `text-destructive` on a `bg-destructive/20`
 tint), and the plan was to return both tokens to 64% and 59% once UI-2 moved those to
 `--destructive-text` on card.
@@ -126,7 +126,7 @@ values are not coming back.
 
 **Icon rule.** `globals.css` carries the spec's literal rule, `.lucide { width:16px; height:16px;
 stroke-width:1.75px; flex:none }`. The `Icon` wrapper sizes through `size-*` utilities, which beat the
-base-layer rule; no icon sets its own stroke width.
+base-layer rule. No icon sets its own stroke width.
 
 ## Legacy names
 
@@ -141,7 +141,7 @@ rendering. The full mapping is in `docs/ui/AUDIT.md` section 4. The notable chan
 - `--dur-*` are the spec durations.
 
 **Decision O2 (UI-R1).** Every file outside `components/ui/`, `components/agents-ui/` and `panels/` now uses the
-spec names; the last 47 uses in 22 files moved over with identical values (for example `text-muted-foreground` to
+spec names. The last 47 uses in 22 files moved over with identical values (for example `text-muted-foreground` to
 `text-text-secondary`, `bg-danger-soft` to `bg-destructive-subtle`, `text-brand-text` to `text-brand`, `ease-out`
 to `ease-entrance`, `rounded-xl` to `rounded-dialog`, `shadow-md` to `shadow-overlay`, `var(--danger)` to
 `var(--destructive-solid)`). The design lint's `legacy-token` rule now forbids the alias utilities and `var()`

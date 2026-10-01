@@ -42,7 +42,7 @@ Pure Pydantic, no I/O, depends only on `pydantic>=2.11,<3`. It ships `py.typed` 
   - Constants `REQUIRED_AGENT_NAME` and `WORKFLOW_FALLBACK_LLM_MODEL` (gemma)
   - `speak_fixed_line`, `_on_set_video_source`
 - `settings.py`: pydantic-settings.
-- `config_client.py`: fetches the resolved config, posts events and the summary; also holds `ApiKbClient` (KB search).
+- `config_client.py`: fetches the resolved config, posts events and the summary. Also holds `ApiKbClient` (KB search).
 - `providers/factory.py`: `ProviderFactory` (registry id → plugin object) and `_INFERENCE_FORBIDDEN_KWARGS`.
 - `providers/image_gen.py`: `ImageGen` protocol, `GoogleImageGen`, `OpenAIImageGen`.
 - `platform_agent.py`
@@ -51,7 +51,7 @@ Pure Pydantic, no I/O, depends only on `pydantic>=2.11,<3`. It ships `py.typed` 
   - `platform_text_input_cb`, `resolve_greeting_mode`.
 - `session_builder.py`: `SessionBuilder.build` produces the `AgentSession`, `RoomOptions` and avatar.
 - `vision.py`: `FrameBuffer`, `encode_jpeg`, `encode_jpeg_data_url(frame, max_px=512)`, `set_preferred_source`.
-- `ui/channel.py`: `UiChannel` implementation (`UiChannelImpl`) covering state seq, patches, assets, activity and RPC; `_remote_identity()`.
+- `ui/channel.py`: `UiChannel` implementation (`UiChannelImpl`) covering state seq, patches, assets, activity and RPC, plus `_remote_identity()`.
 - `tools/builtin/*.py`: nine built-in tools (see §7).
 - `tools/declarative.py`: HTTP tools and MCP servers.
 - `tools/background.py`: `BackgroundToolRunner`.
@@ -94,7 +94,7 @@ Depends only on `pydantic`, `livekit-agents==1.8.2` and `lkap-contracts`.
 - Libraries:
   - `src/lib/api.ts`
   - `src/lib/livekit.ts`: `fetchConnect`, `createConnectTokenSource`, `toPublicAgent`, `SessionAccess`.
-  - `src/lib/livekit-server.ts`: `server-only`; `fetchAdminAgentServerSide`.
+  - `src/lib/livekit-server.ts`: `server-only`, `fetchAdminAgentServerSide`.
   - `src/lib/ui-state.ts`: the reducer.
 - Hooks: `src/hooks/useUiState.ts`, `useByteStream.ts`, `useAgentRpc.ts`.
 - Panels: `src/panels/registry.ts`, `src/panels/generic/`, `src/panels/insurance_notebook/`.
@@ -105,19 +105,19 @@ Depends only on `pydantic`, `livekit-agents==1.8.2` and `lkap-contracts`.
 
 ## 2. Database entities and Alembic
 
-SQLAlchemy 2 async. SQLite via `aiosqlite` by default; Postgres works through `LKAP_DATABASE_URL` (JSON columns use `sa.JSON`, no SQLite-only types). IDs are uuid4 hex.
+SQLAlchemy 2 async. SQLite via `aiosqlite` by default. Postgres works through `LKAP_DATABASE_URL` (JSON columns use `sa.JSON`, no SQLite-only types). IDs are uuid4 hex.
 
 | Table | Key fields |
 |---|---|
-| `agents` | `id` PK; `slug` UNIQUE; `name`; `description`; `pack_id` (default `'generic'`); `ui_panel_id` (default `'generic'`); `published` INT (0/1); `config` JSON (`AgentConfig` v1); `config_version` INT (default 1, bumped when the config changes); `created_at`; `updated_at` |
-| `credentials` (the vault) | `id`; `provider_id` (registry id); `label`; `ciphertext` BLOB (`Fernet(json.dumps({field: value}))`); `fingerprint` ("…" + last 4 chars of the first secret field); timestamps |
-| `tools` | `id`; `agent_id` nullable FK → `agents` ON DELETE CASCADE (NULL = shared); `kind` CHECK IN (`'http'`, `'mcp'`); `name`; `definition` JSON (`HttpToolDefinition` or `McpServerDefinition`); `enabled`; timestamps |
-| `knowledge_bases` | `id`; `name`; `description`; `embedder_id` (default `'fastembed-embedding'`); `chunk_count`; timestamps |
-| `kb_documents` | `id`; `kb_id` FK CASCADE; `filename`; `mime`; `bytes`; `status` CHECK IN (`pending`, `ready`, `failed`); `error`; `chunk_count`; `created_at` |
-| `kb_chunks` | `id`; `kb_id`; `document_id` FK CASCADE; `ordinal`; `text`; `meta` JSON. The vector lives in the LanceDB table `kb_{kb_id}`, row id = chunk id. |
+| `agents` | `id` PK, `slug` UNIQUE, `name`, `description`, `pack_id` (default `'generic'`), `ui_panel_id` (default `'generic'`), `published` INT (0/1), `config` JSON (`AgentConfig` v1), `config_version` INT (default 1, bumped when the config changes), `created_at`, `updated_at` |
+| `credentials` (the vault) | `id`, `provider_id` (registry id), `label`, `ciphertext` BLOB (`Fernet(json.dumps({field: value}))`), `fingerprint` ("…" + last 4 chars of the first secret field), timestamps |
+| `tools` | `id`, `agent_id` nullable FK → `agents` ON DELETE CASCADE (NULL = shared), `kind` CHECK IN (`'http'`, `'mcp'`), `name`, `definition` JSON (`HttpToolDefinition` or `McpServerDefinition`), `enabled`, timestamps |
+| `knowledge_bases` | `id`, `name`, `description`, `embedder_id` (default `'fastembed-embedding'`), `chunk_count`, timestamps |
+| `kb_documents` | `id`, `kb_id` FK CASCADE, `filename`, `mime`, `bytes`, `status` CHECK IN (`pending`, `ready`, `failed`), `error`, `chunk_count`, `created_at` |
+| `kb_chunks` | `id`, `kb_id`, `document_id` FK CASCADE, `ordinal`, `text`, `meta` JSON. The vector lives in the LanceDB table `kb_{kb_id}`, row id = chunk id. |
 | `agent_knowledge_bases` | (`agent_id`, `kb_id`) composite PK, both CASCADE |
-| `sessions` | `id`; `agent_id` FK; `config_version`; `room_name` UNIQUE (`lkap-{session_id[:8]}`); `participant_identity`; `participant_name`; `status` CHECK IN (`created`, `active`, `ended`, `failed`); `pipeline_mode`; `created_at`; `started_at`; `ended_at`; `usage` JSON; `transcript` JSON; `final_ui_state` JSON; `error` |
-| `session_events` | `id` INTEGER autoincrement; `session_id` FK CASCADE; `ts`; `type`; `payload` JSON |
+| `sessions` | `id`, `agent_id` FK, `config_version`, `room_name` UNIQUE (`lkap-{session_id[:8]}`), `participant_identity`, `participant_name`, `status` CHECK IN (`created`, `active`, `ended`, `failed`), `pipeline_mode`, `created_at`, `started_at`, `ended_at`, `usage` JSON, `transcript` JSON, `final_ui_state` JSON, `error` |
+| `session_events` | `id` INTEGER autoincrement, `session_id` FK CASCADE, `ts`, `type`, `payload` JSON |
 
 - **Indexes:** `ix_session_events_session(session_id, id)` and `ix_sessions_agent(agent_id, created_at)`.
 - **There is no `packs` table.** Packs are discovered from code via `LKAP_PACKS`.
@@ -136,7 +136,7 @@ SQLAlchemy 2 async. SQLite via `aiosqlite` by default; Postgres works through `L
 
 ## 3. API endpoints and auth model
 
-**Conventions:** JSON; list endpoints return `{items, total}` (`Page[T]`); errors are `ErrorResponse{error: ErrorBody{code, message, details}}` with status 400, 401, 403, 404, 409, 422 or 500. OpenAPI is served at `/docs`. Route prefixes are `/v1` and `/internal/v1`.
+**Conventions:** JSON. List endpoints return `{items, total}` (`Page[T]`). Errors are `ErrorResponse{error: ErrorBody{code, message, details}}` with status 400, 401, 403, 404, 409, 422 or 500. OpenAPI is served at `/docs`. Route prefixes are `/v1` and `/internal/v1`.
 
 ### Auth model (D14)
 There is no user auth, RBAC or rate limiting in v1.
@@ -159,10 +159,10 @@ There is no user auth, RBAC or rate limiting in v1.
 - `CredentialOut` returns only the `fingerprint`, never the secrets.
 
 ### agents
-- `POST /v1/agents` (`AgentCreate`; `config=None` means use the pack defaults) → `AgentOut`
+- `POST /v1/agents` (`AgentCreate`, where `config=None` means use the pack defaults) → `AgentOut`
 - `GET /v1/agents`
 - `GET /v1/agents/{id_or_slug}` → `AgentOut` for admin, or `AgentPublicOut` with no token (published agents only)
-- `PUT /v1/agents/{id}` (`AgentUpdate`; bumps `config_version`)
+- `PUT /v1/agents/{id}` (`AgentUpdate`, bumps `config_version`)
 - `DELETE /v1/agents/{id}`
 - `POST /v1/agents/{id}/validate` → `ValidationResult{ok, errors, warnings}`
 - Mentioned only in ARCHITECTURE §11, with no model in CONTRACTS: `seed-from-pack`, `publish`, `test-connect`. `test-connect` is superseded by D-W2-1. The seeding rule is described in CONTRACTS §8.
@@ -178,7 +178,7 @@ There is no user auth, RBAC or rate limiting in v1.
 
 ### knowledge-bases (admin)
 - `POST/GET/PUT/DELETE /v1/knowledge-bases[/{id}]` (`KbCreate`, `KbOut`)
-- `POST /v1/knowledge-bases/{id}/documents` (multipart) → `KbDocumentOut` (202; ingestion runs in FastAPI `BackgroundTasks`)
+- `POST /v1/knowledge-bases/{id}/documents` (multipart) → `KbDocumentOut` (202, and ingestion runs in FastAPI `BackgroundTasks`)
 - `GET /v1/knowledge-bases/{id}/documents`
 - `DELETE /v1/knowledge-bases/{id}/documents/{doc_id}`
 - `POST /v1/knowledge-bases/{id}/search`: `KbSearchRequest{query, k}` → `KbSearchResponse{hits: KbHit[chunk_id, document_id, filename, score, text]}`
@@ -236,7 +236,7 @@ Packs may emit only `escalation` and `info`, or custom types prefixed with the p
 - `FieldType` = `string | secret | number | boolean | enum | json | model`
 
 ### Models
-- **`FieldSpec`:** `name` (constructor kwarg; dots allowed for nested configs), `label`, `type`, `required`, `default`, `options`, `placeholder`, `help`, `condition` (e.g. `"vertexai=true"`), `env_fallback` (informational only).
+- **`FieldSpec`:** `name` (constructor kwarg, dots allowed for nested configs), `label`, `type`, `required`, `default`, `options`, `placeholder`, `help`, `condition` (e.g. `"vertexai=true"`), `env_fallback` (informational only).
 - **`ModelSpec`:** `id`, `label`, `supports_video`, `note`. Since D-W2-10, `supports_video` means "accepts visual input" and is set only after the platform has verified it.
 - **`ProviderCapabilities`:** `video_input`, `tool_calling=True`, `silent_tool_reply`, `voices`.
 - **`ProviderSpec`:** `v=1`, `id`, `kind`, `label`, `vendor`, `status` (`mvp` or `deferred`), `package`, `python_class` (dotted path), `requires_credential=True`, `secret_fields` (encrypted), `fields` (stored in `AgentConfig`), `models` (a suggestion list, not an allowlist), `default_model`, `capabilities`, `docs_url`, `get_key_url`.
@@ -246,7 +246,7 @@ Packs may emit only `escalation` and `info`, or custom types prefixed with the p
 | id | python_class | Notes |
 |---|---|---|
 | `livekit-inference-stt` | `inference.STT` | Default model `deepgram/nova-3` |
-| `livekit-inference-llm` | `inference.LLM` | Default model `google/gemma-4-31b-it` (text-only); `google/gemini-3.5-flash` has `supports_video=True` |
+| `livekit-inference-llm` | `inference.LLM` | Default model `google/gemma-4-31b-it` (text-only). `google/gemini-3.5-flash` has `supports_video=True` |
 | `livekit-inference-tts` | `inference.TTS` | Default model `inworld/inworld-tts-2`, voice `Ashley` |
 | `google-realtime` | `livekit.plugins.google.realtime.RealtimeModel` | Fields `voice`=Kore, `temperature`, `tool_behavior`=NON_BLOCKING, `tool_response_scheduling`=WHEN_IDLE, `enable_affective_dialog`. Default model `gemini-3.8-live`. Capabilities `video_input` and `silent_tool_reply`. |
 | `openai-realtime` | OpenAI realtime plugin | Model `gpt-realtime`, voice `marin` |
@@ -262,14 +262,14 @@ Packs may emit only `escalation` and `info`, or custom types prefixed with the p
 | `openai-image-gen` | `lkap_agent.providers.image_gen.OpenAIImageGen` | Model `gpt-image-1` |
 | `fastembed-embedding` | `lkap_api.kb.embed.FastEmbedEmbedder` | |
 | `openai-embedding` | `lkap_api.kb.embed.OpenAIEmbedder` | Model `text-embedding-3-small` |
-| `http-tool-secret` | — | `secret_bag` kind for HTTP/MCP tool secrets |
+| `http-tool-secret` | n/a | `secret_bag` kind for HTTP/MCP tool secrets |
 
 - The three `livekit-inference-*` entries have `requires_credential=false`.
 - About 25 entries are `status="deferred"` (e.g. azure/xai realtime, anthropic/groq LLMs, simli/anam/bithuman avatars). The console hides them with a `status === "mvp"` filter.
 
 ### Factory rules (`ProviderFactory`)
 - Vendor credentials are passed only as explicit constructor kwargs from `ResolvedProvider.kwargs`. The factory never sets environment variables.
-- Inference classes are constructed **without** `api_key`/`api_secret`; `_INFERENCE_FORBIDDEN_KWARGS` strips them, and the SDK reads `LIVEKIT_API_KEY`/`SECRET` from the environment (D-W2-6).
+- Inference classes are constructed **without** `api_key`/`api_secret`. `_INFERENCE_FORBIDDEN_KWARGS` strips them, and the SDK reads `LIVEKIT_API_KEY`/`SECRET` from the environment (D-W2-6).
 - Plugin imports are lazy.
 - `inference.TurnDetector()` is built per session by `Deps.turn_detector_factory`, **in cascaded mode only**. Realtime sessions get no turn detector and no VAD (D-W2-9o). Silero is a dependency, but the docs name no VAD field.
 
@@ -313,21 +313,21 @@ Packs may emit only `escalation` and `info`, or custom types prefixed with the p
 Reserved LiveKit channels are left untouched: `lk.transcription`, `lk.chat`, and the `lk.agent.state` participant attribute.
 
 ### Envelope
-- **`UiState`:** `v`, `status: StatusStamp{label, tone, key}`, `progress` (0–100), `notes: Note[]`, `checklist: ChecklistItem[]`, `assets: AssetRef[]`, `activity: ActivityEvent[]` (last 30), `custom` (pack-defined, validated by `PackManifest.state_schema`).
+- **`UiState`:** `v`, `status: StatusStamp{label, tone, key}`, `progress` (0 to 100), `notes: Note[]`, `checklist: ChecklistItem[]`, `assets: AssetRef[]`, `activity: ActivityEvent[]` (last 30), `custom` (pack-defined, validated by `PackManifest.state_schema`).
 - **`Tone`:** `neutral | info | success | warning | danger`.
 - **`UiSnapshot`:** `{type:"snapshot", seq, session_id, state}`.
 - **`UiPatch`:** `{type:"patch", seq, session_id, ops: UiPatchOp[]}`.
-  - Each op is `{op: set|append|remove|upsert, path, value, key}`. `path` is JSON-pointer style; `upsert` matches list items by `key` or `id`.
+  - Each op is `{op: set|append|remove|upsert, path, value, key}`. `path` is JSON-pointer style. `upsert` matches list items by `key` or `id`.
 - **`UiStateMessage`:** discriminated on `type`.
-- **`ActivityEvent`:** `id` (a call or job id; a repeated id replaces the earlier entry), `ts`, `source`, `label`, `phase` (`running | done | error | cancelled`), `headline`, `urgent`, `duration_ms`, `detail`.
-- **Asset byte stream:** attributes `asset_id`, `kind`, `mime`, `caption?`, `session_id`; name `{asset_id}.{ext}`. The `AssetRef` is patched in only after the stream completes.
+- **`ActivityEvent`:** `id` (a call or job id, and a repeated id replaces the earlier entry), `ts`, `source`, `label`, `phase` (`running | done | error | cancelled`), `headline`, `urgent`, `duration_ms`, `detail`.
+- **Asset byte stream:** attributes `asset_id`, `kind`, `mime`, `caption?`, `session_id`. Name `{asset_id}.{ext}`. The `AssetRef` is patched in only after the stream completes.
 - **`UiRequest`:** `method` is one of `open_dialog | focus | request_video_source | toast`.
 - **`AgentAction`:** `action` is one of `get_snapshot | set_video_source | ui_action`.
   - `set_video_source` payload: `{source: camera|screen|none}`.
   - `ui_action` payload: `{name, data}` → `Pack.on_ui_action`.
   - Results come back as `UiRequestResult` and `AgentActionResult{ok, payload, error}`.
 - **Ordering:**
-  - `seq` starts at 1 with a snapshot that the platform sends after `pack.on_session_start` (D-W2-9a). A snapshot reuses the current seq; only 0 → 1 bumps it.
+  - `seq` starts at 1 with a snapshot that the platform sends after `pack.on_session_start` (D-W2-9a). A snapshot reuses the current seq. Only 0 → 1 bumps it.
   - The UI reducer applies a message only when `seq == last+1`. On a gap it calls `get_snapshot`.
   - The agent re-sends a snapshot on RPC request and every 50 patches.
 
@@ -349,7 +349,7 @@ Reserved LiveKit channels are left untouched: `lk.transcription`, `lk.chat`, and
 - `useByteStream(topic, onAsset)`: wraps `room.registerByteStreamHandler` (there is no React hook for byte streams).
 - `useAgentRpc()` → `perform(AgentAction)`. It targets the remote participant of kind Agent that does not carry `lk.publish_on_behalf`.
 - `useUiRequests(handler)`
-- Transcript comes from `useSessionMessages()`; agent state from `useVoiceAssistant().state`; avatar video from `useVoiceAssistant().videoTrack`.
+- Transcript comes from `useSessionMessages()`. Agent state from `useVoiceAssistant().state`. Avatar video from `useVoiceAssistant().videoTrack`.
 
 ### Panel registry (`web/src/panels/registry.ts`)
 - **`PanelProps`:** `state`, `assets`, `agent: AgentPublicOut`, `sessionId`, `perform`, `transcript: ReceivedMessage[]`, `connectionState`.
@@ -372,7 +372,7 @@ Reserved LiveKit channels are left untouched: `lk.transcription`, `lk.chat`, and
 - The API side sets the dispatch target from `LKAP_AGENT_NAME`, which must equal the worker's name.
 
 ### Run commands
-- Dev: `uv run python -m lkap_agent.main dev`. There is no hot reload; config needs no restart because it is fetched per job.
+- Dev: `uv run python -m lkap_agent.main dev`. There is no hot reload. Config needs no restart because it is fetched per job.
 - Deploy: `start` mode on LiveKit Cloud via `lk agent create --secrets-file secrets.env`, then `lk agent deploy`.
 - Stop policy (D-W2-13): send SIGINT, wait at least 15 s in dev or `drain_timeout` in start mode, then SIGKILL. The Dockerfile sets `STOPSIGNAL SIGINT`.
 
@@ -410,11 +410,11 @@ Tools are passed as `PlatformAgent(tools=[*builtin, *declarative, *pack_tools], 
 Individual tools can be disabled via `tools.builtin_disabled`.
 - **`end_call`**
 - **`search_knowledge(query)`:** searches the agent's attached KBs with `k=top_k`. The `kb` parameter was removed (D-W2-12).
-- **`http_request(method, url, body?)`:** only when `http_request_enabled`; host allowlist enforced; 10 s timeout.
+- **`http_request(method, url, body?)`:** only when `http_request_enabled`. Host allowlist enforced. 10 s timeout.
 - **`describe_current_frame(question?)`:**
   - Cascaded mode: sends the latest frame to the LLM. It raises `ToolError` on a known text-only model.
   - Realtime mode: returns only the frame metadata.
-- **`pin_frame(caption, confirmed?, kind?)`:** uses a frame at most 12 s old; returns `{pinned, asset_id}`.
+- **`pin_frame(caption, confirmed?, kind?)`:** uses a frame at most 12 s old. Returns `{pinned, asset_id}`.
 - **`push_note(text, kind?)`**
 - **`set_status(label, tone)`**
 - **`escalate_to_human(reason, urgency)`:** a stub that emits `escalation`.
@@ -450,7 +450,7 @@ Individual tools can be disabled via `tools.builtin_disabled`.
   - The UI receives activity and a state patch.
   - Routine results go into the chat context with `update_chat_ctx`.
   - Urgent results call `generate_reply(instructions=…, allow_interruptions=False)`.
-- Tools are flagged `ToolFlag.CANCELLABLE`: a user interruption cancels the tool's reply, not the background job.
+- Tools are flagged `ToolFlag.CANCELLABLE`. A user interruption cancels the tool's reply, not the background job.
 - Silent replies: in realtime mode, the `on_function_tools_executed` handler calls `cancel_tool_reply()` for tools whose `ToolMeta.silent_reply` is true (D-W2-9i).
 - Background jobs are logged as `workflow_run` events.
 
@@ -461,13 +461,13 @@ Individual tools can be disabled via `tools.builtin_disabled`.
 ### api
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (required)
 - `LKAP_MASTER_KEY` (required)
-- `LKAP_AGENT_NAME` (required; `lkap-agent`)
+- `LKAP_AGENT_NAME` (required, `lkap-agent`)
 - `LKAP_ADMIN_TOKEN` (required)
 - `LKAP_SERVICE_TOKEN` (required)
-- `LKAP_DATA_DIR` (required; default `./data`)
-- `LKAP_DATABASE_URL` (optional; default `sqlite+aiosqlite:///{DATA_DIR}/lkap.db`)
-- `LKAP_CORS_ORIGINS` (optional; default `http://localhost:3000`)
-- `LKAP_PUBLIC_BASE_URL` (optional; unused in the MVP)
+- `LKAP_DATA_DIR` (required, default `./data`)
+- `LKAP_DATABASE_URL` (optional, default `sqlite+aiosqlite:///{DATA_DIR}/lkap.db`)
+- `LKAP_CORS_ORIGINS` (optional, default `http://localhost:3000`)
+- `LKAP_PUBLIC_BASE_URL` (optional, unused in the MVP)
 - `LKAP_PACKS` (optional)
 - `LKAP_LOG_LEVEL`, `LKAP_LOG_JSON` (optional)
 - `LKAP_EMBEDDER` (`fastembed`, or `openai:<credential_id>`)
@@ -477,7 +477,7 @@ Individual tools can be disabled via `tools.builtin_disabled`.
 
 ### agent
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (required)
-- `LIVEKIT_AGENT_NAME` (optional; must equal `lkap-agent` if set)
+- `LIVEKIT_AGENT_NAME` (optional, must equal `lkap-agent` if set)
 - `LIVEKIT_AGENT_NAME_OVERRIDE` (same rule)
 - `LKAP_SERVICE_TOKEN` (required)
 - `LKAP_API_BASE_URL` (required)
@@ -492,7 +492,7 @@ Individual tools can be disabled via `tools.builtin_disabled`.
 - `LKAP_ADMIN_TOKEN` (server-only)
 - `PORT` (3000)
 
-Vendor keys (`GOOGLE_API_KEY`, `OPENAI_API_KEY`, …) are deliberately **not** read from the environment; they live in the vault.
+Vendor keys (`GOOGLE_API_KEY`, `OPENAI_API_KEY`, …) are deliberately **not** read from the environment. They live in the vault.
 
 ---
 
@@ -500,33 +500,33 @@ Vendor keys (`GOOGLE_API_KEY`, `OPENAI_API_KEY`, …) are deliberately **not** r
 
 - **D-W2-1:** test calls use `?mode=test` through the console proxy. This replaces the `test-connect` endpoint and the admin-cookie approach (ARCH §11, §12).
 - **D-W2-2 (with D-W3-2):** the connect token source freezes after the first connect, plus the api-side stale-session sweep and its three `LKAP_SESSION_*` variables (CONTRACTS §3).
-- **D-W2-3:** `tsType: "unknown"` for `Any` fields in generated TS; `py.typed` added; KB `k` validated as `Field(4, ge=1, le=20)` (CONTRACTS §4, §7).
+- **D-W2-3:** `tsType: "unknown"` for `Any` fields in generated TS. `py.typed` added. KB `k` validated as `Field(4, ge=1, le=20)` (CONTRACTS §4, §7).
 - **D-W2-4 / 9j:** the frame source is the one the UI selected, otherwise the freshest frame. This replaces "screen share if published, else camera" (ARCH §8).
-- **D-W2-5 / 9m:** an explicit `k` wins; platform callers pass `top_k`; `ApiKbClient` loses `default_k` (ARCH §7.4).
+- **D-W2-5 / 9m:** an explicit `k` wins. Platform callers pass `top_k`. `ApiKbClient` loses `default_k` (ARCH §7.4).
 - **D-W2-6:** all Inference objects read LiveKit credentials from the environment.
-- **D-W2-7:** UI RPC targets the identity the api minted; avatar (`lk.publish_on_behalf`) participants are excluded on both sides.
+- **D-W2-7:** UI RPC targets the identity the api minted. Avatar (`lk.publish_on_behalf`) participants are excluded on both sides.
 - **D-W2-8 / 9k:** cascaded vision uses a JPEG data URL of at most 512 px, `inference_detail="low"`, at most one image per LLM call, and auto-disables after an LLM error. This replaces raw `ImageContent(frame)` (ARCH §8).
 - **D-W2-9a:** the platform sends the seq-1 snapshot after the pack's `on_session_start` (CONTRACTS §10).
 - **D-W2-9b:** the start order is resolve → build → `connect` → UI/frames start → avatar → `session.start` (ARCH §4).
 - **D-W2-9c:** usage comes from `session_usage_updated` and tool timing from `tool_execution_updated`. `metrics_collected` and `UsageCollector` are unused (ARCH §14).
-- **D-W2-9d:** `say()` requires a TTS; realtime mode without a TTS greets via `generate_reply` (ARCH §15.9).
+- **D-W2-9d:** `say()` requires a TTS. Realtime mode without a TTS greets via `generate_reply` (ARCH §15.9).
 - **D-W2-9e:** a session `close` event triggers `ctx.shutdown`.
-- **D-W2-9f → D-W2-11:** the agent name is fixed in code with a job-request filter; `LIVEKIT_AGENT_NAME` becomes optional (CONTRACTS §3).
+- **D-W2-9f → D-W2-11:** the agent name is fixed in code with a job-request filter. `LIVEKIT_AGENT_NAME` becomes optional (CONTRACTS §3).
 - **D-W2-9g:** dependency changes: `openai>=2,<3` and the `mcp` extra (CONTRACTS §2).
 - **D-W2-9h:** the asset attribute is `caption`, not `caption_ref` (ARCH §9).
 - **D-W2-9i:** silent tool replies go through `cancel_tool_reply` in `function_tools_executed`, in realtime mode only (ARCH §7.2).
-- **D-W2-9o:** the turn detector is used in cascaded mode only; no VAD in realtime mode.
-- **D-W2-9p:** typed chat goes through `platform_text_input_cb` and then `on_user_turn_completed`; `chat_input=false` sets `text_input=False` (ARCH §9).
+- **D-W2-9o:** the turn detector is used in cascaded mode only. No VAD in realtime mode.
+- **D-W2-9p:** typed chat goes through `platform_text_input_cb` and then `on_user_turn_completed`. `chat_input=false` sets `text_input=False` (ARCH §9).
   - Known gap: in realtime mode, per-turn context edits never reach the model.
-- **D-W2-10:** vision capability is registry data (`vision_support`, tri-state) and gates per-turn injection and `describe_current_frame`. gemma stays the default; the insurance pack seeds `google/gemini-3.5-flash`.
+- **D-W2-10:** vision capability is registry data (`vision_support`, tri-state) and gates per-turn injection and `describe_current_frame`. gemma stays the default. The insurance pack seeds `google/gemini-3.5-flash`.
 - **D-W2-12:** `search_knowledge(query)` with no `kb` parameter (ARCH §7).
-- **D-W2-13:** no hot reload in dev; stop with SIGINT and a grace period, never SIGKILL first.
-- **D-W3-1:** `PackSessionContext.record_event(event_type, payload)` added; event-emission rules added (CONTRACTS §7, §8).
+- **D-W2-13:** no hot reload in dev. Stop with SIGINT and a grace period, never SIGKILL first.
+- **D-W3-1:** `PackSessionContext.record_event(event_type, payload)` added. Event-emission rules added (CONTRACTS §7, §8).
 
 ---
 
 ## Gaps and conflicts in the docs
 - ARCHITECTURE §11 lists `seed-from-pack` and `publish` endpoints, but CONTRACTS §7 defines no path or models for them. Publishing is also possible through `AgentUpdate.published`.
-- ARCH §4 writes the connect path as `/connect` on `{agent_id}`; CONTRACTS uses `{id_or_slug}`.
+- ARCH §4 writes the connect path as `/connect` on `{agent_id}`. CONTRACTS uses `{id_or_slug}`.
 - The docs name no avatar fields beyond the `avatar` `ProviderRef` slot and the per-provider fields listed in §4.
 - The docs name no VAD configuration field.

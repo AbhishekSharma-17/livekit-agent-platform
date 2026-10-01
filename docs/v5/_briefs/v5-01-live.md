@@ -6,7 +6,7 @@ The card's check is: upload the fixture types to a scratch KB, and `POST .../sea
 
 ## Rules (HANDOFF rule 3, PLAN-V5 §0.1)
 
-- Use a **scratch api** on its own port, its own `LKAP_DATA_DIR` and its own SQLite file under the session scratchpad. Never use the dev api on `:8080`, never `api/data/lkap.db`, and never the user's `lkap-agent` worker; this check needs no worker at all.
+- Use a **scratch api** on its own port, its own `LKAP_DATA_DIR` and its own SQLite file under the session scratchpad. Never use the dev api on `:8080`, never `api/data/lkap.db`, and never the user's `lkap-agent` worker. This check needs no worker at all.
 - Read no `.env*` file. Export only the variables below into the scratch shell.
 - Stop only the PID you started, never with a broad `pkill`.
 
@@ -59,7 +59,7 @@ Each answers 202 with `progress: 0.0`.
 curl -s $A $B/v1/knowledge-bases/$KB/documents | python -m json.tool
 ```
 
-Expect all four `ready`, each with `progress: 1.0` and a non-zero `chunk_count`. Record the chunk counts, which come from the real bge tokenizer (the unit tests pin the counts from the heuristic counter). A document with more than 50 chunks shows an intermediate `progress` if you poll while it runs; the fixtures are too small for that.
+Expect all four `ready`, each with `progress: 1.0` and a non-zero `chunk_count`. Record the chunk counts, which come from the real bge tokenizer (the unit tests pin the counts from the heuristic counter). A document with more than 50 chunks shows an intermediate `progress` if you poll while it runs. The fixtures are too small for that.
 
 **Result:**
 
@@ -111,13 +111,13 @@ Expect all four ids in `queued` and `skipped: []`, then all four `ready` again w
 
 ## 7. The embedder mismatch refusal
 
-Stop the scratch api (its PID only). Restart it with `LKAP_EMBED_MODEL=BAAI/bge-base-en-v1.5` (768 dimensions; nothing is downloaded until something embeds), then:
+Stop the scratch api (its PID only). Restart it with `LKAP_EMBED_MODEL=BAAI/bge-base-en-v1.5` (768 dimensions, nothing is downloaded until something embeds), then:
 
 ```
 curl -s $A -X POST $B/v1/knowledge-bases/$KB/search -H 'content-type: application/json' -d '{"query":"x","k":2}'
 ```
 
-Expect 422, `error.code = "kb_embedder_mismatch"`, a message naming "Demo — V5-01 locators", and `details.kb_dimension = 384`, `details.embedder_dimension = 768`. Restart without the variable and the same search answers 200.
+Expect 422, `error.code = "kb_embedder_mismatch"`, a message naming "Demo: V5-01 locators", and `details.kb_dimension = 384`, `details.embedder_dimension = 768`. Restart without the variable and the same search answers 200.
 
 **Result:**
 

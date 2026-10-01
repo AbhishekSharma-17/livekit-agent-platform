@@ -23,7 +23,7 @@ agent. Switch them on with `agent_update(patch={"extraction": {...},
   the panel's checklist (items `need_<field>`), ticking them as values arrive.
 
 The extraction runs **in the background** on the agent's workflow model (the
-`workflow_llm` slot, else its language model): one call of at most two
+`workflow_llm` slot, else its language model). One call of at most two
 seconds, skipped when the conversation has not changed, never delaying the
 reply. Values go into the session's **variables**, the same store
 `{{ var.<name> }}` placeholders, `requires_vars`, result bindings and flows
@@ -49,7 +49,7 @@ short condition (at most 200 characters), never code:
 `instruct` (a note for the model's next reply only) and `disposition.set`.
 
 Rules run after each extraction, after each batch of tool results and after a
-`var.set`. `once: true` (the default) fires a rule once per session;
+`var.set`. `once: true` (the default) fires a rule once per session.
 `once: false` fires it each time its condition turns true.
 
 ## What is recorded

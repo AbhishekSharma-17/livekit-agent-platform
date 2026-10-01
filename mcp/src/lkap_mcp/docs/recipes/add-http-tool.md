@@ -73,7 +73,7 @@ execution so the agent says it is on it and reports back when it is idle:
   }
 }
 ```
-Then `agent_validate`: it warns when the agent's `tools.max_tool_steps` is
+Then `agent_validate`. It warns when the agent's `tools.max_tool_steps` is
 below 4 with a background default. A POST tool opts in the same way and then
 asks before running twice.
 

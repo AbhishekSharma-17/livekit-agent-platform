@@ -1,12 +1,12 @@
-# LiveKit Agent Platform (LKAP) — Architecture
+# LiveKit Agent Platform (LKAP) Architecture
 
-> **Superseded in part (2026-09-18):** `docs/DECISIONS-W2.md` D-W2-9 overrides §4 (start order), §7.4 (KB k), §8 (video source preference, cascaded frame encoding), §9 (`caption`, not `caption_ref`), §11/§12 (test call → console-proxied test mode), §14 (usage from `session_usage_updated`), §15.9 (verified: `say()` needs a TTS); D-W2-9p (typed chat through `on_user_turn_completed`, §9), D-W2-10 (vision capability gate, §8), D-W2-11 (agent name fixed in code), D-W2-12 (`search_knowledge(query)`, §7), D-W2-13 (worker restart/stop rule). Read DECISIONS-W2 first where they differ.
+> **Superseded in part (2026-09-18):** `docs/DECISIONS-W2.md` D-W2-9 overrides §4 (start order), §7.4 (KB k), §8 (video source preference, cascaded frame encoding), §9 (`caption`, not `caption_ref`), §11/§12 (test call → console-proxied test mode), §14 (usage from `session_usage_updated`), §15.9 (verified: `say()` needs a TTS), D-W2-9p (typed chat through `on_user_turn_completed`, §9), D-W2-10 (vision capability gate, §8), D-W2-11 (agent name fixed in code), D-W2-12 (`search_knowledge(query)`, §7), D-W2-13 (worker restart/stop rule). Read DECISIONS-W2 first where they differ.
 
-> **v5 (2026-09-28):** what the v5 plan changed — the knowledge service, connected apps, MCP sign-in, request blocks and caller files, consent, the capability packages, memory, guardrails, the security review — is described in [`docs/v5/ARCHITECTURE-V5.md`](v5/ARCHITECTURE-V5.md), which also indexes the v5 decisions and rulings. D6 below is amended for v5; §7.3 (built-in tools) and §7.4 (knowledge bases) describe v1 and are superseded by that document where they differ.
+> **v5 (2026-09-28):** what the v5 plan changed (the knowledge service, connected apps, MCP sign-in, request blocks and caller files, consent, the capability packages, memory, guardrails, the security review) is described in [`docs/v5/ARCHITECTURE-V5.md`](v5/ARCHITECTURE-V5.md), which also indexes the v5 decisions and rulings. D6 below is amended for v5. §7.3 (built-in tools) and §7.4 (knowledge bases) describe v1 and are superseded by that document where they differ.
 
-> **v6 (2026-09-29):** what the v6 plan changed — speech registry truth and the recommended streaming stacks, OpenRouter prices, the notebook, layout, drawing board and next blocks, tool context and bindings, live extraction and rules, lookup tables, the flow `tool` node, tool kits, the claims-intake starter and the default pack list, avatar framing, connection names and their workers, the security review — is described in [`docs/v6/ARCHITECTURE-V6.md`](v6/ARCHITECTURE-V6.md), which also indexes the v6 decisions and rulings. §10 (packs) is amended for v6: `packs.insurance_claim` is the legacy reference pack, loaded only when `LKAP_PACKS` lists it; new insurance agents start from the `claims_intake` starter on the generic pack (`docs/INSURANCE_PACK_MAPPING.md` §5).
+> **v6 (2026-09-29):** what the v6 plan changed (speech registry truth and the recommended streaming stacks, OpenRouter prices, the notebook, layout, drawing board and next blocks, tool context and bindings, live extraction and rules, lookup tables, the flow `tool` node, tool kits, the claims-intake starter and the default pack list, avatar framing, connection names and their workers, the security review) is described in [`docs/v6/ARCHITECTURE-V6.md`](v6/ARCHITECTURE-V6.md), which also indexes the v6 decisions and rulings. §10 (packs) is amended for v6. `packs.insurance_claim` is the legacy reference pack, loaded only when `LKAP_PACKS` lists it. New insurance agents start from the `claims_intake` starter on the generic pack (`docs/INSURANCE_PACK_MAPPING.md` §5).
 
-Status: **approved design, contract-first.** Implementers follow `docs/CONTRACTS.md` for exact shapes and `docs/IMPLEMENTATION_PLAN.md` for work packages. This document explains *what* and *why*; it does not repeat every field.
+Status: **approved design, contract-first.** Implementers follow `docs/CONTRACTS.md` for exact shapes and `docs/IMPLEMENTATION_PLAN.md` for work packages. This document explains *what* and *why*. It does not repeat every field.
 
 Baseline facts were verified against installed `livekit-agents==1.8.2`, `livekit-plugins-google==1.8.2`, `livekit-api==1.2.1`, `livekit==1.1.18` (rtc), `@livekit/components-react@2.9.24` and `lk` CLI 2.16.2 on 2026-09-17/18 (see `docs/research/*.md`). Anything still unverified is listed in §15.
 
@@ -24,30 +24,30 @@ Three deployable services plus shared code:
 | `api/` | Python 3.12, FastAPI | Admin/config API, credential vault, knowledge-base ingestion, session/token endpoint with explicit dispatch, internal service endpoints for the worker, session/tool-call logs. |
 | `web/` | Next.js 15, React 19, Tailwind 4, shadcn + `@agents-ui` | Live session surface and admin/builder console. |
 | `contracts/` | Python package `lkap_contracts` + generated JSON/TS | Provider registry, agent config schema, dispatch metadata, agent↔UI protocol, pack manifest. Single source of truth. |
-| `packs/` | Python packages | Use-case packs. `packs/insurance_claim` is the reference pack (feature parity with the Gemini Live demo); since v6 it is legacy, loaded only when `LKAP_PACKS` lists it, and its behaviours live in the `claims_intake` starter (docs/v6/ARCHITECTURE-V6.md §14). |
+| `packs/` | Python packages | Use-case packs. `packs/insurance_claim` is the reference pack (feature parity with the Gemini Live demo). Since v6 it is legacy, loaded only when `LKAP_PACKS` lists it, and its behaviours live in the `claims_intake` starter (docs/v6/ARCHITECTURE-V6.md §14). |
 
 Non-goals for the MVP: multi-tenant auth/RBAC, billing, SIP/telephony, self-hosted LiveKit, OpenTelemetry export, half-cascade pipelines, non-MVP providers (listed in the registry as deferred).
 
 ---
 
-## 2. Decision summary (D1–D14)
+## 2. Decision summary (D1 to D14)
 
 | # | Decision | Choice | Why (one line) |
 |---|---|---|---|
-| D1 | Worker topology | One deployment, agent name **`lkap-agent`**, explicit dispatch, config selected inside the single entrypoint from job metadata | `AgentServer` allows exactly one `rtc_session`; explicit dispatch keeps the existing `other-project-agent` untouched. |
-| D2 | How the worker gets config | Dispatch metadata carries **IDs only** (`session_id`, `agent_id`, `config_version`); worker fetches the *resolved* config incl. decrypted credentials from `api` with a service token | The dispatch metadata lives inside the JWT the browser holds; secrets must never be there. Fetch also gives one code path for dev and prod. |
-| D3 | Session start | Browser → `POST /v1/agents/{agent_id}/connect` (api mints token with `RoomAgentDispatch`); api ignores any client-supplied `roomConfig` | Otherwise a browser could dispatch any agent config. Compatible with `TokenSource.custom()` in `livekit-client`. |
-| D4 | Database | **SQLite** (`aiosqlite`) via SQLAlchemy 2 async + Alembic; `DATABASE_URL` switch to Postgres later | Zero-ops for MVP; Alembic + SQLAlchemy keep the schema portable. |
-| D5 | Credential encryption | Fernet (`cryptography`) with `LKAP_MASTER_KEY` from env; ciphertext in DB; decrypt only inside the internal resolve endpoint | Simplest correct envelope for MVP; KMS is deferred. |
-| D6 | Vector store / embeddings | A `VectorStore` Protocol (v2 since V5-13) whose **default store follows the database**: **LanceDB** (file-based) when `LKAP_DATABASE_URL` is SQLite, **pgvector** (the `kb_vectors` table in the same database, one transaction with the chunk rows) when it is Postgres; `LKAP_VECTOR_STORE=lancedb` forces LanceDB. Default embedder **fastembed** (local ONNX `BAAI/bge-small-en-v1.5`); OpenAI embeddings as optional registry entry; `kb_reindex` re-embeds a knowledge base into the current store (docs/RUNBOOK.md §9.2) | Free-tier constraint: KB must work with **no vendor key** in every mode (D-V5-13). LanceDB needs no server; pgvector adds no second writer or shared volume in production and `pg_dump` covers it (D-V5-12). Bring-your-own stores plug in behind the same Protocol as **knowledge connections** (V5-20: Qdrant, Pinecone, Weaviate; hosted re-rankers Cohere and Voyage AI), chosen per knowledge base at creation, and a managed search service answers through the `ExternalRetriever` Protocol instead (V5-45: Ragie); in every backend the SQL chunk row stays the source of truth for chunk text (D-V5-37). docs/v5/ARCHITECTURE-V5.md §2. |
-| D7 | Provider registry | Pydantic models in `lkap_contracts.providers` → exported `providers.json` + TS types; drives UI forms *and* the worker factory | One source of truth; adding a provider is one Python entry + one factory branch. |
-| D8 | Default dev pipeline | Cascaded via **LiveKit Inference** (`deepgram/nova-3` → `google/gemma-4-31b-it` → `inworld/inworld-tts-2`, `inference.TurnDetector()`); Gemini Live selectable once a Google key is saved | Works with LiveKit creds alone; Google free-tier quota is scarce. |
+| D1 | Worker topology | One deployment, agent name **`lkap-agent`**, explicit dispatch, config selected inside the single entrypoint from job metadata | `AgentServer` allows exactly one `rtc_session`. Explicit dispatch keeps the existing `other-project-agent` untouched. |
+| D2 | How the worker gets config | Dispatch metadata carries **IDs only** (`session_id`, `agent_id`, `config_version`). Worker fetches the *resolved* config incl. decrypted credentials from `api` with a service token | The dispatch metadata lives inside the JWT the browser holds. Secrets must never be there. Fetch also gives one code path for dev and prod. |
+| D3 | Session start | Browser → `POST /v1/agents/{agent_id}/connect` (api mints token with `RoomAgentDispatch`), and api ignores any client-supplied `roomConfig` | Otherwise a browser could dispatch any agent config. Compatible with `TokenSource.custom()` in `livekit-client`. |
+| D4 | Database | **SQLite** (`aiosqlite`) via SQLAlchemy 2 async + Alembic. `DATABASE_URL` switch to Postgres later | Zero-ops for MVP. Alembic + SQLAlchemy keep the schema portable. |
+| D5 | Credential encryption | Fernet (`cryptography`) with `LKAP_MASTER_KEY` from env. Ciphertext in DB. Decrypt only inside the internal resolve endpoint | Simplest correct envelope for MVP. KMS is deferred. |
+| D6 | Vector store / embeddings | A `VectorStore` Protocol (v2 since V5-13) whose **default store follows the database**: **LanceDB** (file-based) when `LKAP_DATABASE_URL` is SQLite, **pgvector** (the `kb_vectors` table in the same database, one transaction with the chunk rows) when it is Postgres. `LKAP_VECTOR_STORE=lancedb` forces LanceDB. Default embedder **fastembed** (local ONNX `BAAI/bge-small-en-v1.5`), with OpenAI embeddings as optional registry entry. `kb_reindex` re-embeds a knowledge base into the current store (docs/RUNBOOK.md §9.2) | Free-tier constraint: KB must work with **no vendor key** in every mode (D-V5-13). LanceDB needs no server, and pgvector adds no second writer or shared volume in production and `pg_dump` covers it (D-V5-12). Bring-your-own stores plug in behind the same Protocol as **knowledge connections** (V5-20: Qdrant, Pinecone, Weaviate, and hosted re-rankers Cohere and Voyage AI), chosen per knowledge base at creation, and a managed search service answers through the `ExternalRetriever` Protocol instead (V5-45: Ragie). In every backend the SQL chunk row stays the source of truth for chunk text (D-V5-37). docs/v5/ARCHITECTURE-V5.md §2. |
+| D7 | Provider registry | Pydantic models in `lkap_contracts.providers` → exported `providers.json` + TS types, and drives UI forms *and* the worker factory | One source of truth. Adding a provider is one Python entry + one factory branch. |
+| D8 | Default dev pipeline | Cascaded via **LiveKit Inference** (`deepgram/nova-3` → `google/gemma-4-31b-it` → `inworld/inworld-tts-2`, `inference.TurnDetector()`). Gemini Live selectable once a Google key is saved | Works with LiveKit creds alone. Google free-tier quota is scarce. |
 | D9 | Claim graph | **Port ADK → plain Python**: one JSON-extraction LLM call + verbatim deterministic rules | Removes `google-adk` (heavy, Google-only quota), lets the workflow use whatever LLM the agent is configured with, and enables offline tests with a fake LLM. ADK added nothing beyond sequencing here. |
-| D10 | Background ("non-blocking") tools | Tools return quickly; long work runs in a session-scoped task; result delivery: UI topic always; conversation via `reply_required` control (realtime) or `update_chat_ctx` / `generate_reply` (cascaded) | LiveKit has no NON_BLOCKING tool flag; §7 gives both code paths. |
-| D11 | Vision | Worker owns a **latest-frame buffer** per track source in both modes; realtime additionally sets `RoomOptions(video_input=True)`; cascaded injects one `ImageContent` per user turn | Verified: `AgentActivity.push_video` only forwards to a realtime session, so cascaded vision must be manual. Pinning needs JPEG bytes anyway. |
-| D12 | Agent↔UI transport | Text streams for JSON state/events, byte streams for images, RPC for request/response, `lk.transcription`/`lk.chat` untouched | Matches verified rtc primitives and React hooks (`useTextStream`, `useRpc`; byte streams via `room.registerByteStreamHandler`). |
-| D13 | Frontend base | Fresh Next 15 app in `web/`; vendor `@agents-ui` components with `pnpm dlx shadcn@latest add @agents-ui/all`; do **not** fork `agent-starter-react` | The starter's token route is dev-only and its page is single-agent; we need routes for the console and a panel registry. |
-| D14 | Auth (MVP) | Static admin bearer token for console/API; per-agent `public` flag for the connect endpoint; static service token for worker→api | Single-operator MVP; real auth is deferred but the middleware seam exists. |
+| D10 | Background ("non-blocking") tools | Tools return quickly. Long work runs in a session-scoped task. Result delivery: UI topic always, and conversation via `reply_required` control (realtime) or `update_chat_ctx` / `generate_reply` (cascaded) | LiveKit has no NON_BLOCKING tool flag. §7 gives both code paths. |
+| D11 | Vision | Worker owns a **latest-frame buffer** per track source in both modes. Realtime additionally sets `RoomOptions(video_input=True)`. Cascaded injects one `ImageContent` per user turn | Verified: `AgentActivity.push_video` only forwards to a realtime session, so cascaded vision must be manual. Pinning needs JPEG bytes anyway. |
+| D12 | Agent↔UI transport | Text streams for JSON state/events, byte streams for images, RPC for request/response, `lk.transcription`/`lk.chat` untouched | Matches verified rtc primitives and React hooks (`useTextStream`, `useRpc`, byte streams via `room.registerByteStreamHandler`). |
+| D13 | Frontend base | Fresh Next 15 app in `web/`. Vendor `@agents-ui` components with `pnpm dlx shadcn@latest add @agents-ui/all`. Do **not** fork `agent-starter-react` | The starter's token route is dev-only and its page is single-agent. We need routes for the console and a panel registry. |
+| D14 | Auth (MVP) | Static admin bearer token for console/API. Per-agent `public` flag for the connect endpoint. Static service token for worker→api | Single-operator MVP. Real auth is deferred but the middleware seam exists. |
 
 Deferred (explicit): Postgres/pgvector, Pinecone, KMS, OAuth/RBAC, OTel exporter, SIP, half-cascade, avatar providers beyond bey/tavus, MCP stdio servers in prod, recording, multi-region deploy.
 
@@ -127,14 +127,14 @@ Rules:
 
 Entities (full DDL in `CONTRACTS.md §5`):
 
-- `agents` — name, slug, `published`, `pack_id`, `ui_panel_id`, `config` (JSON `AgentConfig` v1), `config_version` (int, bumped on save), timestamps.
-- `credentials` — `provider_id`, `label`, `ciphertext` (Fernet of JSON `{field: value}`), `fingerprint` (last 4 chars for display), timestamps. Agents reference credentials by id inside `config.pipeline.*.credential_id`.
-- `tools` — declarative tool definitions (`kind`: `http` | `mcp`), `definition` JSON, owned per agent or shared (`agent_id` nullable).
-- `knowledge_bases`, `kb_documents`, `kb_chunks` — KB metadata, uploaded docs (stored on disk under `LKAP_DATA_DIR/kb/{kb_id}/`), chunk rows mirrored to LanceDB (`table = kb_{kb_id}`).
-- `sessions` — `agent_id`, `config_version`, `room_name`, `participant_identity`, `status`, `started_at/ended_at`, `usage` JSON, `final_ui_state` JSON, `transcript` JSON.
-- `session_events` — append-only: `tool_call_started/ended`, `ui_state`, `agent_state`, `error`, `metrics` with JSON payload.
+- `agents`: name, slug, `published`, `pack_id`, `ui_panel_id`, `config` (JSON `AgentConfig` v1), `config_version` (int, bumped on save), timestamps.
+- `credentials`: `provider_id`, `label`, `ciphertext` (Fernet of JSON `{field: value}`), `fingerprint` (last 4 chars for display), timestamps. Agents reference credentials by id inside `config.pipeline.*.credential_id`.
+- `tools`: declarative tool definitions (`kind`: `http` | `mcp`), `definition` JSON, owned per agent or shared (`agent_id` nullable).
+- `knowledge_bases`, `kb_documents`, `kb_chunks`: KB metadata, uploaded docs (stored on disk under `LKAP_DATA_DIR/kb/{kb_id}/`), chunk rows mirrored to LanceDB (`table = kb_{kb_id}`).
+- `sessions`: `agent_id`, `config_version`, `room_name`, `participant_identity`, `status`, `started_at/ended_at`, `usage` JSON, `final_ui_state` JSON, `transcript` JSON.
+- `session_events` (append-only): `tool_call_started/ended`, `ui_state`, `agent_state`, `error`, `metrics` with JSON payload.
 
-Storage: SQLite file at `LKAP_DATA_DIR/lkap.db`; Alembic migrations in `api/alembic/`. Postgres works by changing `DATABASE_URL` (no SQLite-only types; JSON columns use `sa.JSON`).
+Storage: SQLite file at `LKAP_DATA_DIR/lkap.db`. Alembic migrations in `api/alembic/`. Postgres works by changing `DATABASE_URL` (no SQLite-only types, and JSON columns use `sa.JSON`).
 
 Vector store: `VectorStore` Protocol (`upsert(chunks)`, `query(kb_id, text, k)`, `delete(kb_id)`), LanceDB implementation at `LKAP_DATA_DIR/lancedb/`. Embedder: `Embedder` Protocol, default `FastEmbedEmbedder` (local ONNX, ~130 MB model cached under `LKAP_DATA_DIR/models/`). The worker queries the KB through the api (`POST /internal/v1/kb/{kb_id}/search`) so LanceDB files have a single writer/reader process.
 
@@ -161,7 +161,7 @@ flowchart TB
 
 `ProviderSpec` (see CONTRACTS §4) has: `id`, `kind` (`realtime|stt|llm|tts|avatar|image_gen|embedding`), `package`, `python_class`, `secret_fields`, `fields` (typed, with defaults/enums/conditions), `models` (suggested list, not an allowlist), `requires_credential` (false for `livekit-inference-*`), `capabilities` (`video_input`, `tool_calling`, `silent_tool_reply`).
 
-Initial entries (MVP): `livekit-inference-stt`, `livekit-inference-llm`, `livekit-inference-tts`, `google-realtime`, `openai-realtime`, `deepgram-stt`, `openai-llm`, `google-llm`, `cartesia-tts`, `elevenlabs-tts`, `openai-tts`, `bey-avatar`, `tavus-avatar`, `google-image-gen`, `openai-image-gen`, `fastembed-embedding`, `openai-embedding`. Everything else in the research catalog is `status: "deferred"` in the registry: deferred entries are kept as data, but the console currently hides them (the `status === "mvp"` filter in `providers-tab.tsx`/`provider-slot-editor.tsx`), so nothing shows a "coming soon" entry yet (REVIEW-FINAL F-25).
+Initial entries (MVP): `livekit-inference-stt`, `livekit-inference-llm`, `livekit-inference-tts`, `google-realtime`, `openai-realtime`, `deepgram-stt`, `openai-llm`, `google-llm`, `cartesia-tts`, `elevenlabs-tts`, `openai-tts`, `bey-avatar`, `tavus-avatar`, `google-image-gen`, `openai-image-gen`, `fastembed-embedding`, `openai-embedding`. Everything else in the research catalog is `status: "deferred"` in the registry. Deferred entries are kept as data, but the console currently hides them (the `status === "mvp"` filter in `providers-tab.tsx`/`provider-slot-editor.tsx`), so nothing shows a "coming soon" entry yet (REVIEW-FINAL F-25).
 
 Factory rule: the factory only ever passes credentials as explicit constructor kwargs (`api_key=...`) from the resolved config. It never sets process env vars, so two jobs with different keys in the same worker cannot leak into each other. Inference classes get the worker's own `LIVEKIT_API_KEY/SECRET` from env (that is how Inference is billed).
 
@@ -175,7 +175,7 @@ Gemini Live specifics: registry exposes `tool_behavior` (`BLOCKING|NON_BLOCKING`
 
 | Source | Defined by | Built with | Notes |
 |---|---|---|---|
-| Built-in standard tools | platform (`agent/src/lkap_agent/tools/builtin/`) | typed `@function_tool` | Always available; agent config can disable individual ones (`tools.builtin_disabled`). |
+| Built-in standard tools | platform (`agent/src/lkap_agent/tools/builtin/`) | typed `@function_tool` | Always available. Agent config can disable individual ones (`tools.builtin_disabled`). |
 | HTTP/webhook tools | admin UI → `tools` table (`kind: http`) | `function_tool(handler, raw_schema=...)` with a generic handler that receives `raw_arguments` and `RunContext`, renders the URL/body template, calls `httpx`, returns text/JSON (truncated to `max_result_chars`) | Outbound allowlist: URL host must match `tool.definition.allowed_hosts` or the platform `LKAP_HTTP_TOOL_ALLOWED_HOSTS`. |
 | MCP servers | admin UI → `tools` table (`kind: mcp`) | `mcp.MCPServerHTTP(url, headers, transport_type="streamable_http", allowed_tools=...)` passed to `Agent(mcp_servers=[...])` | Stdio MCP is deferred (needs a process sandbox). |
 | Pack code tools | pack Python package | typed `@function_tool` methods returned by `Pack.tools(ctx)` | Full access to `PackSessionContext` (frame buffer, UI channel, KB client, workflow runner). |
@@ -185,7 +185,7 @@ All tool invocations are logged at DEBUG with `{session_id, tool, call_id, args_
 ### 7.2 Background tools (replaces Gemini `NON_BLOCKING` + `WHEN_IDLE` / `INTERRUPT`)
 
 LiveKit has no non-blocking tool flag. Verified semantics:
-- A tool's return value becomes a `FunctionCallOutput`; `reply_required` defaults to `True`, is set to `False` when the tool returns `None` or raises `StopResponse`, and is **honoured by realtime models** (Gemini Live, OpenAI Realtime), **and by the cascaded pipeline from livekit-agents 1.8.3**. Below 1.8.3 a cascaded LLM answers every tool output.
+- A tool's return value becomes a `FunctionCallOutput`. `reply_required` defaults to `True`, is set to `False` when the tool returns `None` or raises `StopResponse`, and is **honoured by realtime models** (Gemini Live, OpenAI Realtime), **and by the cascaded pipeline from livekit-agents 1.8.3**. Below 1.8.3 a cascaded LLM answers every tool output.
 - The `function_tools_executed` event exposes `function_call_outputs` and `cancel_tool_reply()`, the supported hook for deciding "speak now or stay quiet".
 - Gemini Live only honours silent scheduling when the model is constructed with `tool_behavior=NON_BLOCKING` (not on Vertex).
 
@@ -213,20 +213,20 @@ sequenceDiagram
 
 Two model-dependent branches, both implemented in `BackgroundToolRunner` behind one API so packs never branch themselves:
 
-- **Realtime mode** (Gemini Live / OpenAI Realtime): the tool function itself does the work *inline* when it is fast (<~1.5 s, e.g. `lookup_policy`), otherwise submits to the runner and returns `None` → `reply_required=False` → the model stays silent. When the background job finishes, routine results are appended to the chat context with `update_chat_ctx` (the model sees them on its next turn; equivalent to `WHEN_IDLE`); urgent results call `session.generate_reply(instructions=...)`, which interrupts current speech (equivalent to `INTERRUPT`). A `function_tools_executed` handler additionally calls `cancel_tool_reply()` for tools flagged `silent_reply=True` in the pack's tool metadata, so a fast inline tool can also stay silent.
-- **Cascaded mode**: the tool returns a short string ("Checking that now.") which the LLM will voice once; the later result is delivered exactly as above (`update_chat_ctx` for routine, `generate_reply` for urgent). Because that tool output asks for a reply (`reply_required` is honoured by realtime models, and by the cascaded pipeline from livekit-agents 1.8.3, so only a `silent_reply` tool goes quiet), pack instructions for cascaded mode tell the model to keep tool acknowledgements to one short clause (the platform appends a "pipeline notes" block to the system prompt per mode).
+- **Realtime mode** (Gemini Live / OpenAI Realtime): the tool function itself does the work *inline* when it is fast (<~1.5 s, e.g. `lookup_policy`), otherwise submits to the runner and returns `None` → `reply_required=False` → the model stays silent. When the background job finishes, routine results are appended to the chat context with `update_chat_ctx` (the model sees them on its next turn, equivalent to `WHEN_IDLE`). Urgent results call `session.generate_reply(instructions=...)`, which interrupts current speech (equivalent to `INTERRUPT`). A `function_tools_executed` handler additionally calls `cancel_tool_reply()` for tools flagged `silent_reply=True` in the pack's tool metadata, so a fast inline tool can also stay silent.
+- **Cascaded mode**: the tool returns a short string ("Checking that now.") which the LLM will voice once. The later result is delivered exactly as above (`update_chat_ctx` for routine, `generate_reply` for urgent). Because that tool output asks for a reply (`reply_required` is honoured by realtime models, and by the cascaded pipeline from livekit-agents 1.8.3, so only a `silent_reply` tool goes quiet), pack instructions for cascaded mode tell the model to keep tool acknowledgements to one short clause (the platform appends a "pipeline notes" block to the system prompt per mode).
 
-Both branches share: `RunContext.disallow_interruptions()` is never used for background tools; `ToolFlag.CANCELLABLE` is set so a user interruption cancels the tool's *reply*, not the background job (the job keeps running and still updates the UI).
+Both branches share: `RunContext.disallow_interruptions()` is never used for background tools, and `ToolFlag.CANCELLABLE` is set so a user interruption cancels the tool's *reply*, not the background job (the job keeps running and still updates the UI).
 
 ### 7.3 Built-in standard tools (MVP list)
 
 | Tool | Behaviour |
 |---|---|
-| `end_call` | Says a closing line, waits for playout, `ctx.shutdown()`; UI receives `session_ending`. |
-| `search_knowledge(query)` (DECISIONS-W2 §D-W2-12: no `kb` filter) | api KB search over the agent's attached KBs; returns top-k chunks with source titles. Also used automatically in `on_user_turn_completed` when `kb.auto_inject=true` (RAG injection, LiveKit's recommended pattern). |
-| `http_request(method, url, body?)` | Only when enabled; host allowlist enforced; 10 s timeout; result truncated. |
+| `end_call` | Says a closing line, waits for playout, `ctx.shutdown()`. UI receives `session_ending`. |
+| `search_knowledge(query)` (DECISIONS-W2 §D-W2-12: no `kb` filter) | api KB search over the agent's attached KBs. Returns top-k chunks with source titles. Also used automatically in `on_user_turn_completed` when `kb.auto_inject=true` (RAG injection, LiveKit's recommended pattern). |
+| `http_request(method, url, body?)` | Only when enabled. Host allowlist enforced. 10 s timeout. Result truncated. |
 | `describe_current_frame(question?)` | Cascaded: sends the latest frame + question to the configured LLM (`ImageContent`) and returns the description. Realtime: returns the latest frame timestamp/source so the model knows a frame exists (Gemini already sees frames). |
-| `pin_frame(caption, confirmed?, kind?)` | Encodes the latest fresh frame (≤12 s old) to JPEG, streams it to the UI on `lkap.ui.asset`, appends a `pinned_frame` item to UI state; returns `{pinned, asset_id}` or a "no fresh frame" message. |
+| `pin_frame(caption, confirmed?, kind?)` | Encodes the latest fresh frame (≤12 s old) to JPEG, streams it to the UI on `lkap.ui.asset`, appends a `pinned_frame` item to UI state. Returns `{pinned, asset_id}` or a "no fresh frame" message. |
 | `push_note(text, kind?)` | Adds a free-text note to `ui.notes`. |
 | `set_status(label, tone)` | Sets `ui.status` (the "rubber stamp"). |
 | `escalate_to_human(reason, urgency)` | Stub: logs, emits `escalation` event, sets status `Escalated`, returns instructions to tell the user a human will follow up. |
@@ -250,27 +250,27 @@ flowchart LR
   UI[UI panel: pinned frame + caption] --- PIN
 ```
 
-- **FrameBuffer** (`lkap_agent.vision.FrameBuffer`) subscribes to `track_subscribed` for the linked participant's `SOURCE_CAMERA` and `SOURCE_SCREENSHARE` tracks and keeps `{source: (frame, monotonic_ts)}` via `rtc.VideoStream.from_track`. It is active in **both** modes. "Active source" = screen share if published, else camera (the UI enforces one video source at a time by pausing camera while sharing; see web §10).
-- **Realtime**: `room_options=RoomOptions(video_input=True)`; `AgentSession` samples with the default `VoiceActivityVideoSampler(speaking_fps=1.0, silent_fps=0.3)` and forwards to the realtime session (verified). Gemini `image_encode_options` left default. Because LiveKit's single `VideoInput` accepts both sources and simultaneous behaviour is unverified, the UI's one-source rule is what guarantees determinism.
-- **Cascaded**: `video_input` stays `False` (frames would be dropped anyway). `PlatformAgent.on_user_turn_completed` appends `ImageContent(image=frame, inference_detail="low")` (one frame, only if `now - ts <= vision.max_frame_age_s`, default 8 s, and `vision.inject_per_turn=true`). Images are stripped from the persisted transcript. `describe_current_frame` covers explicit "what do you see" requests between turns. *Superseded by DECISIONS-W2 §D-W2-8 (JPEG data URL ≤ 512 px, one image per LLM call, auto-degrade) and §D-W2-10: injection is gated on the registry's `vision_support(provider, model)` — known vision model (e.g. `google/gemini-3.5-flash`) → inject; known text-only (`google/gemma-4-31b-it`, the default) → skip with one `info` session event, and `describe_current_frame` refuses; unknown model id → inject and rely on auto-degrade.*
-- JPEG encoding uses `livekit.agents.utils.images.encode(frame, EncodeOptions(format="JPEG", resize_options=...))` — the same helper the Google plugin uses (implementer: verify exact `EncodeOptions` fields in 1.8.2).
+- **FrameBuffer** (`lkap_agent.vision.FrameBuffer`) subscribes to `track_subscribed` for the linked participant's `SOURCE_CAMERA` and `SOURCE_SCREENSHARE` tracks and keeps `{source: (frame, monotonic_ts)}` via `rtc.VideoStream.from_track`. It is active in **both** modes. "Active source" = screen share if published, else camera (the UI enforces one video source at a time by pausing camera while sharing). See web §10.
+- **Realtime**: `room_options=RoomOptions(video_input=True)`. `AgentSession` samples with the default `VoiceActivityVideoSampler(speaking_fps=1.0, silent_fps=0.3)` and forwards to the realtime session (verified). Gemini `image_encode_options` left default. Because LiveKit's single `VideoInput` accepts both sources and simultaneous behaviour is unverified, the UI's one-source rule is what guarantees determinism.
+- **Cascaded**: `video_input` stays `False` (frames would be dropped anyway). `PlatformAgent.on_user_turn_completed` appends `ImageContent(image=frame, inference_detail="low")` (one frame, only if `now - ts <= vision.max_frame_age_s`, default 8 s, and `vision.inject_per_turn=true`). Images are stripped from the persisted transcript. `describe_current_frame` covers explicit "what do you see" requests between turns. *Superseded by DECISIONS-W2 §D-W2-8 (JPEG data URL ≤ 512 px, one image per LLM call, auto-degrade) and §D-W2-10. Injection is gated on the registry's `vision_support(provider, model)`. A known vision model (e.g. `google/gemini-3.5-flash`) → inject. A known text-only model (`google/gemma-4-31b-it`, the default) → skip with one `info` session event, and `describe_current_frame` refuses. An unknown model id → inject and rely on auto-degrade.*
+- JPEG encoding uses `livekit.agents.utils.images.encode(frame, EncodeOptions(format="JPEG", resize_options=...))`, the same helper the Google plugin uses (implementer: verify exact `EncodeOptions` fields in 1.8.2).
 - Vision is an agent capability flag (`capabilities.camera`, `capabilities.screen_share`) that gates the UI toggles and the `pin_frame`/`describe_current_frame` tools.
 
 ---
 
-## 9. Agent ↔ UI protocol (summary; exact schemas in CONTRACTS §9)
+## 9. Agent ↔ UI protocol (summary, exact schemas in CONTRACTS §9)
 
 | Channel | LiveKit primitive | Direction | Purpose |
 |---|---|---|---|
-| `lkap.ui.state` | text stream (`send_text`, JSON) | agent → UI | `UiSnapshot` (full) or `UiPatch` (RFC 6902-lite ops) with `seq`; UI applies in order and requests a snapshot via RPC if a gap is seen. |
+| `lkap.ui.state` | text stream (`send_text`, JSON) | agent → UI | `UiSnapshot` (full) or `UiPatch` (RFC 6902-lite ops) with `seq`. UI applies in order and requests a snapshot via RPC if a gap is seen. |
 | `lkap.ui.activity` | text stream | agent → UI | `ActivityEvent` for tool calls (started/updated/done/error/cancelled), workflow runs, escalations. |
-| `lkap.ui.asset` | byte stream (`stream_bytes`, attributes: `asset_id`, `kind`, `mime`, `caption` — D-W2-9h, not `caption_ref`) | agent → UI | Images: pinned frames, generated sketches. UI keeps `asset_id → objectURL`; state items reference `asset_id`. |
+| `lkap.ui.asset` | byte stream (`stream_bytes`, attributes: `asset_id`, `kind`, `mime`, `caption`, per D-W2-9h, not `caption_ref`) | agent → UI | Images: pinned frames, generated sketches. UI keeps `asset_id → objectURL`. State items reference `asset_id`. |
 | `lkap.ui.request` | RPC (agent `perform_rpc` → UI `useRpc` handler) | agent → UI | e.g. `open_dialog`, `focus_field`, `request_video_source`. |
 | `lkap.agent.action` | RPC (UI `perform` → agent `register_rpc_method`) | UI → agent | `ui_action` (pack-defined, e.g. `confirm_sketch`, `new_intake`), `get_snapshot`, `set_video_source`. |
-| `lk.transcription`, `lk.chat` | LiveKit reserved | both | Transcript (`useSessionMessages`) and typed chat (`useSessionMessages().send`), typed chat → `platform_text_input_cb` → `on_user_turn_completed` (KB inject, per-turn frame, pack hook) → `generate_reply` (DECISIONS-W2 §D-W2-9p); `capabilities.chat_input=false` sets `RoomOptions.text_input=False`. |
+| `lk.transcription`, `lk.chat` | LiveKit reserved | both | Transcript (`useSessionMessages`) and typed chat (`useSessionMessages().send`), typed chat → `platform_text_input_cb` → `on_user_turn_completed` (KB inject, per-turn frame, pack hook) → `generate_reply` (DECISIONS-W2 §D-W2-9p). `capabilities.chat_input=false` sets `RoomOptions.text_input=False`. |
 | `lk.agent.state` | participant attribute | agent → UI | idle/listening/thinking/speaking (`useVoiceAssistant`). |
 
-Byte streams have no React hook in `@livekit/components-react@2.9.24`; web implements `useByteStream(topic)` on `room.registerByteStreamHandler` from `livekit-client`.
+Byte streams have no React hook in `@livekit/components-react@2.9.24`. Web implements `useByteStream(topic)` on `room.registerByteStreamHandler` from `livekit-client`.
 
 All messages carry `v: 1`. State shape is pack-defined but wrapped in a platform envelope with common slots (`status`, `notes`, `checklist`, `assets`, `activity`, `custom`), so the generic panel can render any pack and pack panels can add their own look.
 
@@ -289,22 +289,22 @@ A **pack** is a Python package exposing `PACK: Pack` (interface in CONTRACTS §8
 | UI panel | `web/src/panels/<panel_id>/` registered in `web/src/panels/registry.ts` | web |
 | Tests | `packs/<id>/tests/` | CI |
 
-Discovery: `LKAP_PACKS` env (comma list of import paths, default `packs.generic` since V6-22; a deployment keeping the legacy insurance pack sets `packs.insurance_claim,packs.generic`) — no entry-point magic for MVP. `packs.generic` is the empty pack (generic panel, no code tools). Dependency direction is `agent → packs → contracts`: the Pack interface and runtime Protocols live in `packs/src/packs/base.py`, the worker implements them and hands packs a `PackSessionContext` (session, room, ui channel, frame buffer, kb client, workflow LLM, logger, config). Packs never import `lkap_agent`. Each pack also exposes a pure-Pydantic `manifest.py` so the api can read manifests without livekit. Seeding an agent from a pack substitutes LiveKit Inference defaults for any slot lacking a credential (CONTRACTS §8), so the insurance pack works out of the box with LiveKit credentials only.
+Discovery: `LKAP_PACKS` env (comma list of import paths, default `packs.generic` since V6-22, and a deployment keeping the legacy insurance pack sets `packs.insurance_claim,packs.generic`). No entry-point magic for MVP. `packs.generic` is the empty pack (generic panel, no code tools). Dependency direction is `agent → packs → contracts`. The Pack interface and runtime Protocols live in `packs/src/packs/base.py`, the worker implements them and hands packs a `PackSessionContext` (session, room, ui channel, frame buffer, kb client, workflow LLM, logger, config). Packs never import `lkap_agent`. Each pack also exposes a pure-Pydantic `manifest.py` so the api can read manifests without livekit. Seeding an agent from a pack substitutes LiveKit Inference defaults for any slot lacking a credential (CONTRACTS §8), so the insurance pack works out of the box with LiveKit credentials only.
 
-Pack state: the pack owns `custom` inside the platform `UiState` envelope and declares its JSON Schema in the manifest; the api validates `final_ui_state` against it, the web panel types it. 
+Pack state: the pack owns `custom` inside the platform `UiState` envelope and declares its JSON Schema in the manifest. The api validates `final_ui_state` against it, and the web panel types it. 
 
 ### 10.1 Insurance pack mapping (details in `INSURANCE_PACK_MAPPING.md`)
 
-- `lookup_policy` → pack code tool, inline (fast), `silent_reply=False`; urgent when lapsed/not found (realtime: reply kept; cascaded: normal reply).
-- `sync_claim_packet` → pack code tool submitting the **claim workflow** (`packs/insurance_claim/workflow.py`: JSON extraction call on the workflow LLM + `rules.py` copied verbatim from `policies.py`) via `BackgroundToolRunner`; urgency = `routing == emergency_escalation`.
+- `lookup_policy` → pack code tool, inline (fast), `silent_reply=False`, and urgent when lapsed/not found (realtime: reply kept, cascaded: normal reply).
+- `sync_claim_packet` → pack code tool submitting the **claim workflow** (`packs/insurance_claim/workflow.py`: JSON extraction call on the workflow LLM + `rules.py` copied verbatim from `policies.py`) via `BackgroundToolRunner`, with urgency = `routing == emergency_escalation`.
 - `pin_evidence_photo` → pack tool wrapping built-in `pin_frame` with insurance captions (`observation`, `claimant_description`, `confirmed`, `evidence_type`).
 - `draw_incident_sketch` → pack tool submitting `ImageGen.generate(prompt)` (provider from config `pipeline.image_gen`, e.g. `google-image-gen` `gemini-3.1-flash-image`) → asset stream + state.
-- Transcript-triggered graph runs → `on_user_turn_completed` hook debounced (the old server ran the graph on every final user transcript); MVP keeps only the tool-triggered run plus a debounced run every 2 user turns to bound LLM usage.
+- Transcript-triggered graph runs → `on_user_turn_completed` hook debounced (the old server ran the graph on every final user transcript). MVP keeps only the tool-triggered run plus a debounced run every 2 user turns to bound LLM usage.
 - Notebook UI → `web/src/panels/insurance_notebook/` (handwritten notes, polaroids, sketch, stamp, still-needed, claim team feed, adjuster packet dialog).
 
 ---
 
-## 11. API (FastAPI) — surface
+## 11. API (FastAPI) surface
 
 Prefix `/v1` (admin + public) and `/internal/v1` (worker only). Full list with Pydantic models in CONTRACTS §7.
 
@@ -312,9 +312,9 @@ Prefix `/v1` (admin + public) and `/internal/v1` (worker only). Full list with P
 - Public: `POST /v1/agents/{agent_id}/connect` (requires agent `published` or admin token), `GET /v1/health`.
 - Internal (`X-Service-Token`): `GET /internal/v1/sessions/{id}/resolved`, `POST /internal/v1/sessions/{id}/events`, `PUT /internal/v1/sessions/{id}/summary`, `POST /internal/v1/kb/search`.
 
-OpenAPI at `/docs`; every endpoint has a summary/description and typed response model. Errors use `{"error": {"code", "message", "details"}}`.
+OpenAPI at `/docs`. Every endpoint has a summary/description and typed response model. Errors use `{"error": {"code", "message", "details"}}`.
 
-Auth justification: a single operator runs the MVP; a static admin token stops accidental exposure while costing nothing. The `published` flag lets a demo page be shared without exposing the console. Rate-limit deferred.
+Auth justification: a single operator runs the MVP. A static admin token stops accidental exposure while costing nothing. The `published` flag lets a demo page be shared without exposing the console. Rate-limit deferred.
 
 ---
 
@@ -322,12 +322,12 @@ Auth justification: a single operator runs the MVP; a static admin token stops a
 
 Two surfaces in one Next.js app (`web/`):
 
-1. **Session** `/s/[agentSlug]` — `LiveKitRoom` session with `useSession(TokenSource.custom(fetchConnect))`; left column: voice visualizer or avatar video (`useVoiceAssistant().videoTrack`), control bar (mic, camera, screen share, chat, end), transcript (`useSessionMessages`) with chat input; right column: pack panel from the registry (`panelId` from connect response) fed by `useUiState()` (text streams + byte streams + RPC). Generic panel fallback renders the envelope slots.
-2. **Console** `/console` — agents list, `/console/agents/[id]` editor with tabs *Providers* (pipeline mode toggle; forms generated from `providers.json`; credential picker + "add credential" modal that only ever POSTs secrets to the api), *Instructions & voice*, *Tools* (HTTP tool from JSON Schema, MCP server, pack tools read-only, built-in toggles), *Knowledge* (upload, chunk count, test search), *Panel* (panel id, capabilities), *Test call* (opens `/s/[slug]` with admin token cookie).
+1. **Session** `/s/[agentSlug]` is a `LiveKitRoom` session with `useSession(TokenSource.custom(fetchConnect))`. Left column: voice visualizer or avatar video (`useVoiceAssistant().videoTrack`), control bar (mic, camera, screen share, chat, end), transcript (`useSessionMessages`) with chat input. Right column: pack panel from the registry (`panelId` from connect response) fed by `useUiState()` (text streams + byte streams + RPC). Generic panel fallback renders the envelope slots.
+2. **Console** `/console` has an agents list and a `/console/agents/[id]` editor with tabs *Providers* (pipeline mode toggle, forms generated from `providers.json`, credential picker + "add credential" modal that only ever POSTs secrets to the api), *Instructions & voice*, *Tools* (HTTP tool from JSON Schema, MCP server, pack tools read-only, built-in toggles), *Knowledge* (upload, chunk count, test search), *Panel* (panel id, capabilities), *Test call* (opens `/s/[slug]` with admin token cookie).
 
-Stack: Next 15.5 (App Router, Turbopack), React 19, Tailwind 4, shadcn/ui + vendored `@agents-ui` components, `@livekit/components-react` 2.9.24, `livekit-client` 2.22.3, `react-hook-form` + `zod` for registry-driven forms, `@tanstack/react-query` for api calls. Design direction: calm "studio" console (neutral surfaces, one accent), session page dark; the insurance panel keeps its notebook craft look (Caveat/Patrick Hand, cream paper, polaroids) as a self-contained styled component.
+Stack: Next 15.5 (App Router, Turbopack), React 19, Tailwind 4, shadcn/ui + vendored `@agents-ui` components, `@livekit/components-react` 2.9.24, `livekit-client` 2.22.3, `react-hook-form` + `zod` for registry-driven forms, `@tanstack/react-query` for api calls. Design direction: calm "studio" console (neutral surfaces, one accent), session page dark. The insurance panel keeps its notebook craft look (Caveat/Patrick Hand, cream paper, polaroids) as a self-contained styled component.
 
-Secrets: the browser only ever sends secrets *to the api* on credential create; it never receives them back (responses carry `fingerprint`).
+Secrets: the browser only ever sends secrets *to the api* on credential create. It never receives them back (responses carry `fingerprint`).
 
 ---
 
@@ -335,13 +335,13 @@ Secrets: the browser only ever sends secrets *to the api* on credential create; 
 
 | Sub-project | Framework | Network-free set | Live set (opt-in, `-m live`) |
 |---|---|---|---|
-| `contracts` | pytest | schema round-trips, `providers.json` export is up to date (diff test), TS types match generated JSON schema (diff test) | — |
+| `contracts` | pytest | schema round-trips, `providers.json` export is up to date (diff test), TS types match generated JSON schema (diff test) | none |
 | `api` | pytest + httpx `AsyncClient`, temp SQLite, fake embedder | every endpoint, vault encrypt/decrypt, token minting (decode JWT, assert `RoomAgentDispatch` metadata is IDs-only), KB ingest+search with `FakeEmbedder`, connect refuses unpublished agents | KB search with fastembed real model (slow marker) |
-| `agent` | pytest + `AgentSession` with `FakeLLM`/`FakeSTT`/`FakeTTS` (`livekit.agents` base classes subclassed in `tests/fakes`), `mock_tools` | ProviderFactory builds every registry entry from a fake resolved config without network (constructors only; plugins are lazily imported), FrameBuffer, BackgroundToolRunner both branches, UiChannel seq/patch, built-in tools, dispatch metadata parsing, config resolve failure path | `session.run(user_input=...)` + `.judge(inference.LLM)` behaviour tests on LiveKit Inference (needs LiveKit creds only) |
+| `agent` | pytest + `AgentSession` with `FakeLLM`/`FakeSTT`/`FakeTTS` (`livekit.agents` base classes subclassed in `tests/fakes`), `mock_tools` | ProviderFactory builds every registry entry from a fake resolved config without network (constructors only, plugins are lazily imported), FrameBuffer, BackgroundToolRunner both branches, UiChannel seq/patch, built-in tools, dispatch metadata parsing, config resolve failure path | `session.run(user_input=...)` + `.judge(inference.LLM)` behaviour tests on LiveKit Inference (needs LiveKit creds only) |
 | `packs/insurance_claim` | pytest | rules verbatim against the existing fixtures (`tests/fixtures/insurance_*`), workflow with `FakeStructuredLLM`, tool argument handling, urgency function, UI state builder golden files | full intake conversation via Inference LLM judged for "asks for policy number", "escalates on injury" |
-| `web` | vitest + testing-library; Playwright smoke | panel registry, `useUiState` reducer (patches, gaps), registry-driven form renders every provider, notebook panel renders golden state | Playwright: console create agent → test call page loads and connects (LiveKit Cloud) |
+| `web` | vitest + testing-library, plus Playwright smoke | panel registry, `useUiState` reducer (patches, gaps), registry-driven form renders every provider, notebook panel renders golden state | Playwright: console create agent → test call page loads and connects (LiveKit Cloud) |
 
-Definition of the MVP live E2E (must pass on LiveKit Cloud): create the insurance agent from the pack with Inference pipeline, open the session page, speak/type a claim with policy `H0-44721`, show the camera, and observe: transcript, `lookup_policy` activity + verified tick, `pin_evidence_photo` polaroid, sketch appearing, stamp changing, still-needed list shrinking, adjuster packet dialog; then repeat with Gemini Live selected (when a key is configured).
+Definition of the MVP live E2E (must pass on LiveKit Cloud): create the insurance agent from the pack with Inference pipeline, open the session page, speak/type a claim with policy `H0-44721`, show the camera, and observe: transcript, `lookup_policy` activity + verified tick, `pin_evidence_photo` polaroid, sketch appearing, stamp changing, still-needed list shrinking, adjuster packet dialog. Then repeat with Gemini Live selected (when a key is configured).
 
 ---
 
@@ -349,21 +349,21 @@ Definition of the MVP live E2E (must pass on LiveKit Cloud): create the insuranc
 
 **Config loading**: every service uses pydantic-settings with prefix `LKAP_` (LiveKit vars keep their canonical names `LIVEKIT_URL/API_KEY/API_SECRET`). `env_file` is optional (`.env` if present, humans create it). Claude agents cannot read/write `.env*`, so each service ships **`env.example`** (not a dotfile) and the launch config at `~/work/.claude/launch.json` exports variables inline for dev. Exact commands and tables: CONTRACTS §11.
 
-**Deployment**: agent → `lk agent create` once with `livekit.toml` `[agent] name = "lkap-agent"` and `--secrets-file agent/secrets.env` (LIVEKIT creds excluded automatically; add `LKAP_API_BASE_URL`, `LKAP_SERVICE_TOKEN`), then `lk agent deploy`. api and web → Dockerfiles (`uv` multi-stage; `node:24-alpine` standalone Next build) for any container host; api needs a persistent volume for `LKAP_DATA_DIR`.
+**Deployment**: agent → `lk agent create` once with `livekit.toml` `[agent] name = "lkap-agent"` and `--secrets-file agent/secrets.env` (LIVEKIT creds excluded automatically, add `LKAP_API_BASE_URL`, `LKAP_SERVICE_TOKEN`), then `lk agent deploy`. api and web → Dockerfiles (`uv` multi-stage, `node:24-alpine` standalone Next build) for any container host, and api needs a persistent volume for `LKAP_DATA_DIR`.
 
-**Observability**: structlog JSON (`LKAP_LOG_JSON=true` in containers), contextvars bound with `session_id`, `agent_id`, `job_id`. Worker subscribes to `metrics_collected` (STT/LLM/TTS/EOU/realtime metrics) and uses `metrics.UsageCollector` (verified class) → summary at session end *(superseded by DECISIONS-W2 §D-W2-9c: usage comes from `session_usage_updated`, tool timing from `tool_execution_updated`; background jobs are recorded as `workflow_run` events)*; `tool_call_*` events → api `session_events`; final transcript from `session.history` (images stripped) → `sessions.transcript`. Console shows sessions with usage and the tool timeline. OTel export deferred.
+**Observability**: structlog JSON (`LKAP_LOG_JSON=true` in containers), contextvars bound with `session_id`, `agent_id`, `job_id`. Worker subscribes to `metrics_collected` (STT/LLM/TTS/EOU/realtime metrics) and uses `metrics.UsageCollector` (verified class) → summary at session end *(superseded by DECISIONS-W2 §D-W2-9c: usage comes from `session_usage_updated`, tool timing from `tool_execution_updated`, and background jobs are recorded as `workflow_run` events)*. `tool_call_*` events → api `session_events`. Final transcript from `session.history` (images stripped) → `sessions.transcript`. Console shows sessions with usage and the tool timeline. OTel export deferred.
 
 ---
 
 ## 15. Implementer verification notes (unverified at design time)
 
 1. `livekit.agents.utils.images.encode` / `EncodeOptions` exact fields (used by the Google plugin) for JPEG encoding in `pin_frame`.
-2. `livekit.api.RoomAgentDispatch` / `RoomConfiguration` kwargs (exports confirmed; protobuf-generated, positional/keyword shape to check).
-3. Behaviour when camera and screen share are published simultaneously in realtime mode (platform avoids it via the UI one-source rule; confirm nothing breaks if a user forces both).
-4. Structured/JSON output through `inference.LLM(extra_kwargs=...)` — the design does **not** rely on it (prompt-for-JSON + Pydantic parse + one repair retry).
+2. `livekit.api.RoomAgentDispatch` / `RoomConfiguration` kwargs (exports confirmed, protobuf-generated, positional/keyword shape to check).
+3. Behaviour when camera and screen share are published simultaneously in realtime mode (platform avoids it via the UI one-source rule. Confirm nothing breaks if a user forces both).
+4. Structured/JSON output through `inference.LLM(extra_kwargs=...)`. The design does **not** rely on it (prompt-for-JSON + Pydantic parse + one repair retry).
 5. `TokenSource.custom()` exact callback type in `livekit-client` 2.22.3 (returns `{serverUrl, participantToken}`), used by the session page.
-6. `bey`/`tavus` `AvatarSession.start(session, room=...)` then `wait_for_join()` ordering before `session.start` (documented; confirm on install).
-7. `fastembed` model name and download size; pin `fastembed` version in `api/pyproject.toml`.
+6. `bey`/`tavus` `AvatarSession.start(session, room=...)` then `wait_for_join()` ordering before `session.start` (documented, confirm on install).
+7. `fastembed` model name and download size. Pin `fastembed` version in `api/pyproject.toml`.
 8. `RunContext.function_call.call_id` naming (used to correlate activity events).
-9. Whether `AgentSession.say()` works with a realtime model and **no TTS configured** (the insurance pack uses `greeting_mode="say"`). If it requires a TTS, `PlatformAgent` must auto-switch to `generate_reply(instructions=greeting)` in realtime mode — implement the switch defensively either way.
-10. `livekit.toml` full schema: we commit only `[agent] name`; `lk agent create` fills the rest.
+9. Whether `AgentSession.say()` works with a realtime model and **no TTS configured** (the insurance pack uses `greeting_mode="say"`). If it requires a TTS, `PlatformAgent` must auto-switch to `generate_reply(instructions=greeting)` in realtime mode. Implement the switch defensively either way.
+10. `livekit.toml` full schema. We commit only `[agent] name`, and `lk agent create` fills the rest.

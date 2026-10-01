@@ -43,7 +43,7 @@ summary arrives (usually within a few seconds).
 ## 5. Save repeatable test cases
 
 A chat is a one-off. To re-check the agent after every change, save test
-cases in its config: each is a simulated caller with a goal and the
+cases in its config. Each is a simulated caller with a goal and the
 statements that must hold. Mock the tools whose real call you do not want
 during a test.
 
@@ -66,7 +66,7 @@ during a test.
   }
 }
 ```
-The caller and the judges run in the api: the agent needs a `workflow_llm`
+The caller and the judges run in the api. The agent needs a `workflow_llm`
 (or `qa.model`) on an OpenAI-compatible provider with a key.
 
 ## 6. Run them and read the verdicts
@@ -83,7 +83,7 @@ relevancy, accuracy). For a failed case, read the conversation:
 { "id_or_slug": "<agent>", "include_transcripts": true }
 ```
 A run whose `status` is `error` did not play its cases (no worker, no usable
-model): fix what `error` names and run again. It says nothing about the agent.
+model). Fix what `error` names and run again. It says nothing about the agent.
 
 ## 7. Publish
 
@@ -94,7 +94,7 @@ Only after `agent_validate` is clean and the tests read the way you wanted:
 { "id_or_slug": "<agent>", "published": true }
 ```
 With `publish_gate.require_tests` on, this is refused (`tests_failing`) until
-the latest run on this version passes; `next_steps` says what to do.
+the latest run on this version passes. `next_steps` says what to do.
 
 ## Related concepts
 

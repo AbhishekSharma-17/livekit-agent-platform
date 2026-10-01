@@ -6,7 +6,7 @@ through Composio (see the `connect-an-app` recipe first). Needs a key with
 
 ## 1. Find the connection and its actions
 
-`apps_connections()`: note the `id` of an `active` connection.
+`apps_connections()`. Note the `id` of an `active` connection.
 
 `apps_actions(...)`
 ```json
@@ -52,8 +52,8 @@ an admin. Reconnect it in the console's Tools, Apps.
   app server.
 - `router` lets the agent search for actions and run them during the
   conversation (Composio's tool finder). Replies are slower. Connecting new
-  apps from a conversation (`router.manage_connections`) is refused for now:
-  an admin connects apps under Tools, Apps. Turning `server` or `router` on,
+  apps from a conversation (`router.manage_connections`) is refused for now.
+  An admin connects apps under Tools, Apps. Turning `server` or `router` on,
   reviewing a destructive action or naming accounts needs an admin key
   (`providers:write`). A Builder key gets a 403.
 - `off` removes the server or finder. Attached action tools stay.

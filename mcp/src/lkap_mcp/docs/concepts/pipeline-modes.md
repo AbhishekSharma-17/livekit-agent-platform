@@ -2,7 +2,7 @@
 
 `AgentConfig.pipeline` (`PipelineConfig`) has a `mode`: `cascaded`,
 `realtime` or `half_cascade`. Each mode requires a different set of provider
-slots to be filled before the agent can run; `agent_validate` (and, offline,
+slots to be filled before the agent can run. `agent_validate` (and, offline,
 `agent_flow_validate`) reports a missing slot as an `error` `Issue` at
 `pipeline.<slot>`.
 
@@ -25,7 +25,7 @@ Each provider entry (`provider_list`) declares which `kind` it fills (`stt`,
 `llm`, `tts`, `realtime`, `avatar`, `image_gen`, `embedding`, `vad`,
 `turn_detection`, `noise_cancellation`, or `secret_bag` for HTTP tool
 secrets) and a `default_model`. `agent_create`/`agent_update` reference a
-provider with a `ProviderRef{provider_id, model}`; `provider_list(kind=...)`
+provider with a `ProviderRef{provider_id, model}`. `provider_list(kind=...)`
 or `lkap_describe("provider", id)` shows the exact model list and whether a
 credential is required (`requires_credential`, `secret_fields`).
 

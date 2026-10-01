@@ -28,7 +28,7 @@ Agent keys (`kind="agent"`) are minted from the console, never by a tool:
 `calls:write` is a separate, off-by-default checkbox on any preset. Having
 it is necessary but not sufficient for `call_place`/`call_control` to
 appear (`lkap_explain("telephony")` has the other two gates). Key
-management itself (`POST /v1/api-keys`, revoking one) is never a tool;
+management itself (`POST /v1/api-keys`, revoking one) is never a tool.
 `api_request` refuses every `/v1/api-keys*` path.
 
 ## What each scope actually gates

@@ -14,7 +14,7 @@ Read `per_minute_usd` (`low`, `mid`, `high`) and `per_session_usd`. `lines`
 lists each part with a plain label ("Caller's speech → text", "Agent's
 thinking", "Agent's voice", "Call minutes", ...), its quantity per minute and
 the price with `quote.source` and `quote.as_of`. `unpriced` names every part
-with no published price; `caveats` repeats the tier notes.
+with no published price. `caveats` repeats the tier notes.
 
 ## 2. Try a change before saving it
 
@@ -51,7 +51,7 @@ the workspace's own rate (USD per unit):
   "body": { "prices": [ { "provider_id": "bey-avatar", "unit": "minutes", "usd_per_unit": 0.1, "note": "Starter plan", "as_of": "" } ] }
 }
 ```
-The list replaces the stored one. Estimate again: the avatar line now says
+The list replaces the stored one. Estimate again. The avatar line now says
 `quote.source: "workspace"`.
 
 ## 4. Run a test call and compare
@@ -64,9 +64,9 @@ read the session:
 ```json
 { "session_id": "<session>", "include_transcript": false }
 ```
-`cost.total_usd` is the actual cost at list prices; `cost.estimated_usd` is
+`cost.total_usd` is the actual cost at list prices. `cost.estimated_usd` is
 the estimate snapshotted when the session was created, at the config version
-it ran; `cost.variance_usd` is the difference; `cost.drivers` explains it part
+it ran. `cost.variance_usd` is the difference. `cost.drivers` explains it part
 by part with a reason. A test chat has call minutes on both sides and no audio
 parts on either.
 

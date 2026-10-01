@@ -1,33 +1,33 @@
-# V4-06 — populate and validate: run log
+# V4-06 populate and validate: run log
 
 **Result: 8 of 8 demo agents are built, tested in chat and published** in the user's dev workspace, one per starter. Every agent has at least one `ready` knowledge base, at least one enabled HTTP tool whose dry run returned 200, and zero `agent_validate` errors.
 
-**Avatars.** Beyond Presence renders live on Demo — Vision assistant. **The Simli session fails at start** on Demo — Survey / intake form; see B-1.
+**Avatars.** Beyond Presence renders live on Demo: Vision assistant. **The Simli session fails at start** on Demo: Survey / intake form. See B-1.
 
 **Findings.** Eleven bugs are logged (one blocker, five degrades, five cosmetic), and none were fixed (R-V4-20).
 
 **Cost and safety.** The run cost **$12.53**, against a $30 cap. The before/after diff outside the manifest is empty, and both keys are revoked.
 
-- **Date:** 2026-09-24, from 20:36 to 21:28 UTC (2026-09-25 local time; the demo descriptions keep the card's "2026-09-25" label).
+- **Date:** 2026-09-24, from 20:36 to 21:28 UTC (2026-09-25 local time, the demo descriptions keep the card's "2026-09-25" label).
 - **Repo:** HEAD `b712faa` at the start. Another session committed V4-04 (`9561de8`) during the run.
 - **Driver:** Opus 5.5, following the card's protocol (`PLAN-V4.md` V4-06, R-V4-17…20).
 - **Target:** the user's real dev api on `:8080` and its DB, at migration `v4_001_livekit_numbers`. The user's `lkap-agent` worker served every chat.
 - **Worker:** PID 27884, image `slim`, SDK 1.8.2, 33 installed providers, including `bey-avatar` and `simli-avatar`.
 - **Scratch files:** `<scratchpad>/v406/`. That directory holds:
-  - the prompts, in `prompts/*.txt`;
-  - the transcripts, in `transcripts/*.jsonl`;
-  - `manifest.json`;
-  - the snapshots, in `snap/`;
-  - the gate script, `check.py`;
+  - the prompts, in `prompts/*.txt`.
+  - the transcripts, in `transcripts/*.jsonl`.
+  - `manifest.json`.
+  - the snapshots, in `snap/`.
+  - the gate script, `check.py`.
   - `final-agents.json`.
-- **Screenshots:** `<scratchpad>/ui-audit/v4-06/`. This is where the coordinator's brief asked for them; the card had suggested `docs/v4/_briefs/v4-06-populate/`, and nothing was added to the repo there.
+- **Screenshots:** `<scratchpad>/ui-audit/v4-06/`. This is where the coordinator's brief asked for them. The card had suggested `docs/v4/_briefs/v4-06-populate/`, and nothing was added to the repo there.
 
 ## 1. Protocol as run
 
 | Rule | How it was met |
 |---|---|
 | Key (R-V4-17 #1) | `POST /v1/api-keys` with the dev admin token (header `X-Admin-Token`). Body: `name=v406-populate`, `kind=agent`, `client=claude-code`, the Builder scopes (`agents:read/write`, `sessions:read/write`, `connections:read`, `providers:read`, `audit:read`), expiry +1 day. Result: id `9e1802db…`, prefix `lkap_mR-`. The key lived only in `<scratchpad>/v406/stdio.mcp.json` (0600). It was **revoked** at the end (`DELETE` returned 204, and `GET /v1/api-keys` then showed `revoked_at`), and the file was deleted |
-| Headless flags (#2) | `claude -p "<prompt>" --permission-mode default --allowedTools mcp__lkap Skill ToolSearch --tools Skill,ToolSearch --strict-mcp-config --mcp-config <scratch>/stdio.mcp.json --output-format stream-json --verbose --model sonnet --max-budget-usd 3 --max-turns 40`, from cwd `<scratch>/v406/project`, with the skill installed via `scripts/install_claude_skill.sh --project`. Every prompt was prefixed `/lkap`. **Deviation:** `--model sonnet` was passed explicitly (the coordinator asked for sonnet; the card says "no override"). Retry and test-only runs used a 1.5 / 20 cap |
+| Headless flags (#2) | `claude -p "<prompt>" --permission-mode default --allowedTools mcp__lkap Skill ToolSearch --tools Skill,ToolSearch --strict-mcp-config --mcp-config <scratch>/stdio.mcp.json --output-format stream-json --verbose --model sonnet --max-budget-usd 3 --max-turns 40`, from cwd `<scratch>/v406/project`, with the skill installed via `scripts/install_claude_skill.sh --project`. Every prompt was prefixed `/lkap`. **Deviation:** `--model sonnet` was passed explicitly (the coordinator asked for sonnet, the card says "no override"). Retry and test-only runs used a 1.5 / 20 cap |
 | Isolation evidence | Every run's `system/init` shows `model=claude-sonnet-5`, `permissionMode=default`, `mcp_servers=[{lkap, connected}]` and 48 `mcp__lkap__*` tools. That tool set is exactly `tools.snap.json`'s `visible.builder`: no `call_place` or `call_control`, and no connection, provider-key or webhook writes. There were **no permission denials** in any run. The probe run: session `bedd8a58-…`, $0.24 |
 | No telephony (#3) | Trunks, numbers and dispatch rules were `[]` before and after, and `calls` was `{items: [], total: 0}` before and after, so both are **identical**. No prompt mentioned a number, trunk, rule or transfer target |
 | User's objects untouched (#4) | `check.py` ran after every run. It snapshots agents (id, slug, config_version, published, updated_at, archived_at), KBs, tools, provider keys, webhooks, connections, telephony and calls. It then diffs pre-existing rows against `snap/before.json` and scans every write `tool_use` for ids outside the manifest. **Foreign changes in every run: none.** See §6 |
@@ -43,31 +43,31 @@
 
 | Agent | Slug | Starter | KBs (all docs `ready`) | HTTP tools (dry run) | Avatar | Chat session | KB signal | Published |
 |---|---|---|---|---|---|---|---|---|
-| Demo — Blank agent | `demo-blank-agent` | blank | · House guide, · Membership plans | `demo_public_holidays` **200** (used); `demo_currency_rates` 301 ×2 → **disabled** (B-3) | — | `3356c6d0…`: ended, 3 user turns, usage, tools `current_time`, `demo_public_holidays` | reply "open 10:00–4:00 on Sundays" (the hours are only in the House guide; auto-inject) | yes |
-| Demo — Knowledge assistant | `demo-knowledge-assistant` | knowledge_assistant | seeded Product FAQ and Support playbook; · Product FAQ (25 Q&A); · NWS API notes (**URL import** of weather.gov/documentation/services-web-api, `text/html`, 72 chunks) | `demo_nws_point_lookup` **200** (used); `demo_wikipedia_summary` 403 ×2 → **disabled** (B-4) | — | `0498f2b1…` (3 turns, `escalate_to_human`, `set_status`) and `62970fdb…` (2 turns, `demo_nws_point_lookup`) | "According to the product FAQ…" plus a `kb_citations` block_update (`sources`) | yes |
-| Demo — Receptionist | `demo-receptionist` | receptionist (flow) | seeded Practice info; · Practice info (extended) | seeded `check_availability` → httpbin `/anything` **200**; `book_appointment` → httpbin `/post` **200** (both repointed with `tool_update`); `demo_public_holidays` **200** (shared with Blank) | — | `f009894f…`: the full booking flow (3 user turns); `8858a221…`: July 4th → `search_knowledge` and `demo_public_holidays` (1 turn); `b1d4a56e…`: the KB after the fix (2 turns) | none before the fix (B-2); after it, "garage entrance on 12th Street … first 90 minutes" | yes |
-| Demo — Vision assistant | `demo-vision-assistant` | vision_assistant | · What to look for | `demo_zip_lookup` **200** (used) | **bey-avatar**, participant "Demo avatar", LLM `google/gemini-3.5-flash` | `e8dccdda…`: ended, 2 turns, `demo_zip_lookup` | reply lists error messages, status codes and form fields from the checklist (weak) | yes |
-| Demo — Phone agent | `demo-phone-agent` | phone_agent | seeded FAQ; · FAQ (extended) | `demo_weather_alerts` **200** (used; User-Agent set) | — | `c628e26c…`: ended, 3 turns, `demo_weather_alerts` | "open until 6:00 PM CT weekdays, 1:00 PM Saturdays, closed Sundays" (from the FAQ) | yes |
-| Demo — Lead qualification | `demo-lead-qualification` | lead_qualification (flow) | seeded Offer sheet; · Customer stories | `demo_lead_zip_lookup` **200** (used); `demo_company_summary` 403 → **disabled** (B-4) | — | `cac1895d…` (3 turns, `demo_lead_zip_lookup`, `search_knowledge` → none) and `9ccc8cd2…` (3 turns, after the fix) | none before the fix (B-2); after it, "Team plan, from 25 dollars per user per month" | yes |
-| Demo — Survey / intake form | `demo-survey-intake-form` | survey_intake | · Survey guidelines | `demo_country_info` (date.nager.at `CountryInfo`) **200** (used); `demo_country_facts` (restcountries) 301 → **disabled** (B-3) | **simli-avatar**, face Tina, participant "Demo avatar" (fails live, B-1) | `ecd2baf7…`: ended, 4 turns, `request_form`, `table_append`, `demo_country_info`, `end_call` | not observed (a guideline doc; no search, no citation block) | yes |
-| Demo — Insurance claim intake | `demo-insurance-claim-intake` | insurance_claim (pack) | pack KBs `Insurance policy lines` and `Intake playbook` (the user's pre-existing rows, reused by the seeder); · Policy notes | `demo_weather_alerts` **200** (shared with Phone; used) | — | `cc096053…`: ended, 3 turns, `lookup_policy`, `demo_weather_alerts`, `search_knowledge` (hit on `policy-notes.md`), workflow `sync_claim_packet` | a `search_knowledge` hit | yes |
+| Demo: Blank agent | `demo-blank-agent` | blank | · House guide, · Membership plans | `demo_public_holidays` **200** (used), `demo_currency_rates` 301 ×2 → **disabled** (B-3) | none | `3356c6d0…`: ended, 3 user turns, usage, tools `current_time`, `demo_public_holidays` | reply "open 10:00 to 4:00 on Sundays" (the hours are only in the House guide, auto-inject) | yes |
+| Demo: Knowledge assistant | `demo-knowledge-assistant` | knowledge_assistant | seeded Product FAQ and Support playbook, · Product FAQ (25 Q&A), · NWS API notes (**URL import** of weather.gov/documentation/services-web-api, `text/html`, 72 chunks) | `demo_nws_point_lookup` **200** (used), `demo_wikipedia_summary` 403 ×2 → **disabled** (B-4) | none | `0498f2b1…` (3 turns, `escalate_to_human`, `set_status`) and `62970fdb…` (2 turns, `demo_nws_point_lookup`) | "According to the product FAQ…" plus a `kb_citations` block_update (`sources`) | yes |
+| Demo: Receptionist | `demo-receptionist` | receptionist (flow) | seeded Practice info, · Practice info (extended) | seeded `check_availability` → httpbin `/anything` **200**, `book_appointment` → httpbin `/post` **200** (both repointed with `tool_update`), `demo_public_holidays` **200** (shared with Blank) | none | `f009894f…`: the full booking flow (3 user turns), `8858a221…`: July 4th → `search_knowledge` and `demo_public_holidays` (1 turn), `b1d4a56e…`: the KB after the fix (2 turns) | none before the fix (B-2). After it, "garage entrance on 12th Street … first 90 minutes" | yes |
+| Demo: Vision assistant | `demo-vision-assistant` | vision_assistant | · What to look for | `demo_zip_lookup` **200** (used) | **bey-avatar**, participant "Demo avatar", LLM `google/gemini-3.5-flash` | `e8dccdda…`: ended, 2 turns, `demo_zip_lookup` | reply lists error messages, status codes and form fields from the checklist (weak) | yes |
+| Demo: Phone agent | `demo-phone-agent` | phone_agent | seeded FAQ, · FAQ (extended) | `demo_weather_alerts` **200** (used, User-Agent set) | none | `c628e26c…`: ended, 3 turns, `demo_weather_alerts` | "open until 6:00 PM CT weekdays, 1:00 PM Saturdays, closed Sundays" (from the FAQ) | yes |
+| Demo: Lead qualification | `demo-lead-qualification` | lead_qualification (flow) | seeded Offer sheet, · Customer stories | `demo_lead_zip_lookup` **200** (used), `demo_company_summary` 403 → **disabled** (B-4) | none | `cac1895d…` (3 turns, `demo_lead_zip_lookup`, `search_knowledge` → none) and `9ccc8cd2…` (3 turns, after the fix) | none before the fix (B-2). After it, "Team plan, from 25 dollars per user per month" | yes |
+| Demo: Survey / intake form | `demo-survey-intake-form` | survey_intake | · Survey guidelines | `demo_country_info` (date.nager.at `CountryInfo`) **200** (used), `demo_country_facts` (restcountries) 301 → **disabled** (B-3) | **simli-avatar**, face Tina, participant "Demo avatar" (fails live, B-1) | `ecd2baf7…`: ended, 4 turns, `request_form`, `table_append`, `demo_country_info`, `end_call` | not observed (a guideline doc, no search, no citation block) | yes |
+| Demo: Insurance claim intake | `demo-insurance-claim-intake` | insurance_claim (pack) | pack KBs `Insurance policy lines` and `Intake playbook` (the user's pre-existing rows, reused by the seeder), · Policy notes | `demo_weather_alerts` **200** (shared with Phone, used) | none | `cc096053…`: ended, 3 turns, `lookup_policy`, `demo_weather_alerts`, `search_knowledge` (hit on `policy-notes.md`), workflow `sync_claim_packet` | a `search_knowledge` hit | yes |
 
 `agent_validate` (re-run by the driver at the end, `POST /v1/agents/{id}/validate`) reports **0 errors for all eight**. The standing warnings are `knowledge.auto_inject` (all eight) and `qa.enabled` (lead qualification).
 
 **How the demos differ from the card**
 - **Substitute tools.** They keep each agent working while its card tool is disabled:
-  - `demo_nws_point_lookup` on the Knowledge assistant, which fits its NWS notes KB;
-  - `demo_lead_zip_lookup` on Lead qualification;
+  - `demo_nws_point_lookup` on the Knowledge assistant, which fits its NWS notes KB.
+  - `demo_lead_zip_lookup` on Lead qualification.
   - `demo_country_info` on Survey.
 
   All three are in the R-V4-18 allowlist.
 - **Flow KB workaround.** On Receptionist and Lead qualification, a follow-up run set the flow's **global node `kb_ids`** to the agent's KBs. This is a config change, not code, and without it the flow agents can't reach their knowledge (B-2).
 - **Shared tools.** Tools are workspace-level (`agent_id: null`), so a same-name tool was reused rather than duplicated:
-  - `demo_public_holidays` is shared by Blank and Receptionist; the receptionist run also rewrote its description;
+  - `demo_public_holidays` is shared by Blank and Receptionist. The receptionist run also rewrote its description.
   - `demo_weather_alerts` is shared by Phone and Insurance.
 - **KB signal.** The worker logs `injected knowledge` at DEBUG, and the user's worker runs at INFO, so that line never appears (B-11). The KB signal above therefore comes from reply content, `search_knowledge` events or `kb_citations` block updates.
 
-## 3. Chat excerpts (trimmed; replies are untrusted model output)
+## 3. Chat excerpts (trimmed, replies are untrusted model output)
 
 - **Blank:**
   - "What are your opening hours on Sunday?" → "We are open from 10:00 AM to 4:00 PM on Sundays."
@@ -79,7 +79,7 @@
   - "I need to talk to a person." → "I'll put you through to a colleague…" (`escalate_to_human`, plus an `escalation` event).
   - Follow-up: "Which NWS forecast office covers downtown Austin (30.2672, -97.7431)?" → answered via `demo_nws_point_lookup`.
 - **Receptionist, the booking flow:**
-  1. "I'd like to book a cleaning next Tuesday morning; I'm Dana Lee, 512-555-0100." → "…is your phone number 5-1-2, 5-5-5, 0-1-0-0?"
+  1. "I'd like to book a cleaning next Tuesday morning. I'm Dana Lee, 512-555-0100." → "…is your phone number 5-1-2, 5-5-5, 0-1-0-0?"
   2. "Yes… Cleaning, next Tuesday at 9am" → **`state=timeout`**, no reply (`request_form` was waiting for an on-screen submit, B-5).
   3. "Please go ahead and book it…" → `check_availability`, `book_appointment`, `table_append`, then "You're booked. We'll text a reminder the day before. Goodbye!" (flow end `done`).
   4. New chat: "Is the practice open on July 4th?" → "We are closed on July 4th for Independence Day."
@@ -108,7 +108,7 @@
 | Step | Result |
 |---|---|
 | `lkap_delete` | `needs_confirmation` |
-| `lkap_delete` with `confirm` | `conflict` **409**: "agent still has sessions; delete them first, or archive and purge it" |
+| `lkap_delete` with `confirm` | `conflict` **409**: "agent still has sessions. Delete them first, or archive and purge it" |
 | `agent_archive` with `confirm` | ok |
 | `lkap_delete` with `confirm` and `purge` | `deleted: true` |
 | `agent_list` | shows it neither active nor archived |
@@ -122,27 +122,27 @@ This was the only delete in the run.
 | (a) `/console/agents` | All 8 `Demo — ` agents are listed with the **Live** chip, which is the console's published label | `a-agents-list.png` |
 | (b) Editor → Providers | Vision shows Avatar **Beyond Presence**. Survey shows Avatar **Simli**, key `…so27`, with participant "Demo avatar" (only the key's fingerprint is on screen) | `b-editor-vision-providers.png`, `b-editor-survey-providers.png` |
 | (c) `/s/demo-knowledge-assistant` | The public pre-call card loads, with Start call and the description | `c-public-knowledge-assistant.png` |
-| (d) Live **Bey**, `/s/demo-vision-assistant` | **Passed.** A remote avatar `<video>` went live at **1536×1024, 16 s after Start call**, speaking the greeting. The driver clicked END CALL at 24 s. Session `95d53626…`: web, **ended**, 21:22:57–21:23:15 (**18 s** of Bey time) | `d-bey-vision-precall.png`, `d-bey-vision-live.png`, `d-bey-vision-ended.png` |
-| (d) Live **Simli**, `/s/demo-survey-intake-form` | **Failed (B-1).** No video within 60 s. The page showed "couldn't join the call — Agent joined the room but did not complete initializing". Session `c53d98aa…`: web, **failed**, 31 s. No Simli stream was created, so no Simli minutes were used | `d-simli-survey-live.png`, `d-simli-survey-ended.png` |
-| (e) Connect dialog leg (closes V3-07-8) | Settings → AI agents → Connect an AI agent. Choices: name `v406-dialog-leg`, Local (stdio), **Builder**, `calls:write` left unchecked, warning acknowledged → Create key. The key step ("Your agent key") rendered with its snippet blocks; **no screenshot of that step, and the key was never printed**. Escape, then revoked from the keys table. The row reads "v406-dialog-leg · lkap_Tb8… · Builder scopes · Never used · **Revoked**". **Snippet rendered; key revoked.** Expiry was **7 days**: the dialog has no 1-day option (B-10) | `e1-connect-dialog-filled.png` (before create), `e2-keys-table-revoked.png` |
+| (d) Live **Bey**, `/s/demo-vision-assistant` | **Passed.** A remote avatar `<video>` went live at **1536×1024, 16 s after Start call**, speaking the greeting. The driver clicked END CALL at 24 s. Session `95d53626…`: web, **ended**, 21:22:57 to 21:23:15 (**18 s** of Bey time) | `d-bey-vision-precall.png`, `d-bey-vision-live.png`, `d-bey-vision-ended.png` |
+| (d) Live **Simli**, `/s/demo-survey-intake-form` | **Failed (B-1).** No video within 60 s. The page showed "couldn't join the call. Agent joined the room but did not complete initializing". Session `c53d98aa…`: web, **failed**, 31 s. No Simli stream was created, so no Simli minutes were used | `d-simli-survey-live.png`, `d-simli-survey-ended.png` |
+| (e) Connect dialog leg (closes V3-07-8) | Settings → AI agents → Connect an AI agent. Choices: name `v406-dialog-leg`, Local (stdio), **Builder**, `calls:write` left unchecked, warning acknowledged → Create key. The key step ("Your agent key") rendered with its snippet blocks. **No screenshot of that step, and the key was never printed**. Escape, then revoked from the keys table. The row reads "v406-dialog-leg · lkap_Tb8… · Builder scopes · Never used · **Revoked**". **Snippet rendered. Key revoked.** Expiry was **7 days**. The dialog has no 1-day option (B-10) | `e1-connect-dialog-filled.png` (before create), `e2-keys-table-revoked.png` |
 
 Every screenshot was checked. None shows a key, token or `.env` value, only prefixes (`lkap_Tb8…`, `lkap_mR-…`) and last-4 fingerprints. The run used about 18 s of Beyond Presence and 0 s of Simli.
 
 ## 6. Manifest and before/after diff
 
 **Before** (`snap/before.json`):
-- 12 agents;
-- 3 KBs (`Intake playbook`, `Insurance policy lines`, `Policies`);
-- 0 tools;
-- 2 provider keys (`simli-avatar`, `bey-avatar`);
-- 0 webhooks;
-- 1 connection (`Default`, `lkap-agent`, status `unverified`);
-- 2 API keys (`AI agent key`, active; `Test1`, revoked);
+- 12 agents.
+- 3 KBs (`Intake playbook`, `Insurance policy lines`, `Policies`).
+- 0 tools.
+- 2 provider keys (`simli-avatar`, `bey-avatar`).
+- 0 webhooks.
+- 1 connection (`Default`, `lkap-agent`, status `unverified`).
+- 2 API keys (`AI agent key`, active, `Test1`, revoked).
 - no telephony objects and no calls.
 
 **After** (`snap/final.json`):
-- 20 agents, 18 KBs, 12 tools;
-- provider keys, webhooks, connections, telephony and calls **identical** to before;
+- 20 agents, 18 KBs, 12 tools.
+- provider keys, webhooks, connections, telephony and calls **identical** to before.
 - 4 API keys: the two new ones are both **revoked**, and the two pre-existing ones are unchanged.
 
 **Pre-existing rows changed: none** (agents, KBs, tools and provider keys compared field by field, `updated_at` included). **New rows outside the manifest: none.**
@@ -151,14 +151,14 @@ Every screenshot was checked. None shows a key, token or `.env` value, only pref
 
 | id | name | slug |
 |---|---|---|
-| `513dcaf34a6a42729d035fb9662f2675` | Demo — Blank agent | demo-blank-agent |
-| `6969e8ce33c94bd2b4216cb31f1b0de6` | Demo — Knowledge assistant | demo-knowledge-assistant |
-| `d52591f4860f4561bab3ed3e66be3370` | Demo — Receptionist | demo-receptionist |
-| `7ccd189876a74adca561cf88e2bf7e64` | Demo — Vision assistant | demo-vision-assistant |
-| `174fecb8788a441992c25fcd53086a46` | Demo — Phone agent | demo-phone-agent |
-| `ae20189be9a54da79e41c656dc3c43a4` | Demo — Lead qualification | demo-lead-qualification |
-| `ea0f9f2a68894da186315189227bfba9` | Demo — Survey / intake form | demo-survey-intake-form |
-| `64c4bd62aca64826a42c1b794ed7a1bb` | Demo — Insurance claim intake | demo-insurance-claim-intake |
+| `513dcaf34a6a42729d035fb9662f2675` | Demo: Blank agent | demo-blank-agent |
+| `6969e8ce33c94bd2b4216cb31f1b0de6` | Demo: Knowledge assistant | demo-knowledge-assistant |
+| `d52591f4860f4561bab3ed3e66be3370` | Demo: Receptionist | demo-receptionist |
+| `7ccd189876a74adca561cf88e2bf7e64` | Demo: Vision assistant | demo-vision-assistant |
+| `174fecb8788a441992c25fcd53086a46` | Demo: Phone agent | demo-phone-agent |
+| `ae20189be9a54da79e41c656dc3c43a4` | Demo: Lead qualification | demo-lead-qualification |
+| `ea0f9f2a68894da186315189227bfba9` | Demo: Survey / intake form | demo-survey-intake-form |
+| `64c4bd62aca64826a42c1b794ed7a1bb` | Demo: Insurance claim intake | demo-insurance-claim-intake |
 
 The throwaway agent `b263b68d02a74b3ab1b824416d9be73e` was created and deleted in the scratch run.
 
@@ -166,21 +166,21 @@ The throwaway agent `b263b68d02a74b3ab1b824416d9be73e` was created and deleted i
 
 | id | name |
 |---|---|
-| `dbb544e4…` | Demo — Blank agent · House guide |
-| `92f1c2a7…` | Demo — Blank agent · Membership plans |
+| `dbb544e4…` | Demo: Blank agent · House guide |
+| `92f1c2a7…` | Demo: Blank agent · Membership plans |
 | `acc75353…` | Knowledge assistant · Product FAQ (seeded) |
 | `a31670dd…` | Knowledge assistant · Support playbook (seeded) |
-| `f0f9f838…` | Demo — Knowledge assistant · Product FAQ |
-| `51f481a0…` | Demo — Knowledge assistant · NWS API notes |
+| `f0f9f838…` | Demo: Knowledge assistant · Product FAQ |
+| `51f481a0…` | Demo: Knowledge assistant · NWS API notes |
 | `93ec3804…` | Receptionist · Practice info (seeded) |
-| `3563c42c…` | Demo — Receptionist · Practice info (extended) |
-| `d665847a…` | Demo — Vision assistant · What to look for |
+| `3563c42c…` | Demo: Receptionist · Practice info (extended) |
+| `d665847a…` | Demo: Vision assistant · What to look for |
 | `61d405f8…` | Phone agent · FAQ (seeded) |
-| `211aabd5…` | Demo — Phone agent · FAQ (extended) |
+| `211aabd5…` | Demo: Phone agent · FAQ (extended) |
 | `70c1638f…` | Lead qualification · Offer sheet (seeded) |
-| `a9194613…` | Demo — Lead qualification · Customer stories |
-| `fa1b5511…` | Demo — Survey / intake form · Survey guidelines |
-| `74319436…` | Demo — Insurance claim intake · Policy notes |
+| `a9194613…` | Demo: Lead qualification · Customer stories |
+| `fa1b5511…` | Demo: Survey / intake form · Survey guidelines |
+| `74319436…` | Demo: Insurance claim intake · Policy notes |
 
 **Tools (12)**
 
@@ -199,7 +199,7 @@ The throwaway agent `b263b68d02a74b3ab1b824416d9be73e` was created and deleted i
 | `ee50d1ba…` | demo_country_facts | restcountries.com | **no** |
 | `cbf899e9…` | demo_country_info | date.nager.at | yes |
 
-Every tool has `allowed_hosts` set to exactly its one host, `timeout_s` 8 and `max_result_chars` 3000. This was checked at the end with `GET /v1/tools/{id}` for all 12; the repointed seeds kept `["httpbin.org"]`. Every host is in the R-V4-18 allowlist. The full ids are in `<scratchpad>/v406/manifest.json`.
+Every tool has `allowed_hosts` set to exactly its one host, `timeout_s` 8 and `max_result_chars` 3000. This was checked at the end with `GET /v1/tools/{id}` for all 12. The repointed seeds kept `["httpbin.org"]`. Every host is in the R-V4-18 allowlist. The full ids are in `<scratchpad>/v406/manifest.json`.
 
 **API keys (2, both revoked)**
 - `v406-populate`: `9e1802db…`, prefix `lkap_mR-`.
@@ -208,40 +208,40 @@ Every tool has `allowed_hosts` set to exactly its one host, `timeout_s` 8 and `m
 **References to pre-existing rows, recorded rather than treated as foreign writes**
 - `agent_create(template_id="insurance_claim")` seeded the new agent with the user's existing pack KBs `Insurance policy lines` (`57765f2c…`) and `Intake playbook` (`38a3079c…`). The seeder reuses them by name.
 - The run's `agent_attach` re-passed those two ids, which writes the new agent's config only. Both KB rows are byte-identical before and after (`updated_at` 2026-09-18).
-- `agent_create` also passed no `connection_id`, so the default connection was used; it was only read.
+- `agent_create` also passed no `connection_id`, so the default connection was used. It was only read.
 
-## 7. Bugs found (none fixed; mirrored in `_asks.md` #26–#36)
+## 7. Bugs found (none fixed, mirrored in `_asks.md` #26 to #36)
 
 | # | Where | Exact call / repro | Expected | Actual | Severity | Blocked |
 |---|---|---|---|---|---|---|
-| B-1 | agent: `providers/special_cases.py::unwrap_nested_fields` / the api's resolved kwargs for nested secrets | Agent with `pipeline.avatar = {provider_id: "simli-avatar", credential_id: <simli key>, fields: {"simli_config.face_id": "cace3ef7-…"}}`; open `/s/demo-survey-intake-form` and Start call | The Simli avatar joins and publishes video | Worker: `failed to create simli session token server returned N/A and detail 'dict' object has no attribute 'create_json'` [livekit.plugins.simli], then `could not start the session`; session `c53d98aa…` `status=failed`, "start failed". `SimliConfig` reaches the plugin as a plain `dict`. **Diagnosis, from a code read (no runtime values inspected):** the api's `config_service._assign_nested` (line 251, called at 959–964) turns the dotted fields into **one non-dotted key**, `{"simli_config": {"face_id": …, "api_key": …}}`. The worker's `unwrap_nested_fields` groups only *dotted* keys, and wraps only `nested_model` fields whose *name has no dot*. Every Simli field name is dotted (`simli_config.*`), so `plain_name_to_model` is empty and the pre-nested dict passes through unwrapped. **Fix:** in `unwrap_nested_fields`, also build `nested_model(**value)` when a plain key equals a dotted outer name and its value is a dict (this affects Anam too, since it uses the same shape), plus a factory test fed with the api's real nested shape. Also, a failing avatar fails the whole call; there is no voice-only fallback | **blocks** the Simli avatar | step 10(d), Simli |
-| B-2 | agent: `flow/runtime.py::kb_ids_for` (line 356) and `flow/state.py::ScopedKbClient`; api templates `receptionist`, `lead_qualification` | Create either flow starter, then `chat_send("How much does it cost?")` (lead) or `"…opening hours July 4th"` (receptionist) | `search_knowledge` and auto-inject reach the agent's `knowledge.kb_ids` (the seeded KBs) | `search_knowledge` → "No relevant knowledge found." in 1–2 ms (no lookup made), and replies lack KB facts. In flow mode the scope is `global.kb_ids + node.kb_ids`, and both starters leave `global.kb_ids` empty. The same api search (`POST /v1/knowledge-bases/70c1638f…/search`) returns the offer sheet at score 0.64. Setting the global node's `kb_ids` fixes it (verified in sessions `b1d4a56e…` and `9ccc8cd2…`). Fix: seed `global.kb_ids` with the seeded KB ids, or fall back to `knowledge.kb_ids` when a flow declares none | **degrades** (both flow starters lose their KB) | worked around in config |
-| B-3 | coordinator: R-V4-18 allowlist | `tool_create_http(url="https://api.frankfurter.app/latest?from={{from}}&to={{to}}", dry_run_args={from: USD, to: EUR})`; `…restcountries.com/v3.1/name/{{country}}?fields=name,capital,region` with `{country: Canada}` | 200 | **301** twice each. Frankfurter now redirects to `api.frankfurter.dev/v1/…`; REST Countries v3.1 redirects to `files-03.restcountries.com/…/legacy.json`. The tool client never follows redirects, by design (`declarative.py:141`, `net_guard`), so both tools were disabled. Update the allowlist: `api.frankfurter.dev` (same project, MIT). REST Countries has no drop-in; `date.nager.at/api/v3/CountryInfo/{code}` worked | degrades | two card tools |
+| B-1 | agent: `providers/special_cases.py::unwrap_nested_fields` / the api's resolved kwargs for nested secrets | Agent with `pipeline.avatar = {provider_id: "simli-avatar", credential_id: <simli key>, fields: {"simli_config.face_id": "cace3ef7-…"}}`. Open `/s/demo-survey-intake-form` and Start call | The Simli avatar joins and publishes video | Worker: `failed to create simli session token server returned N/A and detail 'dict' object has no attribute 'create_json'` [livekit.plugins.simli], then `could not start the session`. Session `c53d98aa…` `status=failed`, "start failed". `SimliConfig` reaches the plugin as a plain `dict`. **Diagnosis, from a code read (no runtime values inspected):** the api's `config_service._assign_nested` (line 251, called at 959 to 964) turns the dotted fields into **one non-dotted key**, `{"simli_config": {"face_id": …, "api_key": …}}`. The worker's `unwrap_nested_fields` groups only *dotted* keys, and wraps only `nested_model` fields whose *name has no dot*. Every Simli field name is dotted (`simli_config.*`), so `plain_name_to_model` is empty and the pre-nested dict passes through unwrapped. **Fix:** in `unwrap_nested_fields`, also build `nested_model(**value)` when a plain key equals a dotted outer name and its value is a dict (this affects Anam too, since it uses the same shape), plus a factory test fed with the api's real nested shape. Also, a failing avatar fails the whole call. There is no voice-only fallback | **blocks** the Simli avatar | step 10(d), Simli |
+| B-2 | agent: `flow/runtime.py::kb_ids_for` (line 356) and `flow/state.py::ScopedKbClient`. Api templates `receptionist`, `lead_qualification` | Create either flow starter, then `chat_send("How much does it cost?")` (lead) or `"…opening hours July 4th"` (receptionist) | `search_knowledge` and auto-inject reach the agent's `knowledge.kb_ids` (the seeded KBs) | `search_knowledge` → "No relevant knowledge found." in 1 to 2 ms (no lookup made), and replies lack KB facts. In flow mode the scope is `global.kb_ids + node.kb_ids`, and both starters leave `global.kb_ids` empty. The same api search (`POST /v1/knowledge-bases/70c1638f…/search`) returns the offer sheet at score 0.64. Setting the global node's `kb_ids` fixes it (verified in sessions `b1d4a56e…` and `9ccc8cd2…`). Fix: seed `global.kb_ids` with the seeded KB ids, or fall back to `knowledge.kb_ids` when a flow declares none | **degrades** (both flow starters lose their KB) | worked around in config |
+| B-3 | coordinator: R-V4-18 allowlist | `tool_create_http(url="https://api.frankfurter.app/latest?from={{from}}&to={{to}}", dry_run_args={from: USD, to: EUR})`, `…restcountries.com/v3.1/name/{{country}}?fields=name,capital,region` with `{country: Canada}` | 200 | **301** twice each. Frankfurter now redirects to `api.frankfurter.dev/v1/…`. REST Countries v3.1 redirects to `files-03.restcountries.com/…/legacy.json`. The tool client never follows redirects, by design (`declarative.py:141`, `net_guard`), so both tools were disabled. Update the allowlist: `api.frankfurter.dev` (same project, MIT). REST Countries has no drop-in, `date.nager.at/api/v3/CountryInfo/{code}` worked | degrades | two card tools |
 | B-4 | coordinator (R-V4-18) and the MCP `tools-http` concept doc | `tool_create_http(url="https://en.wikipedia.org/api/rest_v1/page/summary/{{title}}", headers={"User-Agent": "LKAP-demo/1.0 (LKAP V4-06 demo agent)"}, dry_run_args={title: "Weather_forecasting"})` | 200 | **403**: "Please respect our robot policy https://w.wiki/4wJS". Reproduced with plain `httpx`: a descriptive User-Agent **without contact info** is refused, while curl and urllib pass with the same header, so it is client fingerprinting. A User-Agent with a contact URL or email returns 200. The run did not invent a contact or send the user's email to a third party, so `demo_wikipedia_summary` and `demo_company_summary` stay **disabled**. The user can set a real contact in their headers and re-enable them | degrades | two card tools |
-| B-5 | agent (`request_form` on the text channel) / mcp `chat_send` | Receptionist flow node `collect_booking` or the survey prompt calls `request_form` during `chat_send` | Text chat gets a reply (a verbal fallback, or the form auto-resolves) | The turn blocks until the form times out. Receptionist turn 2: `state=timeout`, no reply (about 85 s). Survey turn 3 stalled about 65 s, and the worker logged `speech not done in time after interruption, cancelling the speech arbitrarily`. Text chat has no way to submit a form | degrades | — |
-| B-6 | api template `lead_qualification` / agent flow | `chat_start` on Demo — Lead qualification; turns "Sounds good." → "The company is Contoso and I'm the IT manager…" → pricing | `start→company→needs…`, variables extracted | `flow_ended {path: ["start"], variables: {}, missing_required: ["company"]}` in both sessions, `cac1895d…` and `9ccc8cd2…`. The default LLM (`google/gemma-4-31b-it`) never took the edge "the caller agrees". Receptionist edges worked with the same model. Cause not isolated (log only) | degrades | — |
-| B-7 | mcp `me` (`discovery.py`) | `me()` with a ready worker (fleet `status=ready`, 33 providers) on a connection whose `status="unverified"` | Reports whether a worker is reachable (SKILL.md says it does) | `health.connections = {n: 1, ok: 0}`, which the model reported as "no worker currently reachable". Chats then worked. The field counts tested connections, not workers | cosmetic / misleading | — |
-| B-8 | agent: text channel `end_call` | Survey session `ecd2baf7…`: the agent calls `end_call`; the MCP runs `chat_end` | Session summary posted promptly | `caller left, ending the job` at 21:10:39. The summary was posted at **21:11:25** (51 s after `end_call`) after `failed to send session event … room session transport is closed`. `session_get` meanwhile shows `status=active`, 0 turns | cosmetic | — |
-| B-9 | api `templates/catalog/insurance_claim/template.json:26` / `packs/insurance_claim/policy_directory.py` | Sample prompt "My policy number is HO-4471-2210." | `lookup_policy` finds it | `found: false`. `POLICY_RECORDS` holds `H044721`, `AUTO90210`, `RNT3008` and `TRV7711` | cosmetic | — |
-| B-10 | web `settings/snippets.ts` `AGENT_KEY_EXPIRY_OPTIONS` / card | The Connect dialog's expiry select | A 1-day option (card step 10(e)) | The options are 7, 30, 90 and 365 days; the run used 7 and revoked at once | cosmetic (card or UI) | — |
-| B-11 | agent `platform_agent.py:440` | Acceptance (1)'s KB signal "the worker's `injected knowledge` line" | Observable on the user's worker | It is logged at `debug`, and the worker runs at INFO: 0 lines in the whole run | cosmetic | — |
+| B-5 | agent (`request_form` on the text channel) / mcp `chat_send` | Receptionist flow node `collect_booking` or the survey prompt calls `request_form` during `chat_send` | Text chat gets a reply (a verbal fallback, or the form auto-resolves) | The turn blocks until the form times out. Receptionist turn 2: `state=timeout`, no reply (about 85 s). Survey turn 3 stalled about 65 s, and the worker logged `speech not done in time after interruption, cancelling the speech arbitrarily`. Text chat has no way to submit a form | degrades | none |
+| B-6 | api template `lead_qualification` / agent flow | `chat_start` on Demo: Lead qualification. Turns "Sounds good." → "The company is Contoso and I'm the IT manager…" → pricing | `start→company→needs…`, variables extracted | `flow_ended {path: ["start"], variables: {}, missing_required: ["company"]}` in both sessions, `cac1895d…` and `9ccc8cd2…`. The default LLM (`google/gemma-4-31b-it`) never took the edge "the caller agrees". Receptionist edges worked with the same model. Cause not isolated (log only) | degrades | none |
+| B-7 | mcp `me` (`discovery.py`) | `me()` with a ready worker (fleet `status=ready`, 33 providers) on a connection whose `status="unverified"` | Reports whether a worker is reachable (SKILL.md says it does) | `health.connections = {n: 1, ok: 0}`, which the model reported as "no worker currently reachable". Chats then worked. The field counts tested connections, not workers | cosmetic / misleading | none |
+| B-8 | agent: text channel `end_call` | Survey session `ecd2baf7…`: the agent calls `end_call`. The MCP runs `chat_end` | Session summary posted promptly | `caller left, ending the job` at 21:10:39. The summary was posted at **21:11:25** (51 s after `end_call`) after `failed to send session event … room session transport is closed`. `session_get` meanwhile shows `status=active`, 0 turns | cosmetic | none |
+| B-9 | api `templates/catalog/insurance_claim/template.json:26` / `packs/insurance_claim/policy_directory.py` | Sample prompt "My policy number is HO-4471-2210." | `lookup_policy` finds it | `found: false`. `POLICY_RECORDS` holds `H044721`, `AUTO90210`, `RNT3008` and `TRV7711` | cosmetic | none |
+| B-10 | web `settings/snippets.ts` `AGENT_KEY_EXPIRY_OPTIONS` / card | The Connect dialog's expiry select | A 1-day option (card step 10(e)) | The options are 7, 30, 90 and 365 days. The run used 7 and revoked at once | cosmetic (card or UI) | none |
+| B-11 | agent `platform_agent.py:440` | Acceptance (1)'s KB signal "the worker's `injected knowledge` line" | Observable on the user's worker | It is logged at `debug`, and the worker runs at INFO: 0 lines in the whole run | cosmetic | none |
 
 **Other notes** (not bugs):
 - `provider_catalog("simli-avatar", "avatars")` lists no faces (`source=vendor`), so the console picker can't offer Simli's documented presets. The user already knew this.
-- A disabled tool that the instructions still name makes the LLM try it: the worker logged `unknown AI function demo_wikipedia_summary`.
+- A disabled tool that the instructions still name makes the LLM try it. The worker logged `unknown AI function demo_wikipedia_summary`.
 - The flow warns `flow node references a tool this session does not have` for the disabled `demo_company_summary`.
 - The live session panel's Status block reads "Not started" while the Bey call is live (`d-bey-vision-live.png`).
 
-## 7a. Acceptance (card items 1–8)
+## 7a. Acceptance (card items 1 to 8)
 
 | # | Item | Result | Evidence |
 |---|---|---|---|
-| 1 | 8 published agents, each with ≥1 KB holding a `ready` doc, ≥1 HTTP tool with a 200 creation dry run, 0 validation errors, and one ended text session with ≥2 user turns, `usage`, a `demo_`/repointed tool event and a KB signal | **Pass for 6; partial for 2** | §2 and `final-agents.json`. **Receptionist:** met across sessions but not in one. `f009894f…` has 3 user turns plus the repointed `check_availability`/`book_appointment` but no KB hit (B-2); `b1d4a56e…` has the KB signal but no tool call; `8858a221…` has `demo_public_holidays` but 1 turn. **Survey:** no KB signal was observed in `ecd2baf7…` (the tools and the 4 turns pass). Every other agent meets it in a single session |
-| 2 | Vision has `bey-avatar`, Survey has `simli-avatar`, both with a resolved credential id and 0 validation errors | **Pass** in config. Simli then fails live (B-1) | §2; `validate` returns 0 errors |
+| 1 | 8 published agents, each with ≥1 KB holding a `ready` doc, ≥1 HTTP tool with a 200 creation dry run, 0 validation errors, and one ended text session with ≥2 user turns, `usage`, a `demo_`/repointed tool event and a KB signal | **Pass for 6. Partial for 2** | §2 and `final-agents.json`. **Receptionist:** met across sessions but not in one. `f009894f…` has 3 user turns plus the repointed `check_availability`/`book_appointment` but no KB hit (B-2), `b1d4a56e…` has the KB signal but no tool call, `8858a221…` has `demo_public_holidays` but 1 turn. **Survey:** no KB signal was observed in `ecd2baf7…` (the tools and the 4 turns pass). Every other agent meets it in a single session |
+| 2 | Vision has `bey-avatar`, Survey has `simli-avatar`, both with a resolved credential id and 0 validation errors | **Pass** in config. Simli then fails live (B-1) | §2, `validate` returns 0 errors |
 | 3 | The throwaway agent is gone | **Pass** | §4 |
 | 4 | The key is revoked and its config file deleted | **Pass** | §9 |
-| 5 | Telephony and calls identical before and after; no diff outside the manifest | **Pass** | §6 |
-| 6 | Step-10 screenshots exist with no secret; the dialog leg records "snippet rendered; key revoked" | **Pass**, except the Simli tile (B-1) | §5 |
+| 5 | Telephony and calls identical before and after. No diff outside the manifest | **Pass** | §6 |
+| 6 | Step-10 screenshots exist with no secret. The dialog leg records "snippet rendered. Key revoked" | **Pass**, except the Simli tile (B-1) | §5 |
 | 7 | A run log per template (session, turns, cost, tool sequence), the bug table, the cost and the transcripts' location | **Pass** | §2, §7, §8 |
 | 8 | No diff in `api mcp web agent contracts` | **Pass** | `git status --short` shows only the two V4-06 docs |
 
@@ -266,7 +266,7 @@ Every tool has `allowed_hosts` set to exactly its one host, `timeout_s` 8 and `m
 
 **MCP tool sequence per run** (counts, from `check.py`):
 - **blank:** guide, me, agent_list, kb_list, tool_list, agent_create, agent_update, kb_create ×2, kb_add_document ×2, tool_create_http ×2, tool_dry_run, tool_update, agent_attach, agent_validate, chat_start, chat_send ×3, chat_end, agent_publish.
-- **knowledge_assistant:** the same shape, plus a URL import; tool_update disables Wikipedia.
+- **knowledge_assistant:** the same shape, plus a URL import. Tool_update disables Wikipedia.
 - **knowledge_assistant_2:** agent_get, tool_create_http, agent_attach, agent_update, agent_validate, chat ×2, publish.
 - **receptionist:** agent_flow_validate ×2, agent_update ×2, tool_update ×3, tool_dry_run ×3, agent_attach ×2, chat_start ×2, chat_send ×4, session_events ×2, chat_end ×2, publish.
 - **vision:** plus lkap_explain and provider_key_list, agent_update ×2.
@@ -282,21 +282,21 @@ The LiveKit Inference usage of the test chats bills to the user's LiveKit projec
 ## 9. Cleanup
 
 - **Keys:**
-  - `v406-populate` was revoked with `DELETE` → 204; `GET /v1/api-keys` now shows `revoked_at`.
+  - `v406-populate` was revoked with `DELETE` → 204. `GET /v1/api-keys` now shows `revoked_at`.
   - `<scratchpad>/v406/stdio.mcp.json` was deleted.
   - The dialog-leg key `v406-dialog-leg` was revoked in the UI.
-- **The user's processes:** worker 27884, api 35129 and web 35228 kept the same PIDs, running continuously, and were never signalled; `/v1/health` is ok.
-- **Git:** `git status --short` was clean before these two docs were written. The only repo changes from V4-06 are `docs/v4/_briefs/v4-06-populate.md` and the "Open — left by V4-06" section of `docs/v4/_asks.md`. HEAD moved `b712faa` → `9561de8` because V4-04 committed in parallel.
+- **The user's processes:** worker 27884, api 35129 and web 35228 kept the same PIDs, running continuously, and were never signalled. `/v1/health` is ok.
+- **Git:** `git status --short` was clean before these two docs were written. The only repo changes from V4-06 are `docs/v4/_briefs/v4-06-populate.md` and the "Open, left by V4-06" section of `docs/v4/_asks.md`. HEAD moved `b712faa` → `9561de8` because V4-04 committed in parallel.
 - **User-side mitigation, not done under R-V4-20:** until B-1 is fixed, `/s/demo-survey-intake-form` fails for every visitor. Remove the avatar in the Survey editor, or switch it to Beyond Presence, to keep that demo usable.
 - **A judgment to confirm (coordinator owns the rule):** on Insurance, `agent_attach` re-passed the two pre-existing pack KB ids that the seeder itself had put in the config (§6). The card's literal rule says a foreign id in a write stops the run. The run treated it as a reference, since the KB rows are byte-identical, and continued.
 - **What stays in the user's DB, as the user asked:**
-  - the 8 `Demo — ` agents;
-  - their KBs and tools;
+  - the 8 `Demo — ` agents.
+  - their KBs and tools.
   - their test and live sessions, including the one failed Simli web session `c53d98aa…`.
 
-## Appendix: prompts (verbatim; each template prompt ended with the shared rules block)
+## Appendix: prompts (verbatim, each template prompt ended with the shared rules block)
 
-Files: `<scratchpad>/v406/prompts/`. The shared rules block (`_rules.txt`) was appended to every template, follow-up and `*_2` prompt; the scratch and probe prompts stand alone.
+Files: `<scratchpad>/v406/prompts/`. The shared rules block (`_rules.txt`) was appended to every template, follow-up and `*_2` prompt. The scratch and probe prompts stand alone.
 
 ### Shared rules block (`_rules.txt`)
 

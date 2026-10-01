@@ -40,7 +40,7 @@ A row-by-row comparison against a second `.backup` of the original shows three t
 - **`agents.connection_id` is `NULL` for all 10 agents after the round trip.** This is expected and is not a data bug. `downgrade` below `v2_002` drops `livekit_connections`, so the bindings, and any non-default connections, cannot survive. On the next api start, bootstrap re-creates the default connection from `LIVEKIT_*` (`ensure_default_connection`) and binds every unbound agent and session to it (`bind_unbound_rows`). The connection gets a new id. `/v1/health` reports `agents_unbound` until then.
 - **One `test` session comes back as `web`.** `v2_005` drops `sessions.channel` on downgrade, and the upgrade backfills `web`.
 
-Both are the documented cost of a full downgrade: v2-only tables and columns are dropped, not archived. **Take a `.backup` before any downgrade** (RUNBOOK §"Backups").
+Both are the documented cost of a full downgrade, because v2-only tables and columns are dropped, not archived. **Take a `.backup` before any downgrade** (RUNBOOK §"Backups").
 
 ## Fresh database
 
@@ -48,9 +48,9 @@ Both are the documented cost of a full downgrade: v2-only tables and columns are
 
 ## Postgres
 
-This was not run locally: Docker is not running on the dev host, and Postgres has never been run here. CI covers it in `.github/workflows/python.yml`, job `test-postgres`, which uses a `postgres:16` service with `LKAP_DATABASE_URL=postgresql+asyncpg://…/lkap_test`. The job:
+This was not run locally. Docker is not running on the dev host, and Postgres has never been run here. CI covers it in `.github/workflows/python.yml`, job `test-postgres`, which uses a `postgres:16` service with `LKAP_DATABASE_URL=postgresql+asyncpg://…/lkap_test`. The job:
 
-1. runs `alembic upgrade head`, `downgrade 4135323c6ecc`, `upgrade head`, then `downgrade base`;
+1. runs `alembic upgrade head`, `downgrade 4135323c6ecc`, `upgrade head`, then `downgrade base`.
 2. runs the whole api suite against Postgres (`LKAP_TEST_DATABASE_URL`, read by `tests/conftest.py::postgres_url`).
 
 The V2-01 stub `api-postgres.yml` is gone (asks #18), folded into that job.
@@ -59,5 +59,5 @@ The workflow runs once the repo has a GitHub remote (HANDOFF "Waiting on the use
 
 ## For the coordinator
 
-- Nothing to apply: `api/data/lkap.db` is at head.
+- Nothing to apply. `api/data/lkap.db` is at head.
 - Before any future `alembic` run on the live file, back it up first: `sqlite3 api/data/lkap.db ".backup <path outside api/data>"`. SQLite DDL is non-transactional.

@@ -10,9 +10,9 @@ Today that worker runs on the developer's Mac and reaches the DGX over a relayed
 
 ## Why a worker, not a separate "turn-detection server"
 
-- The LiveKit turn detector (open weights, ONNX) and the Silero voice-activity model are **in-process libraries**. The worker loads them and runs them on CPU in a few tens of milliseconds per turn. LiveKit ships no network server for them; the hosted version exists only inside LiveKit Cloud's Inference gateway.
+- The LiveKit turn detector (open weights, ONNX) and the Silero voice-activity model are **in-process libraries**. The worker loads them and runs them on CPU in a few tens of milliseconds per turn. LiveKit ships no network server for them. The hosted version exists only inside LiveKit Cloud's Inference gateway.
 - So "deploy the turn-detection model on the DGX" means: **run the worker on the DGX with the model files baked in**. The agent Dockerfile already runs `livekit.agents download-files` at build, which bakes the turn detector and Silero weights into the image. No GPU is needed.
-- LKAP picks the detector itself: on the DGX connection (no hosted Inference) it uses the **local** turn detector. When an agent's speech-to-text decides turns itself (Deepgram Flux, `capabilities.end_of_turn`), the worker uses that and skips the model. You don't configure this per agent.
+- LKAP picks the detector itself. On the DGX connection (no hosted Inference) it uses the **local** turn detector. When an agent's speech-to-text decides turns itself (Deepgram Flux, `capabilities.end_of_turn`), the worker uses that and skips the model. You don't configure this per agent.
 - A standalone detection service would add a network hop per turn and need a custom LKAP plugin. **Do not build one** unless the coordinator asks.
 
 ## What you need from the user (never in the repo, never in logs)
@@ -25,7 +25,7 @@ Today that worker runs on the developer's Mac and reaches the DGX over a relayed
 ## Steps
 
 1. **Code.** `git clone https://github.com/AbhishekSharma-17/livekit-agent-platform` (or pull), then check out `main`.
-2. **Build the image** (DGX Spark is **arm64**; `python:3.12-slim-bookworm` is multi-arch, so build natively on the DGX):
+2. **Build the image** (DGX Spark is **arm64**, `python:3.12-slim-bookworm` is multi-arch, so build natively on the DGX):
    ```bash
    cd livekit-agent-platform
    scripts/vendor_agent_deps.sh

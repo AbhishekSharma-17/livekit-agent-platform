@@ -35,7 +35,7 @@ one `start`) before saving. This call never writes anything.
 ```json
 { "id_or_slug": "<agent>", "patch": { "flow": "<the same FlowSpec object>" } }
 ```
-The agent's mode becomes `"flow"` automatically; `agent_get` now returns
+The agent's mode becomes `"flow"` automatically. `agent_get` now returns
 `config.flow` populated.
 
 ## 3. Optional: look the record up without a model turn

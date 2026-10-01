@@ -1,11 +1,11 @@
 # QA and evals
 
 `config.qa` (`QaConfig{enabled, rubric_prompt, model}`) turns on an
-LLM-judge pass over each session: after the call, a judge model scores the
+LLM-judge pass over each session. After the call, a judge model scores the
 transcript against `rubric_prompt` and the result lands on `session_get` as
 `QaOut`. A flow's `qa` node is equivalent to turning `qa.enabled` on for
 that agent without you needing to set it separately. Its `rubric_prompt`
-(when set) is what runs; `qa.model` still picks the judge either way.
+(when set) is what runs. `qa.model` still picks the judge either way.
 
 ## Which model judges
 

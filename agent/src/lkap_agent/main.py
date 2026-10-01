@@ -1091,7 +1091,7 @@ class _ReconnectGrace:
         )
         if self._record_event is not None:
             self._record_event(
-                "info", {"message": "caller disconnected; waiting to reconnect", "reason": reason_name}
+                "info", {"message": "caller disconnected. Waiting to reconnect", "reason": reason_name}
             )
         self._task = asyncio.create_task(self._fire(self._delay_s))
 
@@ -1804,7 +1804,7 @@ async def _start_avatar_or_degrade(
         agent.context.record_event(
             "error",
             {
-                "message": "The avatar could not start; the call continues voice-only.",
+                "message": "The avatar could not start. The call continues voice-only.",
                 "avatar_provider": provider_id,
                 "severity": "warning",
             },

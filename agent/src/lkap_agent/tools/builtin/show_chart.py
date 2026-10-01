@@ -89,7 +89,7 @@ def build_show_chart_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
             return json.dumps({"visible": False})
         if len(points) > MAX_CHART_POINTS:
             raise ToolError(
-                f"That is {len(points)} points; a chart shows at most {MAX_CHART_POINTS}. "
+                f"That is {len(points)} points. A chart shows at most {MAX_CHART_POINTS}. "
                 "Group or trim them first."
             )
         spec = next(s for s in specs if s.id == target)

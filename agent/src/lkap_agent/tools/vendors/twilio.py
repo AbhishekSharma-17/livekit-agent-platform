@@ -29,7 +29,7 @@ def messages_url(account_sid: str) -> str:
         VendorError: The SID is not an account SID (``AC`` + 32 hex digits).
     """
     if not _ACCOUNT_SID_RE.match(account_sid):
-        raise VendorError(f"{VENDOR} account SID is not valid; an admin needs to check the key")
+        raise VendorError(f"{VENDOR} account SID is not valid. An admin needs to check the key")
     return f"{TWILIO_API_BASE}/Accounts/{account_sid}/Messages.json"
 
 

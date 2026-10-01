@@ -92,7 +92,7 @@ def resolve_destination(ctx: PackSessionContext, to: str | None, targets: list[S
         if target.label.casefold() == wanted.casefold():
             return target.to, target.label
     raise ToolError(
-        "Texts go only to the caller on a phone call or to a saved contact by name; numbers cannot be "
+        "Texts go only to the caller on a phone call or to a saved contact by name. Numbers cannot be "
         "typed in." + saved
     )
 

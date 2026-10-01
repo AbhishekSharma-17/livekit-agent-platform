@@ -726,7 +726,7 @@ class TelephonySession:
         if fallback is not None:
             logger.info("warm transfer falls back to cold", reason=fallback)
             self._record(
-                "info", {"message": f"Warm transfer is not available ({fallback}); transferring directly."}
+                "info", {"message": f"Warm transfer is not available ({fallback}). Transferring directly."}
             )
         await self._handoff("connecting", mode="cold", target=request.label)
         result = await self._api.transfer_call(self._session_id, request.to, self._leg_identity())
@@ -808,7 +808,7 @@ class TelephonySession:
         the event. The flow runtime speaks ``announce`` itself.
         """
         if getattr(node, "mode", "cold") != "cold":
-            self._record("info", {"message": "warm transfer is not available yet; transferring cold"})
+            self._record("info", {"message": "warm transfer is not available yet. Transferring cold"})
         result = await self.transfer(str(node.to))
         return result.ok
 

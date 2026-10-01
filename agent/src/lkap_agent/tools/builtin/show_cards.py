@@ -84,7 +84,7 @@ def build_show_cards_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
         if image_url is not None:
             if not config.image_hosts:
                 raise ToolError(
-                    "This cards block shows no pictures from the web; use image_asset_id or none."
+                    "This cards block shows no pictures from the web. Use image_asset_id or none."
                 )
             problem = https_url_problem(image_url, allowed_hosts=config.image_hosts)
             if problem is not None:

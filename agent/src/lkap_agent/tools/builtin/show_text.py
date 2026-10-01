@@ -59,12 +59,12 @@ def build_show_text_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
         if not text:
             raise ToolError("Pass the text to show.")
         if contains_html(text) or contains_html(title):
-            raise ToolError("Raw HTML is not allowed here; write Markdown instead.")
+            raise ToolError("Raw HTML is not allowed here. Write Markdown instead.")
         config = next((s.config for s in specs if s.id == target), {})
         limit = config.get("max_chars")
         max_chars = limit if isinstance(limit, int) else DEFAULT_MAX_CHARS
         if len(text) > max_chars:
-            raise ToolError(f"The text is {len(text)} characters; this block shows at most {max_chars}.")
+            raise ToolError(f"The text is {len(text)} characters. This block shows at most {max_chars}.")
         state = MarkdownBlockState(markdown=text, title=title.strip() or None, updated_at=time.time())
         await ctx.ui.set_block(target, state.model_dump(mode="json"))
         show = getattr(ctx.ui, "show_block", None)

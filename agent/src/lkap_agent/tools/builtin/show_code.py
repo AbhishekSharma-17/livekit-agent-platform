@@ -65,7 +65,7 @@ def build_show_code_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
         except ValidationError:
             max_chars = CodeBlockConfig().max_chars
         if len(text) > max_chars:
-            raise ToolError(f"The code is {len(text)} characters; this block shows at most {max_chars}.")
+            raise ToolError(f"The code is {len(text)} characters. This block shows at most {max_chars}.")
         label = language.strip().lower() or None
         if label is not None and _LANGUAGE_RE.match(label) is None:
             raise ToolError("language is a short label such as python, json or shell.")

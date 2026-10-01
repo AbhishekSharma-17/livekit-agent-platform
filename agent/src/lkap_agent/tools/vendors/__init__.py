@@ -102,9 +102,9 @@ async def vendor_call(
         raise VendorError(f"{vendor} could not be reached ({type(exc).__name__})") from exc
     status = response.status_code
     if status in (401, 403):
-        raise VendorError(f"{vendor} refused the key (HTTP {status}); an admin needs to check it")
+        raise VendorError(f"{vendor} refused the key (HTTP {status}). An admin needs to check it")
     if status == 429:
-        raise VendorError(f"{vendor} is limiting requests right now (HTTP 429); try again shortly")
+        raise VendorError(f"{vendor} is limiting requests right now (HTTP 429). Try again shortly")
     if status >= 400:
         raise VendorError(f"{vendor} answered with an error (HTTP {status})")
     return response

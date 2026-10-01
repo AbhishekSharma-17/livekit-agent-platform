@@ -64,7 +64,7 @@ def merge_steps(state: dict[str, Any], steps: list[StepIn], current: str, *, now
         if not step_id:
             raise ToolError("Every step needs an id.")
         if step.status not in STEP_STATUSES:
-            raise ToolError(f"Unknown status {step.status!r}; use one of {', '.join(STEP_STATUSES)}.")
+            raise ToolError(f"Unknown status {step.status!r}. Use one of {', '.join(STEP_STATUSES)}.")
         row = by_id.get(step_id)
         if row is None:
             row = {"id": step_id, "label": step.label.strip() or step_id.replace("_", " ").capitalize()}
@@ -79,7 +79,7 @@ def merge_steps(state: dict[str, Any], steps: list[StepIn], current: str, *, now
             row["note"] = step.note.strip()
     ids = [s.get("id") for s in existing]
     if current and current not in ids:
-        raise ToolError(f"current names no step; the steps are {', '.join(map(str, ids))}.")
+        raise ToolError(f"current names no step. The steps are {', '.join(map(str, ids))}.")
     active = current or next((s.get("id") for s in existing if s.get("status") == "active"), None)
     try:
         return StepsBlockState.model_validate({"steps": existing, "current": active}).model_dump(mode="json")
@@ -109,7 +109,7 @@ def build_set_steps_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
         elif not candidates:
             raise ToolError("This panel has no steps block the agent can change.")
         else:
-            raise ToolError(f"Unknown steps block {block_id!r}; use one of: {', '.join(candidates)}.")
+            raise ToolError(f"Unknown steps block {block_id!r}. Use one of: {', '.join(candidates)}.")
         if not steps:
             raise ToolError("Pass at least one step.")
         state = merge_steps(ctx.ui.state.blocks.get(target) or {}, steps, current.strip(), now=time.time())

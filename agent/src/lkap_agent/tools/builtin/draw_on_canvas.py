@@ -118,7 +118,7 @@ def canvas_background(ctx: PackSessionContext, value: str) -> str:
     ref = next((a for a in ctx.ui.state.assets if a.asset_id == asset_id), None)
     if ref is None or not ref.mime.startswith("image/"):
         raise ToolError(
-            f"There is no picture {asset_id!r} in this call; use a pinned frame's or a gallery "
+            f"There is no picture {asset_id!r} in this call. Use a pinned frame's or a gallery "
             "picture's asset id, 'live_camera' or 'none'."
         )
     return f"{CANVAS_ASSET_BACKGROUND_PREFIX}{asset_id}"
@@ -168,7 +168,7 @@ def build_draw_on_canvas_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
         target, state = resolve_canvas(ctx, block_id)
         spec = next(s for s in session_block_specs(ctx.ui, ctx.config.panel) if s.id == target)
         if canvas_config(spec).signature_mode and shapes:
-            raise ToolError(f"{target} is a signature board; nothing can be drawn on it.")
+            raise ToolError(f"{target} is a signature board. Nothing can be drawn on it.")
         if not shapes and not background.strip() and not replace:
             raise ToolError("Pass the shapes to draw, or a background.")
         if len(shapes) > MAX_SHAPES_PER_CALL:
@@ -185,7 +185,7 @@ def build_draw_on_canvas_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
             current = {s.get("id") for s in state.get("shapes") or [] if isinstance(s, dict)}
             if len(current | set(ids)) > MAX_CANVAS_SHAPES:
                 raise ToolError(
-                    f"The board holds at most {MAX_CANVAS_SHAPES} marks; replace or clear some first."
+                    f"The board holds at most {MAX_CANVAS_SHAPES} marks. Replace or clear some first."
                 )
             ops += [UiPatchOp(op="upsert", path="/shapes", value=shape, key=shape["id"]) for shape in drawn]
         if background.strip():

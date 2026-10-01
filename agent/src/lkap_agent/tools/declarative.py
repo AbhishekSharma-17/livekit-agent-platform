@@ -272,7 +272,7 @@ def misconfigured_handler(name: str, reason: str) -> Handler:
     _log.warning("declarative_tool.misconfigured", tool=name, reason=reason)
 
     async def handler(raw_arguments: dict[str, object], context: RunContext[Any]) -> str:
-        raise ToolError("this tool is set up incorrectly and cannot run; tell the caller it is unavailable")
+        raise ToolError("this tool is set up incorrectly and cannot run. Tell the caller it is unavailable")
 
     return handler
 
@@ -954,7 +954,7 @@ def _guarded_mcp_servers(
     except ImportError:
         _log.error(
             "declarative_tool.mcp_extra_missing",
-            detail="livekit-agents[mcp] extra is not installed; skipping MCP servers",
+            detail="livekit-agents[mcp] extra is not installed. Skipping MCP servers",
             count=len(kept),
         )
         return []

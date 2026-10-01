@@ -100,7 +100,7 @@ def _wording(config: SignatureBlockConfig, disclosure_text: str) -> str:
         raise ToolError("Pass the wording the caller signs, in disclosure_text.")
     if len(text) > MAX_CONSENT_TEXT_CHARS:
         raise ToolError(
-            f"The wording is {len(text)} characters; keep it to {MAX_CONSENT_TEXT_CHARS} at most."
+            f"The wording is {len(text)} characters. Keep it to {MAX_CONSENT_TEXT_CHARS} at most."
         )
     return text
 

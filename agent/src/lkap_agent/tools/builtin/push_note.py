@@ -36,7 +36,7 @@ def build_push_note_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
             return "Noted."
         ids = [spec.id for spec in session_block_specs(ctx.ui, ctx.config.panel)]
         if block_id not in ids:
-            raise ToolError(f"Unknown block {block_id!r}; use one of: {', '.join(ids) or 'none'}.")
+            raise ToolError(f"Unknown block {block_id!r}. Use one of: {', '.join(ids) or 'none'}.")
         note = Note(id=str(uuid.uuid4()), text=text, kind=kind, ts=time.time(), block_id=block_id)
         await ctx.ui.patch([UiPatchOp(op="append", path="/notes", value=note)])
         ctx.log.debug("builtin_tool.push_note", call_id=context.function_call.call_id, block_id=block_id)

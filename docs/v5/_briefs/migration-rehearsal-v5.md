@@ -1,12 +1,12 @@
 # Migration rehearsals, v5
 
-One section per V5 migration (`PLAN-V5.md` §0.3). Each is rehearsed `upgrade head → downgrade <previous> → upgrade head` on a `.backup` copy of the dev database and on a fresh database, and is **never applied to `api/data/lkap.db` by the package**: the coordinator applies it after its own `sqlite3 api/data/lkap.db ".backup <scratchpad>/…"` (HANDOFF rule 4).
+One section per V5 migration (`PLAN-V5.md` §0.3). Each is rehearsed `upgrade head → downgrade <previous> → upgrade head` on a `.backup` copy of the dev database and on a fresh database, and is **never applied to `api/data/lkap.db` by the package**. The coordinator applies it after its own `sqlite3 api/data/lkap.db ".backup <scratchpad>/…"` (HANDOFF rule 4).
 
 ## `v5_001_knowledge_p0` (V5-01)
 
 Rehearsed 2026-09-25 by V5-01. **Not applied** to the dev database, which is still at `v4_002_provider_models`. The only access to it was one `sqlite3 … ".backup <scratchpad>/v501/rehearsal/lkap-copy.db"`.
 
-**Chain.** `down_revision = "v4_002_provider_models"`. §0.3 chains V5 after the costs package's `v4_003`, which has not landed; if it lands first, the coordinator re-chains `v5_001` onto it (`_asks.md` #8) and re-runs this rehearsal.
+**Chain.** `down_revision = "v4_002_provider_models"`. §0.3 chains V5 after the costs package's `v4_003`, which has not landed, if it lands first, the coordinator re-chains `v5_001` onto it (`_asks.md` #8) and re-runs this rehearsal.
 
 ### What the revision does
 
@@ -14,7 +14,7 @@ Rehearsed 2026-09-25 by V5-01. **Not applied** to the dev database, which is sti
 |---|---|
 | `knowledge_bases` | `+ dimension INTEGER NULL`, `+ embedder_model VARCHAR(200) NULL`, `+ chunking JSON NULL` (`ALTER TABLE ADD COLUMN` on SQLite, no table rebuild). Existing rows stay `NULL` = "not recorded, never refused". Nothing is backfilled. |
 | `kb_documents` | `+ progress FLOAT NULL`. Existing rows stay `NULL`. |
-| `kb_chunks` | `+ ix_kb_chunks_kb_document (kb_id, document_id)`. `meta` is unchanged (already JSON); old chunks keep `{"filename"}` until re-indexed. |
+| `kb_chunks` | `+ ix_kb_chunks_kb_document (kb_id, document_id)`. `meta` is unchanged (already JSON), old chunks keep `{"filename"}` until re-indexed. |
 | SQLite only | `kb_chunks_fts`, an FTS5 table `(chunk_id, kb_id UNINDEXED, text)` with the `porter unicode61 remove_diacritics 2` tokenizer, plus the triggers `kb_chunks_fts_ai` / `_ad` / `_au` on `kb_chunks`, backfilled with one `INSERT … SELECT`. It keeps its own copy of the text (not `content='kb_chunks'`), because `kb_chunks` has no INTEGER PRIMARY KEY and its implicit rowids can change on `VACUUM`. The delete trigger finds the row by `MATCH 'chunk_id:"<id>"'` on the indexed column, so it never scans. |
 | Postgres only | `kb_chunks.tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED` plus `ix_kb_chunks_tsv USING gin (tsv)`. |
 | `kb_evals` (new) | `id PK, kb_id → knowledge_bases ON DELETE CASCADE, question TEXT, expected_document_id VARCHAR(32) NULL (no FK), expected_text TEXT NULL, tags JSON, ordinal INTEGER, created_at` plus `ix_kb_evals_kb (kb_id)`. |
@@ -51,16 +51,16 @@ The copy was made at `v4_002_provider_models` with `sqlite3 api/data/lkap.db ".b
 
 | Agent | KBs | Refused | Chunks (all legacy meta) |
 |---|---|---|---|
-| Demo — Blank agent | 2 | 0 | 12 |
-| Demo — Insurance claim intake | 3 | 0 | 14 |
-| Demo — Knowledge assistant | 4 | 0 | 87 |
-| Demo — Lead qualification | 2 | 0 | 9 |
-| Demo — Phone agent | 2 | 0 | 9 |
-| Demo — Receptionist | 2 | 0 | 7 |
-| Demo — Survey / intake form | 1 | 0 | 6 |
-| Demo — Vision assistant | 1 | 0 | 6 |
+| Demo: Blank agent | 2 | 0 | 12 |
+| Demo: Insurance claim intake | 3 | 0 | 14 |
+| Demo: Knowledge assistant | 4 | 0 | 87 |
+| Demo: Lead qualification | 2 | 0 | 9 |
+| Demo: Phone agent | 2 | 0 | 9 |
+| Demo: Receptionist | 2 | 0 | 7 |
+| Demo: Survey / intake form | 1 | 0 | 6 |
+| Demo: Vision assistant | 1 | 0 | 6 |
 
-These chunks gain locators only through an explicit `POST /v1/knowledge-bases/{id}/reindex`. Documents seeded from a pack or template were never stored and are skipped (`source_not_stored`); uploaded and url-imported ones are re-chunked.
+These chunks gain locators only through an explicit `POST /v1/knowledge-bases/{id}/reindex`. Documents seeded from a pack or template were never stored and are skipped (`source_not_stored`). Uploaded and url-imported ones are re-chunked.
 
 ### Rehearsal on a fresh database
 
@@ -77,17 +77,17 @@ integrity_check=ok foreign_key_check rows=0
 ### Tests
 
 - `api/tests/test_migration_v5_001.py` (SQLite):
-  - upgrade on a V4 database keeps the rows, leaves them unrecorded and backfills the index (including an exact `"AUTO-11111"` phrase and a porter-stemmed `flooding → flood` match);
-  - the index follows insert, update, delete and the cascading knowledge-base delete;
-  - downgrade removes every object and keeps the rows, and the next upgrade reaches head again;
+  - upgrade on a V4 database keeps the rows, leaves them unrecorded and backfills the index (including an exact `"AUTO-11111"` phrase and a porter-stemmed `flooding → flood` match).
+  - the index follows insert, update, delete and the cascading knowledge-base delete.
+  - downgrade removes every object and keeps the rows, and the next upgrade reaches head again.
   - a fresh database goes up, down and up.
 - `api/tests/test_migrations.py` (existing): fresh `upgrade head` matches the models, and `alembic check` finds no drift.
 - `api/tests/test_migrations_v2.py` (existing): a v1 database migrates to head (now including `v5_001`), downgrades to the v1 head and comes back.
 
 **Postgres: not executed yet.** Docker is not running on this machine, and nothing is pushed. The branch has been reviewed:
 
-- the generated column needs Postgres 12 or later (CI uses `postgres:16`);
-- the two-argument `to_tsvector('english', text)` is immutable, which a generated column requires;
+- the generated column needs Postgres 12 or later (CI uses `postgres:16`).
+- the two-argument `to_tsvector('english', text)` is immutable, which a generated column requires.
 - the downgrade drops the index, then the column, both `IF EXISTS`.
 
 It first runs in the CI `test-postgres` job's step "Migrate up, down and up again on Postgres" (`upgrade head → downgrade 4135323c6ecc → upgrade head → downgrade base`), which executes both `v5_001` branches. That job's pytest run builds its schema with `create_all`, so it never sees `tsv`. If that step fails on the first push, the fix belongs to this revision.
@@ -103,7 +103,7 @@ It takes well under a second on the dev database. The api needs no restart to st
 
 ## Re-rehearsal after the re-chain (coordinator, 2026-09-25)
 
-`v5_001_knowledge_p0` now has `down_revision = "v4_003_session_estimates"` (ask #8). On a fresh `.backup` copy of the dev DB at `v4_002_provider_models`: `upgrade head` ran `v4_003` then `v5_001`; `downgrade v4_002_provider_models` ran both down; `upgrade head` again; row counts (agents 19, sessions 63, kb_chunks 154, tools 12) unchanged at every step; `kb_chunks_fts` holds 154 rows; `integrity_check` ok, `foreign_key_check` clean; `alembic check` reports no drift.
+`v5_001_knowledge_p0` now has `down_revision = "v4_003_session_estimates"` (ask #8). On a fresh `.backup` copy of the dev DB at `v4_002_provider_models`: `upgrade head` ran `v4_003` then `v5_001`, `downgrade v4_002_provider_models` ran both down, `upgrade head` again. Row counts (agents 19, sessions 63, kb_chunks 154, tools 12) unchanged at every step, `kb_chunks_fts` holds 154 rows, `integrity_check` ok, `foreign_key_check` clean, `alembic check` reports no drift.
 
 ## `v5_003_pgvector` (V5-13)
 
@@ -112,7 +112,7 @@ It takes well under a second on the dev database. The api needs no restart to st
 ### What the revision does
 
 - **SQLite:** nothing, in both directions. LanceDB stays the store. `KbVector` is outside `Base.metadata`, so `create_all` and `alembic check` on SQLite are unchanged.
-- **Postgres, upgrade:** `CREATE EXTENSION IF NOT EXISTS vector`, then `kb_vectors` (`chunk_id` PK and FK to `kb_chunks.id ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED`, `kb_id` with a btree index, and `embedding vector` with no fixed width). It also creates one partial HNSW index per existing knowledge base whose `dimension` is recorded: `kbv_hnsw_<id>_<d>` on `(embedding::vector(<d>)) vector_cosine_ops WHERE kb_id = '<id>' AND vector_dims(embedding) = <d>`. That is `halfvec` from 2,001 to 4,000 dimensions on pgvector 0.7 or later, and nothing above that. Every statement is `IF NOT EXISTS`. The revision copies no vectors: `python -m lkap_api.kb.jobs reindex --all` does that afterwards.
+- **Postgres, upgrade:** `CREATE EXTENSION IF NOT EXISTS vector`, then `kb_vectors` (`chunk_id` PK and FK to `kb_chunks.id ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED`, `kb_id` with a btree index, and `embedding vector` with no fixed width). It also creates one partial HNSW index per existing knowledge base whose `dimension` is recorded: `kbv_hnsw_<id>_<d>` on `(embedding::vector(<d>)) vector_cosine_ops WHERE kb_id = '<id>' AND vector_dims(embedding) = <d>`. That is `halfvec` from 2,001 to 4,000 dimensions on pgvector 0.7 or later, and nothing above that. Every statement is `IF NOT EXISTS`. The revision copies no vectors. `python -m lkap_api.kb.jobs reindex --all` does that afterwards.
 - **Postgres, downgrade:** `DROP TABLE IF EXISTS kb_vectors`, which drops its indexes too. The extension stays.
 
 ### Rehearsal on a copy of the dev database (SQLite, 2026-09-27)
@@ -121,13 +121,13 @@ It takes well under a second on the dev database. The api needs no restart to st
 
 ### Rehearsal on Postgres (2026-09-27)
 
-Run on a scratch PostgreSQL 16.2 server with pgvector 0.6.2 (the `pgserver` wheel's binaries, in a scratch directory; Docker is not running on this machine). Database `lkap_mig`:
+Run on a scratch PostgreSQL 16.2 server with pgvector 0.6.2 (the `pgserver` wheel's binaries, in a scratch directory, Docker is not running on this machine). Database `lkap_mig`:
 
 - `upgrade head` from empty. `kb_vectors`, `pk_kb_vectors` and `ix_kb_vectors_kb_id` were created.
 - Two knowledge bases were inserted (384 and 3,072 dimensions), then `downgrade v5_010_tool_provider_kind` and `upgrade head`. The 384-dimension knowledge base got its `kbv_hnsw_…_384` index. The 3,072-dimension one got none, which is correct for pgvector below 0.7.
 - `stamp v5_010_tool_provider_kind`, then `upgrade head` over the existing table, index and extension: no error (idempotent).
 - The CI sequence: `downgrade 4135323c6ecc`, `upgrade head`, `downgrade base`, `upgrade head`. All clean.
-- `alembic check` on Postgres reports only `kb_vectors` and its index as "remove". That is expected: `alembic/env.py` compares against `Base.metadata` only. The fix is filed as an ask on `env.py`. CI does not run `check` on Postgres.
+- `alembic check` on Postgres reports only `kb_vectors` and its index as "remove". That is expected. `alembic/env.py` compares against `Base.metadata` only. The fix is filed as an ask on `env.py`. CI does not run `check` on Postgres.
 
 The CI job (`pgvector/pgvector:pg16`, pgvector 0.8.x) repeats the CI sequence in "Migrate up, down and up again on Postgres". It also runs `tests/test_kb_store_pgvector.py` and the Postgres test of `tests/test_kb_reindex.py`, where the `halfvec` and iterative-scan branches that 0.6.2 skips are exercised.
 
@@ -135,18 +135,18 @@ The CI job (`pgvector/pgvector:pg16`, pgvector 0.8.x) repeats the CI sequence in
 
 ### What the revision does
 
-Adds the nullable JSON column `sessions.consent_state` (`lkap_contracts.compliance.ConsentState`: the latest consent answer per kind, folded in by `POST /internal/v1/sessions/{id}/events` from the `consent` events). `upgrade()` is a plain `ADD COLUMN` on both dialects (no table rebuild); existing rows read `NULL`. `downgrade()` uses SQLite's native `ALTER TABLE sessions DROP COLUMN consent_state` (3.35+; the api venv has 3.47) instead of a batch rebuild, which would reflect the table and lose its CHECK constraints; Postgres uses `op.drop_column`. Chained after `v5_010_tool_provider_kind` (the head when V5-15 started; the ledger reserved the id `v5_009` before V5-47 took `v5_010`).
+Adds the nullable JSON column `sessions.consent_state` (`lkap_contracts.compliance.ConsentState`: the latest consent answer per kind, folded in by `POST /internal/v1/sessions/{id}/events` from the `consent` events). `upgrade()` is a plain `ADD COLUMN` on both dialects (no table rebuild). Existing rows read `NULL`. `downgrade()` uses SQLite's native `ALTER TABLE sessions DROP COLUMN consent_state` (3.35+, the api venv has 3.47) instead of a batch rebuild, which would reflect the table and lose its CHECK constraints, Postgres uses `op.drop_column`. Chained after `v5_010_tool_provider_kind` (the head when V5-15 started, the ledger reserved the id `v5_009` before V5-47 took `v5_010`).
 
 ### Rehearsal on a scratch database (V5-15, 2026-09-27)
 
-The worktree has no dev database and the package rules keep the live one out of reach, so the rehearsal ran on a scratch copy of `api/tests/fixtures/v1_seed.sqlite` in the session scratchpad: `upgrade head` ran every revision from the v1 head through `v5_010` to `v5_009_consent`; `downgrade v5_010_tool_provider_kind` ran `v5_009` down; `upgrade head` again; `alembic current` = `v5_009_consent (head)`.
+The worktree has no dev database and the package rules keep the live one out of reach, so the rehearsal ran on a scratch copy of `api/tests/fixtures/v1_seed.sqlite` in the session scratchpad: `upgrade head` ran every revision from the v1 head through `v5_010` to `v5_009_consent`, `downgrade v5_010_tool_provider_kind` ran `v5_009` down, `upgrade head` again, `alembic current` = `v5_009_consent (head)`.
 
 ### Tests
 
-- `api/tests/test_migration_v5_009.py` (SQLite): upgrade adds the column and every existing row reads `NULL`; downgrade drops it and the `sessions` DDL still carries `status_valid`, `channel_valid` and `recording_status_valid`; the next upgrade reaches head again.
-- `api/tests/test_migrations.py` and `test_health.py` (existing): fresh `upgrade head` matches the models (`Session.consent_state`), no drift; the head id keeps the `v5_` prefix.
+- `api/tests/test_migration_v5_009.py` (SQLite): upgrade adds the column and every existing row reads `NULL`. Downgrade drops it and the `sessions` DDL still carries `status_valid`, `channel_valid` and `recording_status_valid`. The next upgrade reaches head again.
+- `api/tests/test_migrations.py` and `test_health.py` (existing): fresh `upgrade head` matches the models (`Session.consent_state`), no drift. The head id keeps the `v5_` prefix.
 
-**Postgres: not executed** (no Postgres here). The revision uses only `op.add_column` / `op.drop_column` with `sa.JSON()` on Postgres; the CI `test-postgres` job's up/down/up step runs it.
+**Postgres: not executed** (no Postgres here). The revision uses only `op.add_column` / `op.drop_column` with `sa.JSON()` on Postgres. The CI `test-postgres` job's up/down/up step runs it.
 
 ### To apply (coordinator)
 
@@ -224,7 +224,7 @@ cd api && uv run alembic upgrade head      # v5_009_consent -> v5_002_session_up
 ```
 
 Instant on the dev database. **Order:** backup → `upgrade head` → restart the api → restart the
-worker. The api mounts the new routes and starts the retention loop at boot; an api on this code
+worker. The api mounts the new routes and starts the retention loop at boot. An api on this code
 against an unmigrated database fails only on the new routes and in that loop (logged, retried), not
 on existing ones. An old worker never posts files, so the order between the two restarts does not
 matter otherwise.
@@ -241,9 +241,9 @@ Creates `agent_test_runs` (`id`, `workspace_id` → `workspaces` ON DELETE CASCA
 `session_id` → `sessions` ON DELETE SET NULL, `status` with its CHECK, `mocks` JSON, `verdict` JSON,
 `created_at`, `finished_at`), with indexes `ix_agent_test_runs_agent (agent_id, created_at)`,
 `ix_agent_test_runs_workspace`, `ix_agent_test_results_run (run_id, ordinal)`,
-`ix_agent_test_results_session`, `ix_agent_test_results_workspace`. New tables only; nothing
+`ix_agent_test_results_session`, `ix_agent_test_results_workspace`. New tables only. Nothing
 existing is touched. `down_revision = v5_002_session_uploads` (the head when V5-29 started).
-Ledger deviation: the ledger names `agent_tests` and `agent_test_runs`; the card rules the test
+Ledger deviation: the ledger names `agent_tests` and `agent_test_runs`. The card rules the test
 cases live in the agent config (no cases table), so the second table holds per-case **results**
 (`agent_test_results`), named so it cannot be mistaken for a cases table. Both are tenant tables
 (`db/guard.py::TENANT_TABLES`).
@@ -251,41 +251,41 @@ cases live in the agent config (no cases table), so the second table holds per-c
 ### Rehearsal on a scratch database (V5-29, 2026-09-27)
 
 A fresh SQLite file in the session scratchpad (the live database was not read or copied), alembic
-CLI with `-x url=`: `heads` = `v5_006_agent_tests (head)`; `upgrade head` ran every revision to
-`v5_006_agent_tests`; both tables present; `downgrade v5_002_session_uploads` dropped both; `upgrade
-head` again; `alembic check` = "No new upgrade operations detected"; `alembic_version` =
+CLI with `-x url=`: `heads` = `v5_006_agent_tests (head)`. `upgrade head` ran every revision to
+`v5_006_agent_tests`, both tables present, `downgrade v5_002_session_uploads` dropped both, `upgrade
+head` again. `alembic check` = "No new upgrade operations detected", `alembic_version` =
 `v5_006_agent_tests`.
 
 ### Tests
 
 - `api/tests/test_agent_tests.py::test_v5_006_upgrades_downgrades_and_upgrades` (SQLite): up, down,
-  up; the tables exist only when they should.
+  up. The tables exist only when they should.
 - `api/tests/test_migrations.py` (existing): a fresh `upgrade head` matches the models
   (`AgentTestRun`, `AgentTestResult`), no drift.
 
 **Postgres: not executed** (no Postgres here). Only `op.create_table` / `op.create_index` /
-`op.drop_*` with portable types; the CI `test-postgres` job's up/down/up step runs it.
+`op.drop_*` with portable types. The CI `test-postgres` job's up/down/up step runs it.
 
 ## `v5_005_knowledge_connections` (V5-20)
 
-Rehearsed 2026-09-27 by V5-20 on **scratch SQLite databases only**. **Not applied** to the dev database, and the dev database was not read or copied (the package brief forbids touching `api/data/lkap.db`); the coordinator rehearses on its own `.backup` copy before applying.
+Rehearsed 2026-09-27 by V5-20 on **scratch SQLite databases only**. **Not applied** to the dev database, and the dev database was not read or copied (the package brief forbids touching `api/data/lkap.db`). The coordinator rehearses on its own `.backup` copy before applying.
 
-**Chain.** Re-chained at merge to `down_revision = "v5_006_agent_tests"` (V5-29 landed first; applied to the dev database on 2026-09-27 after a backup). Originally `down_revision = "v5_002_session_uploads"` (the head when V5-20 started; ledger numbers are not chain order).
+**Chain.** Re-chained at merge to `down_revision = "v5_006_agent_tests"` (V5-29 landed first, applied to the dev database on 2026-09-27 after a backup). Originally `down_revision = "v5_002_session_uploads"` (the head when V5-20 started, ledger numbers are not chain order).
 
 ### What the revision does
 
 | Object | Change |
 |---|---|
 | `knowledge_connections` (new) | `id PK, workspace_id → workspaces ON DELETE CASCADE, name, kind VARCHAR(32) (no CHECK: validated by the contracts literal, so V5-45's `ragie` needs no rebuild), settings JSON, credential_id → credentials ON DELETE SET NULL, status CHECK (unverified|ok|error), last_checked_at, last_error, capabilities JSON, created_at, updated_at` + `ix_knowledge_connections_workspace`. |
-| `knowledge_bases` | `+ connection_id VARCHAR(32) NULL → knowledge_connections (no ondelete: a connection with knowledge bases is refused with 409 first)`, `+ kind VARCHAR(16) NOT NULL DEFAULT 'managed'`, `+ external_ref VARCHAR(512) NULL`. On SQLite the foreign key rebuilds the table through `batch_alter_table` (the `v2_004` precedent; the migration connection does not enable `PRAGMA foreign_keys`, so dropping the old copy cascades nothing). Existing rows read as `connection_id NULL, kind 'managed'` = the platform's store, unchanged. |
+| `knowledge_bases` | `+ connection_id VARCHAR(32) NULL → knowledge_connections (no ondelete: a connection with knowledge bases is refused with 409 first)`, `+ kind VARCHAR(16) NOT NULL DEFAULT 'managed'`, `+ external_ref VARCHAR(512) NULL`. On SQLite the foreign key rebuilds the table through `batch_alter_table` (the `v2_004` precedent, the migration connection does not enable `PRAGMA foreign_keys`, so dropping the old copy cascades nothing). Existing rows read as `connection_id NULL, kind 'managed'` = the platform's store, unchanged. |
 
 **Downgrade** drops the foreign key and the three columns (a batch rebuild on SQLite) and then the table. A knowledge base that was stored through a connection falls back to the platform's store (re-index it afterwards).
 
 ### Rehearsal (scratch SQLite)
 
-Fresh database: `upgrade head` → `downgrade v5_002_session_uploads` → `upgrade head` → `alembic check` = "No new upgrade operations detected."; `PRAGMA integrity_check` = ok, `foreign_key_check` = no rows.
+Fresh database: `upgrade head` → `downgrade v5_002_session_uploads` → `upgrade head` → `alembic check` = "No new upgrade operations detected.". `PRAGMA integrity_check` = ok, `foreign_key_check` = no rows.
 
-Seeded database (`upgrade v5_002_session_uploads`, then one workspace, two knowledge bases — one with a recorded 384-wide embedder, one legacy with NULLs — two documents, three chunks, FTS rows by the `v5_001` triggers):
+Seeded database (`upgrade v5_002_session_uploads`, then one workspace, two knowledge bases, one with a recorded 384-wide embedder, one legacy with NULLs, two documents, three chunks, FTS rows by the `v5_001` triggers):
 
 ```
 before:         2 kbs, 2 docs, 3 chunks, 3 fts
@@ -298,7 +298,7 @@ after up again: 2 kbs, 2 docs, 3 chunks, 3 fts
 integrity: ok   fk_violations: 0
 ```
 
-**Postgres: rendered, not executed** (no Postgres here). `alembic upgrade v5_002_session_uploads:v5_005_knowledge_connections --sql` against a Postgres url emits `CREATE TABLE knowledge_connections (…)`, the index, three `ALTER TABLE knowledge_bases ADD COLUMN` and one `ADD CONSTRAINT … FOREIGN KEY`, no rebuild; the CI `test-postgres` job's up/down/up step runs it.
+**Postgres: rendered, not executed** (no Postgres here). `alembic upgrade v5_002_session_uploads:v5_005_knowledge_connections --sql` against a Postgres url emits `CREATE TABLE knowledge_connections (…)`, the index, three `ALTER TABLE knowledge_bases ADD COLUMN` and one `ADD CONSTRAINT … FOREIGN KEY`, no rebuild. The CI `test-postgres` job's up/down/up step runs it.
 
 ### To apply (coordinator)
 

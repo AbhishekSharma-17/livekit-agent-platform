@@ -12,14 +12,14 @@ only (no streaming), so even after these fixes they will always be slower than a
 
 The evidence was read-only: the dev DB `api/data/lkap.db` (sessions, `session_events`, agent config
 versions, the catalog cache) and the worker log. Eight sessions used `openrouter-stt`/`openrouter-tts`
-(2026-09-24 to 2026-09-26). Four ran; four never started (no worker was running; unrelated).
+(2026-09-24 to 2026-09-26). Four ran. Four never started (no worker was running, unrelated).
 
 | Session | STT (language) | TTS (voice) | What happened |
 |---|---|---|---|
-| `ef86f22a` | openrouter-stt `openai/gpt-4o-mini-transcribe` (`multi`) | `google/gemini-3.8-flash-tts` (Fenrir) | TTS 400 on the greeting; 8 STT 400s; no user turn |
-| `b02bac9f` | same | same | TTS 400 twice (greeting and reply: silent); 8 STT 400s; the one user turn ("hello") was typed |
-| `a7b481a6` | `microsoft/mai-transcribe-2` (`multi`) | `google/gemini-3.8-flash-lite-tts` | TTS 400; 8 STT 400s; no user turn |
-| `0a179844` | `microsoft/mai-transcribe-2` (`multi`) | `deepgram/aura-2` (`aura-2-agathe-fr`) | Greeting spoken (TTS TTFB 2378 ms); 8 STT 400s; no user turn |
+| `ef86f22a` | openrouter-stt `openai/gpt-4o-mini-transcribe` (`multi`) | `google/gemini-3.8-flash-tts` (Fenrir) | TTS 400 on the greeting, 8 STT 400s, no user turn |
+| `b02bac9f` | same | same | TTS 400 twice (greeting and reply: silent), 8 STT 400s, the one user turn ("hello") was typed |
+| `a7b481a6` | `microsoft/mai-transcribe-2` (`multi`) | `google/gemini-3.8-flash-lite-tts` | TTS 400, 8 STT 400s, no user turn |
+| `0a179844` | `microsoft/mai-transcribe-2` (`multi`) | `deepgram/aura-2` (`aura-2-agathe-fr`) | Greeting spoken (TTS TTFB 2378 ms), 8 STT 400s, no user turn |
 
 Both errors are the same in every session:
 
@@ -41,7 +41,7 @@ end-of-utterance to first audio at p50 2.6 s and p95 6.8 s.
 told it otherwise. OpenRouter's Gemini TTS models, including the registry default
 `google/gemini-3.8-flash-tts`, reject MP3, so every sentence failed. The agent was silent.
 `agent/tests/unit/test_factory_openrouter.py` asserted `response_format == "mp3"`, which locked the bug
-in. OpenRouter's docs say the default format is PCM; Voxtral is the exception, which takes MP3 only.
+in. OpenRouter's docs say the default format is PCM. Voxtral is the exception, which takes MP3 only.
 
 There was a second, hidden problem. OpenRouter sends PCM with `Content-Type:
 audio/pcm;rate=<hz>;channels=<n>`. The plugin drops those parameters (`tts.py:275`) and labels all audio
@@ -59,7 +59,7 @@ models (`gpt-4o-mini-transcribe`, `mai-transcribe-2`) failed the same way, which
 request, not at a model.
 
 The plugin sends nothing else unusual (a 24 kHz WAV, `response_format=json`, no prompt), so `language` is
-the only candidate. This could not be confirmed with a live call: no key was used and no paid calls were
+the only candidate. This could not be confirmed with a live call. No key was used and no paid calls were
 made. It is the most likely cause, and the fix is correct either way. Codes like `en-US` would fail the
 same way.
 
@@ -68,7 +68,7 @@ same way.
 Session `0a179844` used `deepgram/aura-2` with voice `aura-2-agathe-fr`, a French Aura-2 voice, to read
 an English greeting. That is the most likely cause of the odd, robotic sound. A sample-rate mix-up is
 unlikely. The request was MP3, which the decoder resamples to the right rate. The recorded audio was
-7.1 s for the 90-character greeting, a normal speaking pace; 1.5x too fast would be about 4.7 s and 1.5x
+7.1 s for the 90-character greeting, a normal speaking pace, 1.5x too fast would be about 4.7 s and 1.5x
 too slow about 10.6 s. What content type OpenRouter actually returned was not logged. The slow start
 (TTS TTFB 2.4 s, and 2.0 s more before playback) comes from the non-streaming, one-request-per-sentence
 design (see below). The "transcript" the user saw was the agent's greeting. No user speech was ever
@@ -88,11 +88,11 @@ was left as it is because it is a design decision, not part of this report.
 - **`agent/src/lkap_agent/providers/openrouter.py`, new `OpenRouterTTS`.** The registry's
   `openrouter-tts.python_class` now points here (`contracts/src/lkap_contracts/providers.py:1354`). It
   keeps the OpenAI plugin's constructor, and:
-  - asks for `pcm` by default and `mp3` for `mistralai/voxtral*` (`response_format_for`);
+  - asks for `pcm` by default and `mp3` for `mistralai/voxtral*` (`response_format_for`).
   - reads `rate`/`channels` from the response `Content-Type` and labels frames with the rate the vendor
     actually sent (`parse_audio_content_type`, falling back to 24 kHz). The voice pipeline then
     resamples to the room's rate (livekit-agents `voice/generation.py:631`). The pipeline does not
-    remix channels, so multi-channel PCM is downmixed to mono (`PcmDownmixer`);
+    remix channels, so multi-channel PCM is downmixed to mono (`PcmDownmixer`).
   - drops `stream_format` (OpenRouter returns raw bytes, never SSE) and uses `X-Generation-Id` as the
     request id.
 - **`agent/src/lkap_agent/providers/factory.py`: `openai_transcription_language_kwargs`.** This runs for
@@ -103,9 +103,9 @@ was left as it is because it is a design decision, not part of this report.
   the previous vendor class. This covers a restart order where the worker comes up before the api.
 - **`api/src/lkap_api/config_service.py`: `speech_latency_issues`.** Validator warnings (not errors):
   - `pipeline.stt` on `openrouter-stt`: each turn is transcribed in one request after the user stops
-    speaking, with no live transcript, adding about 0.5 to 2 s; use LiveKit Inference or Deepgram.
+    speaking, with no live transcript, adding about 0.5 to 2 s. Use LiveKit Inference or Deepgram.
   - `pipeline.tts` on `openrouter-tts`: speech is not streamed, which adds about 1 to 2.5 s before the
-    agent speaks; use LiveKit Inference or Cartesia.
+    agent speaks. Use LiveKit Inference or Cartesia.
   - `pipeline.stt.fields.language` on an OpenAI-style transcriber, when the value is not a two-letter
     code: says whether the language will be auto-detected or which code will be sent instead.
 - The registry note for `openrouter-tts` now describes the format/rate handling and the latency.
@@ -136,13 +136,13 @@ only, add it to `_MP3_ONLY_MODEL_PREFIXES` in `openrouter.py`.
 
 - **Keep OpenRouter for the LLM family**: llm, workflow_llm, QA judge, embeddings and image
   generation. That is what it is good at.
-- **For speech, use a streaming provider**: LiveKit Inference STT/TTS (no extra key; it bills through
+- **For speech, use a streaming provider**: LiveKit Inference STT/TTS (no extra key, it bills through
   the LiveKit project), or Deepgram STT with Cartesia or ElevenLabs TTS. This is also the recommendation
   in V4 (`docs/v4/OPENROUTER.md` §3).
 - **If OpenRouter speech is required** (for example, one invoice):
-  - set the STT language to a two-letter code (`en`), or leave it blank for auto-detect;
-  - pick a TTS voice in the same language as the agent (an `-en` Aura-2 voice, or any Gemini voice);
+  - set the STT language to a two-letter code (`en`), or leave it blank for auto-detect.
+  - pick a TTS voice in the same language as the agent (an `-en` Aura-2 voice, or any Gemini voice).
   - accept roughly 2 to 4 s from end of speech to first audio.
 - **Restart the worker and the api** to pick up the fixes. The worker holds the new class and the
-  language mapping; the api holds the new registry `python_class` and the warnings. The factory fallback
+  language mapping. The api holds the new registry `python_class` and the warnings. The factory fallback
   still covers a worker restarted before the api.

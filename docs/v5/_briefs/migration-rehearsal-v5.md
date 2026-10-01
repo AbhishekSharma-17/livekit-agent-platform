@@ -51,14 +51,14 @@ The copy was made at `v4_002_provider_models` with `sqlite3 api/data/lkap.db ".b
 
 | Agent | KBs | Refused | Chunks (all legacy meta) |
 |---|---|---|---|
-| Demo: Blank agent | 2 | 0 | 12 |
-| Demo: Insurance claim intake | 3 | 0 | 14 |
-| Demo: Knowledge assistant | 4 | 0 | 87 |
-| Demo: Lead qualification | 2 | 0 | 9 |
-| Demo: Phone agent | 2 | 0 | 9 |
-| Demo: Receptionist | 2 | 0 | 7 |
-| Demo: Survey / intake form | 1 | 0 | 6 |
-| Demo: Vision assistant | 1 | 0 | 6 |
+| Demo · Blank agent | 2 | 0 | 12 |
+| Demo · Insurance claim intake | 3 | 0 | 14 |
+| Demo · Knowledge assistant | 4 | 0 | 87 |
+| Demo · Lead qualification | 2 | 0 | 9 |
+| Demo · Phone agent | 2 | 0 | 9 |
+| Demo · Receptionist | 2 | 0 | 7 |
+| Demo · Survey / intake form | 1 | 0 | 6 |
+| Demo · Vision assistant | 1 | 0 | 6 |
 
 These chunks gain locators only through an explicit `POST /v1/knowledge-bases/{id}/reindex`. Documents seeded from a pack or template were never stored and are skipped (`source_not_stored`). Uploaded and url-imported ones are re-chunked.
 

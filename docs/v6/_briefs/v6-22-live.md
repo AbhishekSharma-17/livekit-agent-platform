@@ -33,7 +33,7 @@ for each of the eight `Demo — ` agents → no new error. The insurance ones (`
    - Panel: the wide Notebook layout with status, the claim notebook (Notes, Still needed, Summary, Sketch),
      the drawing board inside the Sketch section, Pictures, the Record table, the Still needed checklist,
      the hand-over block.
-   - Tools tab: one tool, `policy_lookup` (a lookup table). Lookup tables: **Demo: Policy directory**,
+   - Tools tab: one tool, `policy_lookup` (a lookup table). Lookup tables: **Demo · Policy directory**,
      six rows, ready. Creating the starter a second time reuses the same table.
    - Knowledge: "Claims intake · Policy lines", "Claims intake · Intake playbook" reach `ready`.
    - Tests tab: `fnol-golden`, `fnol-safety`, `fnol-evidence`, and the two kit cases.

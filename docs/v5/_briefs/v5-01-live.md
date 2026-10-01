@@ -117,7 +117,7 @@ Stop the scratch api (its PID only). Restart it with `LKAP_EMBED_MODEL=BAAI/bge-
 curl -s $A -X POST $B/v1/knowledge-bases/$KB/search -H 'content-type: application/json' -d '{"query":"x","k":2}'
 ```
 
-Expect 422, `error.code = "kb_embedder_mismatch"`, a message naming "Demo: V5-01 locators", and `details.kb_dimension = 384`, `details.embedder_dimension = 768`. Restart without the variable and the same search answers 200.
+Expect 422, `error.code = "kb_embedder_mismatch"`, a message naming "Demo · V5-01 locators", and `details.kb_dimension = 384`, `details.embedder_dimension = 768`. Restart without the variable and the same search answers 200.
 
 **Result:**
 

@@ -38,7 +38,7 @@
 | Headless flags | `claude -p "<prompt>" --permission-mode default --allowedTools mcp__lkap Skill ToolSearch --tools Skill,ToolSearch --strict-mcp-config --mcp-config <scratch>/stdio.mcp.json --output-format stream-json --verbose --model sonnet --max-budget-usd 4 --max-turns 60`, from cwd `<scratch>/v6demos/project` with the skill installed by `scripts/install_claude_skill.sh --project`. Every prompt is prefixed `/lkap`. The archive run had a $1.5 / 30-turn cap, the verify run 70 turns and the polish run a $2.5 / 40-turn cap |
 | Extra guard (added over V4-06) | Every run passed `--disallowedTools` for `lkap_delete`, `api_request`, `dataset_delete`, `memory_forget`, `memory_purge`, `connection_fleet`, `session_rescore`, `tool_create_mcp`, `session_whisper` and `tool_create_from_template`. The build runs also blocked `agent_archive` and `tool_create_http`. The verify run blocked every config write (create, update, publish, attach, kits, datasets, tools, KBs, `agent_versions`), and the polish run blocked everything except `agent_update`, `agent_publish` and chat. Every run's `system/init` shows `lkap` connected with 67 or fewer lkap tools (77 = `visible.builder`), permission mode `default`, and **no permission denials** |
 | Gate | `check.py <step>` ran after every run. It takes a read-only snapshot of agents (including archived), KBs, tools, datasets, provider keys, webhooks, connections, API keys, telephony and calls, and diffs it against `snap/before.json`. It allows only the 12 archive slugs to change, and only `archived_at` and `updated_at`. It records new ids in `manifest.json` and scans every write `tool_use` for ids outside the manifest. **FOREIGN: none after every run**, and no `CHECK id` alerts |
-| No telephony, webhooks, provider keys or connections | Telephony and calls are identical before and after. The 4 provider keys, 0 webhooks, 2 connections and 10 API keys are unchanged. All six agents reuse the `openrouter-*` credential already used by Demo: Vision assistant, **by id only** |
+| No telephony, webhooks, provider keys or connections | Telephony and calls are identical before and after. The 4 provider keys, 0 webhooks, 2 connections and 10 API keys are unchanged. All six agents reuse the `openrouter-*` credential already used by Demo · Vision assistant, **by id only** |
 | No new vendor keys | No Composio, Cal.com, SMS or external webhook. `notify_escalate` was added with no credential. The kit reports `notify_team` as *skipped*, the built-in hand-over still works and the team is not messaged. The claims starter's `google-image-gen` slot was replaced by the existing `openrouter-image-gen` reference |
 | Never deleted | No delete and no purge. The 12 archives are reversible |
 
@@ -66,7 +66,7 @@
 ## 3. Task 2: the six agents
 
 **Common setup.**
-- **Pipeline:** all six copy Demo: Vision assistant's cascaded OpenRouter pipeline, with no avatar:
+- **Pipeline:** all six copy Demo · Vision assistant's cascaded OpenRouter pipeline, with no avatar:
   - speech-to-text: `openai/gpt-4o-mini-transcribe`.
   - LLM: `google/gemini-3.5-flash`, which can see pictures, as the boards, handwriting and camera evidence need.
   - text-to-speech: `google/gemini-3.8-flash-tts`, voice Fenrir.
@@ -80,14 +80,14 @@
 
 | Agent | Slug / id | Cost |
 |---|---|---|
-| Demo: Claims intake | `demo-claims-intake` / `8549b64ad4f7436f8ceb60f03a26c76d` | $1.81 |
-| Demo: Order & checkout | `demo-order-checkout` / `c181a4b3ceb341238d021fda8142ed1e` | $2.14 |
-| Demo: Sales briefing | `demo-sales-briefing` / `34535b0c7d9b436780ac68b2b4a2e5e7` | $2.61 |
-| Demo: Coding tutor | `demo-coding-tutor` / `ceb7b9eb6e5a408590a952e3afaaf5a9` | $3.42 |
-| Demo: Support desk | `demo-support-desk` / `766ef0f4ad824465998216b509becfa9` | $1.93 |
-| Demo: Field inspection | `demo-field-inspection` / `c41ea40ce1324ea795e80cdbf8e8bded` | $2.08 |
+| Demo · Claims intake | `demo-claims-intake` / `8549b64ad4f7436f8ceb60f03a26c76d` | $1.81 |
+| Demo · Order & checkout | `demo-order-checkout` / `c181a4b3ceb341238d021fda8142ed1e` | $2.14 |
+| Demo · Sales briefing | `demo-sales-briefing` / `34535b0c7d9b436780ac68b2b4a2e5e7` | $2.61 |
+| Demo · Coding tutor | `demo-coding-tutor` / `ceb7b9eb6e5a408590a952e3afaaf5a9` | $3.42 |
+| Demo · Support desk | `demo-support-desk` / `766ef0f4ad824465998216b509becfa9` | $1.93 |
+| Demo · Field inspection | `demo-field-inspection` / `c41ea40ce1324ea795e80cdbf8e8bded` | $2.08 |
 
-### Demo: Claims intake
+### Demo · Claims intake
 
 - **Built from:** the `claims_intake` starter.
 - **Panel:** the Notebook preset: `claim_notebook`, `sketch_board` (canvas), gallery and status. The kits add a `policy_results` table, a checklist and a handoff block.
@@ -99,7 +99,7 @@
 - **Camera:** on.
 - **Chat `27a5bca9…`:** `policy_lookup` found the record (H0-44721), the `policy_found` rule fired, and `policy_results`, the checklist and `claim_notebook` all updated. The coverage question got the caveat: "I can't confirm coverage myself, as an adjuster will need to review…".
 
-### Demo: Order & checkout
+### Demo · Order & checkout
 
 - **Built from:** the blank generic pack.
 - **Lookup table:** `Demo — Product catalog` (15 rows, keys `sku` and `name`).
@@ -110,7 +110,7 @@
   - `product_results`, status and handoff blocks from the kits.
 - **Chat `905b9957…`:** `product_lookup` and `cart_set` ran and the cart was shown.
 
-### Demo: Sales briefing
+### Demo · Sales briefing
 
 - **Built from:** the blank generic pack.
 - **Lookup table:** `Demo — Sales metrics` (12 rows, keys `region` and `quarter`).
@@ -123,7 +123,7 @@
 - **Build chat `fbbd97fd…`:** `metric_lookup`, `show_chart`, `notebook_write` and `start_timer` all ran.
 - **Polish chat `8d74a56c…`:** `metric_lookup`, then four `show_chart` calls, with the first retried once. The reply read "…West beat its target, $405,000 against $400,000…".
 
-### Demo: Coding tutor
+### Demo · Coding tutor
 
 - **Built from:** the blank generic pack.
 - **Panel:**
@@ -135,7 +135,7 @@
 - **Chat `6c261e74…`:** `show_code`, `clear_canvas`, `draw_on_canvas` (it errored first) and `notebook_write` ran.
 - **Verify chat:** `start_timer` ran (5 min).
 
-### Demo: Support desk
+### Demo · Support desk
 
 - **Built from:** the blank generic pack.
 - **Lookup table:** `Demo — Support customers` (12 rows, keys `phone` (phone) and `email` (email)). One key alone matches.
@@ -145,7 +145,7 @@
 - **Flow:** `start` → **tool step** `lookup_caller` (`customer_lookup` with `phone={{ ctx.caller_phone }}`). Its outcomes: `ok` → `found`, `empty` → `not_found`, `error` → `identify`. From there the flow goes on to `done`.
 - **Chat `7b807864…`:** there is no caller number on text, so the tool step took `error` → `identify`, by design. The model then called `customer_lookup` with the email, `go_to_found`, `set_details` and `escalate_to_human`.
 
-### Demo: Field inspection
+### Demo · Field inspection
 
 - **Built from:** the blank generic pack.
 - **Panel:**
@@ -166,7 +166,7 @@
 
 | Kind | Items |
 |---|---|
-| Lookup tables | `759527720d214d9ba60689f8aea81f95` Demo: Policy directory (starter-seeded), `c4ca4978525a4ce3995d4e4ee705d57b` Demo: Product catalog, `93eb002c6b8c41ec99f886d53fa4a755` Demo: Sales metrics, `88b8eed58acc44e0b77968fec0d79c3e` Demo: Support customers |
+| Lookup tables | `759527720d214d9ba60689f8aea81f95` Demo · Policy directory (starter-seeded), `c4ca4978525a4ce3995d4e4ee705d57b` Demo · Product catalog, `93eb002c6b8c41ec99f886d53fa4a755` Demo · Sales metrics, `88b8eed58acc44e0b77968fec0d79c3e` Demo · Support customers |
 | Tools (`dataset` kind, created by kits) | `966eb29a…` `policy_lookup`, `eff6533a…` `product_lookup`, `cfe5be9e…` `metric_lookup`, `aa5cb9a0…` `customer_lookup` |
 | Knowledge bases (seeded by the claims starter) | `a97dea24…` Claims intake · Policy lines, `f257d734…` Claims intake · Intake playbook |
 

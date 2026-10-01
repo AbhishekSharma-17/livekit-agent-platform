@@ -2,7 +2,7 @@
 
 **Result: 8 of 8 demo agents are built, tested in chat and published** in the user's dev workspace, one per starter. Every agent has at least one `ready` knowledge base, at least one enabled HTTP tool whose dry run returned 200, and zero `agent_validate` errors.
 
-**Avatars.** Beyond Presence renders live on Demo: Vision assistant. **The Simli session fails at start** on Demo: Survey / intake form. See B-1.
+**Avatars.** Beyond Presence renders live on Demo · Vision assistant. **The Simli session fails at start** on Demo · Survey / intake form. See B-1.
 
 **Findings.** Eleven bugs are logged (one blocker, five degrades, five cosmetic), and none were fixed (R-V4-20).
 
@@ -43,14 +43,14 @@
 
 | Agent | Slug | Starter | KBs (all docs `ready`) | HTTP tools (dry run) | Avatar | Chat session | KB signal | Published |
 |---|---|---|---|---|---|---|---|---|
-| Demo: Blank agent | `demo-blank-agent` | blank | · House guide, · Membership plans | `demo_public_holidays` **200** (used), `demo_currency_rates` 301 ×2 → **disabled** (B-3) | none | `3356c6d0…`: ended, 3 user turns, usage, tools `current_time`, `demo_public_holidays` | reply "open 10:00 to 4:00 on Sundays" (the hours are only in the House guide, auto-inject) | yes |
-| Demo: Knowledge assistant | `demo-knowledge-assistant` | knowledge_assistant | seeded Product FAQ and Support playbook, · Product FAQ (25 Q&A), · NWS API notes (**URL import** of weather.gov/documentation/services-web-api, `text/html`, 72 chunks) | `demo_nws_point_lookup` **200** (used), `demo_wikipedia_summary` 403 ×2 → **disabled** (B-4) | none | `0498f2b1…` (3 turns, `escalate_to_human`, `set_status`) and `62970fdb…` (2 turns, `demo_nws_point_lookup`) | "According to the product FAQ…" plus a `kb_citations` block_update (`sources`) | yes |
-| Demo: Receptionist | `demo-receptionist` | receptionist (flow) | seeded Practice info, · Practice info (extended) | seeded `check_availability` → httpbin `/anything` **200**, `book_appointment` → httpbin `/post` **200** (both repointed with `tool_update`), `demo_public_holidays` **200** (shared with Blank) | none | `f009894f…`: the full booking flow (3 user turns), `8858a221…`: July 4th → `search_knowledge` and `demo_public_holidays` (1 turn), `b1d4a56e…`: the KB after the fix (2 turns) | none before the fix (B-2). After it, "garage entrance on 12th Street … first 90 minutes" | yes |
-| Demo: Vision assistant | `demo-vision-assistant` | vision_assistant | · What to look for | `demo_zip_lookup` **200** (used) | **bey-avatar**, participant "Demo avatar", LLM `google/gemini-3.5-flash` | `e8dccdda…`: ended, 2 turns, `demo_zip_lookup` | reply lists error messages, status codes and form fields from the checklist (weak) | yes |
-| Demo: Phone agent | `demo-phone-agent` | phone_agent | seeded FAQ, · FAQ (extended) | `demo_weather_alerts` **200** (used, User-Agent set) | none | `c628e26c…`: ended, 3 turns, `demo_weather_alerts` | "open until 6:00 PM CT weekdays, 1:00 PM Saturdays, closed Sundays" (from the FAQ) | yes |
-| Demo: Lead qualification | `demo-lead-qualification` | lead_qualification (flow) | seeded Offer sheet, · Customer stories | `demo_lead_zip_lookup` **200** (used), `demo_company_summary` 403 → **disabled** (B-4) | none | `cac1895d…` (3 turns, `demo_lead_zip_lookup`, `search_knowledge` → none) and `9ccc8cd2…` (3 turns, after the fix) | none before the fix (B-2). After it, "Team plan, from 25 dollars per user per month" | yes |
-| Demo: Survey / intake form | `demo-survey-intake-form` | survey_intake | · Survey guidelines | `demo_country_info` (date.nager.at `CountryInfo`) **200** (used), `demo_country_facts` (restcountries) 301 → **disabled** (B-3) | **simli-avatar**, face Tina, participant "Demo avatar" (fails live, B-1) | `ecd2baf7…`: ended, 4 turns, `request_form`, `table_append`, `demo_country_info`, `end_call` | not observed (a guideline doc, no search, no citation block) | yes |
-| Demo: Insurance claim intake | `demo-insurance-claim-intake` | insurance_claim (pack) | pack KBs `Insurance policy lines` and `Intake playbook` (the user's pre-existing rows, reused by the seeder), · Policy notes | `demo_weather_alerts` **200** (shared with Phone, used) | none | `cc096053…`: ended, 3 turns, `lookup_policy`, `demo_weather_alerts`, `search_knowledge` (hit on `policy-notes.md`), workflow `sync_claim_packet` | a `search_knowledge` hit | yes |
+| Demo · Blank agent | `demo-blank-agent` | blank | · House guide, · Membership plans | `demo_public_holidays` **200** (used), `demo_currency_rates` 301 ×2 → **disabled** (B-3) | none | `3356c6d0…`: ended, 3 user turns, usage, tools `current_time`, `demo_public_holidays` | reply "open 10:00 to 4:00 on Sundays" (the hours are only in the House guide, auto-inject) | yes |
+| Demo · Knowledge assistant | `demo-knowledge-assistant` | knowledge_assistant | seeded Product FAQ and Support playbook, · Product FAQ (25 Q&A), · NWS API notes (**URL import** of weather.gov/documentation/services-web-api, `text/html`, 72 chunks) | `demo_nws_point_lookup` **200** (used), `demo_wikipedia_summary` 403 ×2 → **disabled** (B-4) | none | `0498f2b1…` (3 turns, `escalate_to_human`, `set_status`) and `62970fdb…` (2 turns, `demo_nws_point_lookup`) | "According to the product FAQ…" plus a `kb_citations` block_update (`sources`) | yes |
+| Demo · Receptionist | `demo-receptionist` | receptionist (flow) | seeded Practice info, · Practice info (extended) | seeded `check_availability` → httpbin `/anything` **200**, `book_appointment` → httpbin `/post` **200** (both repointed with `tool_update`), `demo_public_holidays` **200** (shared with Blank) | none | `f009894f…`: the full booking flow (3 user turns), `8858a221…`: July 4th → `search_knowledge` and `demo_public_holidays` (1 turn), `b1d4a56e…`: the KB after the fix (2 turns) | none before the fix (B-2). After it, "garage entrance on 12th Street … first 90 minutes" | yes |
+| Demo · Vision assistant | `demo-vision-assistant` | vision_assistant | · What to look for | `demo_zip_lookup` **200** (used) | **bey-avatar**, participant "Demo avatar", LLM `google/gemini-3.5-flash` | `e8dccdda…`: ended, 2 turns, `demo_zip_lookup` | reply lists error messages, status codes and form fields from the checklist (weak) | yes |
+| Demo · Phone agent | `demo-phone-agent` | phone_agent | seeded FAQ, · FAQ (extended) | `demo_weather_alerts` **200** (used, User-Agent set) | none | `c628e26c…`: ended, 3 turns, `demo_weather_alerts` | "open until 6:00 PM CT weekdays, 1:00 PM Saturdays, closed Sundays" (from the FAQ) | yes |
+| Demo · Lead qualification | `demo-lead-qualification` | lead_qualification (flow) | seeded Offer sheet, · Customer stories | `demo_lead_zip_lookup` **200** (used), `demo_company_summary` 403 → **disabled** (B-4) | none | `cac1895d…` (3 turns, `demo_lead_zip_lookup`, `search_knowledge` → none) and `9ccc8cd2…` (3 turns, after the fix) | none before the fix (B-2). After it, "Team plan, from 25 dollars per user per month" | yes |
+| Demo · Survey / intake form | `demo-survey-intake-form` | survey_intake | · Survey guidelines | `demo_country_info` (date.nager.at `CountryInfo`) **200** (used), `demo_country_facts` (restcountries) 301 → **disabled** (B-3) | **simli-avatar**, face Tina, participant "Demo avatar" (fails live, B-1) | `ecd2baf7…`: ended, 4 turns, `request_form`, `table_append`, `demo_country_info`, `end_call` | not observed (a guideline doc, no search, no citation block) | yes |
+| Demo · Insurance claim intake | `demo-insurance-claim-intake` | insurance_claim (pack) | pack KBs `Insurance policy lines` and `Intake playbook` (the user's pre-existing rows, reused by the seeder), · Policy notes | `demo_weather_alerts` **200** (shared with Phone, used) | none | `cc096053…`: ended, 3 turns, `lookup_policy`, `demo_weather_alerts`, `search_knowledge` (hit on `policy-notes.md`), workflow `sync_claim_packet` | a `search_knowledge` hit | yes |
 
 `agent_validate` (re-run by the driver at the end, `POST /v1/agents/{id}/validate`) reports **0 errors for all eight**. The standing warnings are `knowledge.auto_inject` (all eight) and `qa.enabled` (lead qualification).
 
@@ -151,14 +151,14 @@ Every screenshot was checked. None shows a key, token or `.env` value, only pref
 
 | id | name | slug |
 |---|---|---|
-| `513dcaf34a6a42729d035fb9662f2675` | Demo: Blank agent | demo-blank-agent |
-| `6969e8ce33c94bd2b4216cb31f1b0de6` | Demo: Knowledge assistant | demo-knowledge-assistant |
-| `d52591f4860f4561bab3ed3e66be3370` | Demo: Receptionist | demo-receptionist |
-| `7ccd189876a74adca561cf88e2bf7e64` | Demo: Vision assistant | demo-vision-assistant |
-| `174fecb8788a441992c25fcd53086a46` | Demo: Phone agent | demo-phone-agent |
-| `ae20189be9a54da79e41c656dc3c43a4` | Demo: Lead qualification | demo-lead-qualification |
-| `ea0f9f2a68894da186315189227bfba9` | Demo: Survey / intake form | demo-survey-intake-form |
-| `64c4bd62aca64826a42c1b794ed7a1bb` | Demo: Insurance claim intake | demo-insurance-claim-intake |
+| `513dcaf34a6a42729d035fb9662f2675` | Demo · Blank agent | demo-blank-agent |
+| `6969e8ce33c94bd2b4216cb31f1b0de6` | Demo · Knowledge assistant | demo-knowledge-assistant |
+| `d52591f4860f4561bab3ed3e66be3370` | Demo · Receptionist | demo-receptionist |
+| `7ccd189876a74adca561cf88e2bf7e64` | Demo · Vision assistant | demo-vision-assistant |
+| `174fecb8788a441992c25fcd53086a46` | Demo · Phone agent | demo-phone-agent |
+| `ae20189be9a54da79e41c656dc3c43a4` | Demo · Lead qualification | demo-lead-qualification |
+| `ea0f9f2a68894da186315189227bfba9` | Demo · Survey / intake form | demo-survey-intake-form |
+| `64c4bd62aca64826a42c1b794ed7a1bb` | Demo · Insurance claim intake | demo-insurance-claim-intake |
 
 The throwaway agent `b263b68d02a74b3ab1b824416d9be73e` was created and deleted in the scratch run.
 
@@ -166,21 +166,21 @@ The throwaway agent `b263b68d02a74b3ab1b824416d9be73e` was created and deleted i
 
 | id | name |
 |---|---|
-| `dbb544e4…` | Demo: Blank agent · House guide |
-| `92f1c2a7…` | Demo: Blank agent · Membership plans |
+| `dbb544e4…` | Demo · Blank agent · House guide |
+| `92f1c2a7…` | Demo · Blank agent · Membership plans |
 | `acc75353…` | Knowledge assistant · Product FAQ (seeded) |
 | `a31670dd…` | Knowledge assistant · Support playbook (seeded) |
-| `f0f9f838…` | Demo: Knowledge assistant · Product FAQ |
-| `51f481a0…` | Demo: Knowledge assistant · NWS API notes |
+| `f0f9f838…` | Demo · Knowledge assistant · Product FAQ |
+| `51f481a0…` | Demo · Knowledge assistant · NWS API notes |
 | `93ec3804…` | Receptionist · Practice info (seeded) |
-| `3563c42c…` | Demo: Receptionist · Practice info (extended) |
-| `d665847a…` | Demo: Vision assistant · What to look for |
+| `3563c42c…` | Demo · Receptionist · Practice info (extended) |
+| `d665847a…` | Demo · Vision assistant · What to look for |
 | `61d405f8…` | Phone agent · FAQ (seeded) |
-| `211aabd5…` | Demo: Phone agent · FAQ (extended) |
+| `211aabd5…` | Demo · Phone agent · FAQ (extended) |
 | `70c1638f…` | Lead qualification · Offer sheet (seeded) |
-| `a9194613…` | Demo: Lead qualification · Customer stories |
-| `fa1b5511…` | Demo: Survey / intake form · Survey guidelines |
-| `74319436…` | Demo: Insurance claim intake · Policy notes |
+| `a9194613…` | Demo · Lead qualification · Customer stories |
+| `fa1b5511…` | Demo · Survey / intake form · Survey guidelines |
+| `74319436…` | Demo · Insurance claim intake · Policy notes |
 
 **Tools (12)**
 
@@ -219,7 +219,7 @@ Every tool has `allowed_hosts` set to exactly its one host, `timeout_s` 8 and `m
 | B-3 | coordinator: R-V4-18 allowlist | `tool_create_http(url="https://api.frankfurter.app/latest?from={{from}}&to={{to}}", dry_run_args={from: USD, to: EUR})`, `…restcountries.com/v3.1/name/{{country}}?fields=name,capital,region` with `{country: Canada}` | 200 | **301** twice each. Frankfurter now redirects to `api.frankfurter.dev/v1/…`. REST Countries v3.1 redirects to `files-03.restcountries.com/…/legacy.json`. The tool client never follows redirects, by design (`declarative.py:141`, `net_guard`), so both tools were disabled. Update the allowlist: `api.frankfurter.dev` (same project, MIT). REST Countries has no drop-in, `date.nager.at/api/v3/CountryInfo/{code}` worked | degrades | two card tools |
 | B-4 | coordinator (R-V4-18) and the MCP `tools-http` concept doc | `tool_create_http(url="https://en.wikipedia.org/api/rest_v1/page/summary/{{title}}", headers={"User-Agent": "LKAP-demo/1.0 (LKAP V4-06 demo agent)"}, dry_run_args={title: "Weather_forecasting"})` | 200 | **403**: "Please respect our robot policy https://w.wiki/4wJS". Reproduced with plain `httpx`: a descriptive User-Agent **without contact info** is refused, while curl and urllib pass with the same header, so it is client fingerprinting. A User-Agent with a contact URL or email returns 200. The run did not invent a contact or send the user's email to a third party, so `demo_wikipedia_summary` and `demo_company_summary` stay **disabled**. The user can set a real contact in their headers and re-enable them | degrades | two card tools |
 | B-5 | agent (`request_form` on the text channel) / mcp `chat_send` | Receptionist flow node `collect_booking` or the survey prompt calls `request_form` during `chat_send` | Text chat gets a reply (a verbal fallback, or the form auto-resolves) | The turn blocks until the form times out. Receptionist turn 2: `state=timeout`, no reply (about 85 s). Survey turn 3 stalled about 65 s, and the worker logged `speech not done in time after interruption, cancelling the speech arbitrarily`. Text chat has no way to submit a form | degrades | none |
-| B-6 | api template `lead_qualification` / agent flow | `chat_start` on Demo: Lead qualification. Turns "Sounds good." → "The company is Contoso and I'm the IT manager…" → pricing | `start→company→needs…`, variables extracted | `flow_ended {path: ["start"], variables: {}, missing_required: ["company"]}` in both sessions, `cac1895d…` and `9ccc8cd2…`. The default LLM (`google/gemma-4-31b-it`) never took the edge "the caller agrees". Receptionist edges worked with the same model. Cause not isolated (log only) | degrades | none |
+| B-6 | api template `lead_qualification` / agent flow | `chat_start` on Demo · Lead qualification. Turns "Sounds good." → "The company is Contoso and I'm the IT manager…" → pricing | `start→company→needs…`, variables extracted | `flow_ended {path: ["start"], variables: {}, missing_required: ["company"]}` in both sessions, `cac1895d…` and `9ccc8cd2…`. The default LLM (`google/gemma-4-31b-it`) never took the edge "the caller agrees". Receptionist edges worked with the same model. Cause not isolated (log only) | degrades | none |
 | B-7 | mcp `me` (`discovery.py`) | `me()` with a ready worker (fleet `status=ready`, 33 providers) on a connection whose `status="unverified"` | Reports whether a worker is reachable (SKILL.md says it does) | `health.connections = {n: 1, ok: 0}`, which the model reported as "no worker currently reachable". Chats then worked. The field counts tested connections, not workers | cosmetic / misleading | none |
 | B-8 | agent: text channel `end_call` | Survey session `ecd2baf7…`: the agent calls `end_call`. The MCP runs `chat_end` | Session summary posted promptly | `caller left, ending the job` at 21:10:39. The summary was posted at **21:11:25** (51 s after `end_call`) after `failed to send session event … room session transport is closed`. `session_get` meanwhile shows `status=active`, 0 turns | cosmetic | none |
 | B-9 | api `templates/catalog/insurance_claim/template.json:26` / `packs/insurance_claim/policy_directory.py` | Sample prompt "My policy number is HO-4471-2210." | `lookup_policy` finds it | `found: false`. `POLICY_RECORDS` holds `H044721`, `AUTO90210`, `RNT3008` and `TRV7711` | cosmetic | none |

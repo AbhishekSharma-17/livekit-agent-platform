@@ -14,7 +14,7 @@ The repo is public. This file contains no token, key, host or phone number.
 | # | Check | Result |
 |---|---|---|
 | 1 | Simli avatar on `/s/demo-survey-intake-form` | **PASS on the second run (04:12 IST).** Video **7.0 s** after Start call, at **360×360**, the agent greeted. The first run (03:59) failed on **B-12** (`_asks.md` #54, now resolved in `3d9b8c0`), not on B-1. See §1a |
-| 3 | LiveKit number: assign it to Demo: Phone agent | **Still OFFLINE.** One assignment attempt was made, and LiveKit refused it (422). LKAP rolled the attempt back cleanly |
+| 3 | LiveKit number: assign it to Demo · Phone agent | **Still OFFLINE.** One assignment attempt was made, and LiveKit refused it (422). LKAP rolled the attempt back cleanly |
 
 Check 2 (V4-11 live steps 1 to 7) is in `v4-11-live.md`. It was blocked by B-12 on the first run and **passed all five checks** on the second. Check 3 was not re-run on the second pass. The number is still OFFLINE on LiveKit's side.
 
@@ -24,7 +24,7 @@ Check 2 (V4-11 live steps 1 to 7) is in `v4-11-live.md`. It was blocked by B-12 
 
 **Result:**
 - **No video within 60 s.** Time to video and resolution: none.
-- The page showed "Demo: Survey / intake form couldn't join the call. Agent did not join the room." The chip read **Failed**. See `out/c1-simli-live.png`.
+- The page showed "Demo · Survey / intake form couldn't join the call. Agent did not join the room." The chip read **Failed**. See `out/c1-simli-live.png`.
 - The agent never greeted.
 - Simli minutes used: **0**. The job crashed before `_start_avatar_or_degrade`, so no Simli session was requested.
 
@@ -47,7 +47,7 @@ Check 2 (V4-11 live steps 1 to 7) is in `v4-11-live.md`. It was blocked by B-12 
 **Session events.** `GET /v1/sessions/0e87a488…/events` returns **no events**. The job died before the observer posted anything. `GET /v1/sessions/0e87a488…` still reads `status=active`, `ended_at=null`, 6 minutes later (B-13, `_asks.md` #55). The voice-only warning event ("The avatar could not start, the call continues voice-only.") did **not** appear, because that code was never reached.
 
 **Not specific to Simli.** The worker accepted three jobs after its restart, and all three crashed on the same line:
-- `9d151645…` and `f01a0a72…`: the user's own console tests of Demo: Vision assistant (Beyond Presence), `channel=test`, at 22:27:19Z and 22:27:42Z, before this run started.
+- `9d151645…` and `f01a0a72…`: the user's own console tests of Demo · Vision assistant (Beyond Presence), `channel=test`, at 22:27:19Z and 22:27:42Z, before this run started.
 - `0e87a488…`: this run.
 
 `run_session` registers the callback on every channel before `_start`. The only early returns are for config or build failures, so text chat, the console test, web and SIP calls all fail. **Every live session on this worker fails until B-12 is fixed and the worker is restarted.**
@@ -71,7 +71,7 @@ Rerun `node <scratchpad>/v411/avatar.mjs demo-survey-intake-form <out>`, which u
 
 ## 1a. Simli avatar, second run: PASS
 
-- **Setup.** The coordinator fixed B-12 in `3d9b8c0`. `run_session` now registers a plain `async def _run_shutdown(reason)`. The worker was restarted by the coordinator (PID 30659, registered 04:10:29 IST, 33 providers). Before the avatar test, a text chat on Demo: Blank agent (`3b381f59…`) confirmed that jobs start and end.
+- **Setup.** The coordinator fixed B-12 in `3d9b8c0`. `run_session` now registers a plain `async def _run_shutdown(reason)`. The worker was restarted by the coordinator (PID 30659, registered 04:10:29 IST, 33 providers). Before the avatar test, a text chat on Demo · Blank agent (`3b381f59…`) confirmed that jobs start and end.
 - **Run.** The same `avatar.mjs`, at 22:42:33Z.
 
 | Metric | Value |
@@ -126,7 +126,7 @@ The run neither bought nor released anything, and placed no call.
 - **Not touched:** no restart or signal to the worker (PID 20725), the api or web, no `.env` read, no path starting with "credentials". `sqb-assistant` and every non-demo agent untouched.
 - **What stays in the user's DB:** web session `0e87a488…` (stuck `active`, B-13). The user's own sessions `9d151645…` and `f01a0a72…` are in the same state.
 - **Second run (04:11 to 04:19 IST).** The driver minted key `v411-live-2` (`47ce4e75…`, prefix `lkap_t2O`) and revoked it at the end (`revoked_at` 22:48:18Z). The MCP config was deleted.
-  - Before/after diff: only Demo: Receptionist and Demo: Lead qualification changed (`config_version` 6→7 and 5→7, V4-11 steps 1 and 3), plus the new revoked key. The `Demo — Router scratch` agent (`49b8eb3a…`) was created and purged inside the run.
+  - Before/after diff: only Demo · Receptionist and Demo · Lead qualification changed (`config_version` 6→7 and 5→7, V4-11 steps 1 and 3), plus the new revoked key. The `Demo — Router scratch` agent (`49b8eb3a…`) was created and purged inside the run.
   - Nothing else changed: no restart or signal, no `.env` read, no `credentials*` path, and `sqb-assistant` and all non-demo objects untouched.
 - **#55 stuck sessions, checked 22:48Z and not modified.** **Seven** sessions from the crash window are still `status=active` with `ended_at=null`:
   - web: `0e87a488…` (this run).

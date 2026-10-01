@@ -30,8 +30,8 @@ For each agent: `chat_start`, one `chat_send`, then `chat_end`.
 
 | Agent | Turn | Pass when |
 |---|---|---|
-| Demo: Receptionist | "What are your opening hours?" | the reply states hours from the seeded Practice info KB, and the session's `kb_citations` block is non-empty |
-| Demo: Lead qualification | "How much does it cost?" | the reply states a price band from the Offer sheet KB, and `kb_citations` is non-empty |
+| Demo · Receptionist | "What are your opening hours?" | the reply states hours from the seeded Practice info KB, and the session's `kb_citations` block is non-empty |
+| Demo · Lead qualification | "How much does it cost?" | the reply states a price band from the Offer sheet KB, and `kb_citations` is non-empty |
 
 Result (session id, pass/fail, the reply trimmed to about two sentences, `kb_citations` count, cost):
 - Receptionist: `7e3c6c3d15654f6f93e00b4d41c8de03`, **pass**. Reply: "We're open Monday to Thursday from 8:00 am to 6:00 pm, Friday from 8:00 am to 3:00 pm, and Saturday from 9:00 am to 12:00 pm for check-ups and cleanings." These are the exact hours in the seeded `practice_info.md`: `POST /v1/knowledge-bases/93ec3804…/search` returns them at score 0.62. The agent's panel has **no `kb_citations` block**, so the citations count doesn't apply here (the caveat from the first run). The knowledge evidence is the worker's `injected knowledge hits=4 top_k=4` line for this session, now logged at info. Path `[start, identify]`. LiveKit Inference cost: $0.0011
@@ -131,7 +131,7 @@ Result: **done.** (1) The scratch agent went through the delete ladder: `lkap_de
   - **Draft vs. published.** `published` is a flag on the live config, and the api keeps no published snapshot. `text-sessions` resolves the current config, so a re-run doesn't need to publish after steps 1 and 3.
   - **Fallback trigger.** `FlowRuntime._flow_scopes_kbs = any(n.kb_ids for global/agent nodes)`. Both flows' agent nodes hold `kb_ids: []`, so clearing the global node's list is enough to turn on the fallback.
   - **`kb_citations` on the Receptionist.** Its panel has no `kb_citations` block, so step 2's receptionist line needs a different signal (see step 2's result line).
-- **What happened.** Before any write, check 1 of the recheck (`v4-live-recheck.md`) opened a web call. The worker crashed the job before it connected. The user's own two console tests of Demo: Vision assistant, just before, crashed the same way. So did every job the worker accepted after its 03:52 restart: 3 of 3.
+- **What happened.** Before any write, check 1 of the recheck (`v4-live-recheck.md`) opened a web call. The worker crashed the job before it connected. The user's own two console tests of Demo · Vision assistant, just before, crashed the same way. So did every job the worker accepted after its 03:52 restart: 3 of 3.
 
   ```text
   File "agent/src/lkap_agent/main.py", line 715, in run_session
@@ -148,7 +148,7 @@ Result: **done.** (1) The scratch agent went through the delete ladder: `lkap_de
 ## Run log, second run (2026-09-25, 04:11 to 04:19 IST): every check passes
 
 - **Setup.** The coordinator fixed B-12 in `3d9b8c0` and restarted the worker (PID 30659, 04:10:29 IST). A new Builder key, `v411-live-2` (`47ce4e75…`, prefix `lkap_t2O`, the 7 Builder scopes, 1-day expiry), was minted into a 0600 MCP config. The driver called `lkap-mcp` over stdio (`<scratchpad>/v411/mcpc.py`, the scripts are in `scripts/`, the call logs in `logs/`, the sanitised worker log in `logs/worker-run2.log`).
-- **Smoke first.** A text chat on Demo: Blank agent (`3b381f59…`) ran end to end: greeting, one turn, `chat_end`, `status=ended`. `me.health.workers.ready=1`. An earlier chat on the same agent (`ff5f6c38…`) was closed by the driver's MCP process exiting after a script error of its own (a wrong result path). That session **ended** normally.
+- **Smoke first.** A text chat on Demo · Blank agent (`3b381f59…`) ran end to end: greeting, one turn, `chat_end`, `status=ended`. `me.health.workers.ready=1`. An earlier chat on the same agent (`ff5f6c38…`) was closed by the driver's MCP process exiting after a script error of its own (a wrong result path). That session **ended** normally.
   - Quality note, not a bug: the reply to "What are your opening hours on Sunday?" said it didn't have Sunday hours. `search_knowledge` returned `membership-plans.md` chunks for "opening hours Sunday", and V4-06 had answered this correctly from the House guide. The plumbing works. The retrieval ranking or the model's use of it varies.
 - **Steps 1 to 7 ran as written**. The results are in the sections above.
 - **Order:** smoke, then step 1 (both reverts), step 2, the step 3 edge swap and chat, step 4 create, flow and chat, step 5, step 6 in the browser, and step 7.

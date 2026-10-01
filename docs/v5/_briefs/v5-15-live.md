@@ -18,7 +18,7 @@ chat and direct calls, step 6 needs V5-17.
 3. Disclosure: an agent with the default `disclosure` (`both`). A text chat (`chat_start`/`chat_send`)
    and a browser session both open with the EU disclosure line in front of the greeting, once. Set
    `disclosure.position = "banner"`: the browser greeting is unchanged (and `agent_validate` warns that
-   no consent block shows a banner). Set `voice.greeting` to `"Hi, this is Demo: Insurance. {disclosure}
+   no consent block shows a banner). Set `voice.greeting` to `"Hi, this is Demo · Insurance. {disclosure}
    How can I help?"`: the line lands at the placeholder.
 4. Recording consent without a block: `recording {enabled: true, require_consent: true}`,
    no consent block. `agent_validate` warns ("callers can agree to the recording out loud, add a

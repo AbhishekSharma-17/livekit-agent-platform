@@ -26,6 +26,7 @@ import { McpToolEditorDialog } from "@/components/console/tools/mcp-tool-editor-
 import { ProviderToolEditorDialog } from "@/components/console/tools/provider-tool-editor-dialog";
 import { requestSummary } from "@/components/console/tools/tool-row";
 import { ToolTemplateDialog } from "@/components/console/tools/tool-template-dialog";
+import { ToolMark, toolTitle } from "@/components/console/tools/tool-identity";
 import { useWriteGate } from "@/components/console/shared/write-gate";
 import type { AppConnectionOut, ProviderSpec, ProviderToolDefinition, ToolOut } from "@/contracts/lkap-contracts";
 
@@ -186,6 +187,8 @@ export function ToolsList() {
       : { label: "One agent" };
   }
 
+  const titleOf = (tool: ToolOut) => toolTitle(tool, appNameFor(tool, connectionsById));
+
   const counts: Record<ToolKind, number> = { http: 0, mcp: 0, dataset: 0, app: 0 };
   for (const tool of tools) counts[kindOf(tool)] += 1;
   const filtering = query.trim() !== "" || kind !== "all";
@@ -193,7 +196,10 @@ export function ToolsList() {
   const visible = tools.filter(
     (tool) =>
       (kind === "all" || kindOf(tool) === kind) &&
-      matchesQuery([tool.name, requestSummary(tool), kindLabel(tool), scopeOf(tool).label, appNameFor(tool, connectionsById)], query),
+      matchesQuery(
+        [titleOf(tool), tool.name, requestSummary(tool), kindLabel(tool), scopeOf(tool).label, appNameFor(tool, connectionsById)],
+        query,
+      ),
   );
   const clearFilters = () => {
     setQuery("");
@@ -206,31 +212,52 @@ export function ToolsList() {
       .map((key) => ({ value: key as KindFilter, label: KIND_FILTER_LABEL[key], count: counts[key] })),
   ];
 
-  const nameBlock = (tool: ToolOut) => (
-    <div className="min-w-0">
-      <div className="truncate font-mono text-body text-foreground">
-        <Highlight text={tool.name} query={query} />
+  // The human title leads; the technical name the model sees sits in the meta line, in mono,
+  // before the request summary or description (one line, cut with an ellipsis; the edit
+  // dialog shows both whole).
+  const nameBlock = (tool: ToolOut) => {
+    const title = titleOf(tool);
+    return (
+      <div className="flex min-w-0 flex-1 items-start gap-2.5">
+        <ToolMark tool={tool} appName={appNameFor(tool, connectionsById)} className="mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-body font-medium text-foreground" title={title}>
+            <Highlight text={title} query={query} />
+          </div>
+          <div className="flex min-w-0 items-baseline gap-1.5 text-caption text-text-secondary">
+            {title !== tool.name ? (
+              <code data-slot="tool-name" className="max-w-[50%] shrink-0 truncate font-mono text-text-tertiary">
+                <Highlight text={tool.name} query={query} />
+              </code>
+            ) : null}
+            {title !== tool.name ? <span aria-hidden="true">·</span> : null}
+            <span className="min-w-0 truncate" title={requestSummary(tool)}>
+              <Highlight text={requestSummary(tool)} query={query} />
+            </span>
+          </div>
+        </div>
       </div>
-      <div className="truncate text-caption text-text-secondary">
-        <Highlight text={requestSummary(tool)} query={query} />
-      </div>
-    </div>
-  );
+    );
+  };
 
-  const kindCell = (tool: ToolOut) =>
-    isProviderTool(tool) ? (
+  const kindCell = (tool: ToolOut) => {
+    const app = appNameFor(tool, connectionsById);
+    return isProviderTool(tool) ? (
       <Tag>
-        <VendorMark vendor={appNameFor(tool, connectionsById) ?? "App"} size="sm" labelled />
+        <VendorMark vendor={app ?? "App"} size="sm" labelled />
         App
       </Tag>
     ) : (
       <span className="text-text-secondary">{kindLabel(tool)}</span>
     );
+  };
 
   const statusPill = (tool: ToolOut) => <LifecycleBadge state={tool.enabled ? "enabled" : "disabled"} />;
 
   const columns: ResponsiveTableColumn<ToolOut>[] = [
-    { id: "name", header: "Name", cell: nameBlock },
+    // The name column takes the room that is left and cuts its text to fit (max-w-0 + w-full),
+    // so the other columns always show in full inside the frame.
+    { id: "name", header: "Name", cell: nameBlock, className: "w-full max-w-0" },
     { id: "kind", header: "Kind", cell: kindCell },
     {
       id: "scope",
@@ -238,11 +265,11 @@ export function ToolsList() {
       cell: (tool) => {
         const scope = scopeOf(tool);
         return scope.href ? (
-          <Link href={scope.href} className="text-brand underline-offset-3 hover:underline">
+          <Link href={scope.href} className="block max-w-44 truncate text-brand underline-offset-3 hover:underline" title={scope.label}>
             {scope.label}
           </Link>
         ) : (
-          <span className="text-text-secondary">{scope.label}</span>
+          <span className="block max-w-44 truncate text-text-secondary">{scope.label}</span>
         );
       },
     },
@@ -285,7 +312,7 @@ export function ToolsList() {
             <div className="flex flex-wrap items-center gap-2 text-caption text-text-secondary">
               {kindCell(tool)}
               <span aria-hidden="true">·</span>
-              <span>{scopeOf(tool).label}</span>
+              <span className="min-w-0 truncate">{scopeOf(tool).label}</span>
               {statusPill(tool)}
             </div>
           </div>

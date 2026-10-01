@@ -57,6 +57,10 @@ ActionRisk = Literal["read", "write", "destructive"]
 #: Who a connection belongs to (D-V5-C2): the workspace, or one agent.
 SubjectKind = Literal["workspace", "agent"]
 
+#: What a connected account's ``identity`` is (V6-35): the address it is signed in as, its
+#: user name, the workspace it belongs to, or another name the app reports.
+IdentityKind = Literal["email", "username", "workspace", "other"]
+
 
 #: The longest account label (R-V5-13): "Work", "Personal", an address.
 MAX_ACCOUNT_LABEL: Final = 40
@@ -215,6 +219,16 @@ class AppConnectionOut(BaseModel):
         True,
         description="The app's default account for this workspace (or agent): its tools keep the plain "
         "names and a session with no account choice uses it. Exactly one per app",
+    )
+    identity: str | None = Field(
+        None,
+        max_length=200,
+        description="Who the account is signed in as, as the app reports it (V6-35): an address, a "
+        "user name or a workspace name. Vendor text. Empty until the account has been identified",
+    )
+    identity_kind: IdentityKind | None = Field(None, description="What `identity` is")
+    identity_checked_at: datetime | None = Field(
+        None, description="When LKAP last asked the app who the account is (found or not)"
     )
 
 
@@ -561,6 +575,7 @@ __all__ = [
     "ConnectMethod",
     "ConnectionRenameIn",
     "ConnectionStatus",
+    "IdentityKind",
     "SubjectKind",
     "ToolProviderId",
     "ToolkitOut",

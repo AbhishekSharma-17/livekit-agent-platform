@@ -25,6 +25,53 @@
       "title": "Id",
       "type": "string"
     },
+    "identity": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Who the account is signed in as, as the app reports it (V6-35): an address, a user name or a workspace name. Vendor text. Empty until the account has been identified",
+      "title": "Identity"
+    },
+    "identity_checked_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "When LKAP last asked the app who the account is (found or not)",
+      "title": "Identity Checked At"
+    },
+    "identity_kind": {
+      "anyOf": [
+        {
+          "enum": [
+            "email",
+            "username",
+            "workspace",
+            "other"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "What `identity` is",
+      "title": "Identity Kind"
+    },
     "is_default": {
       "default": true,
       "description": "The app's default account for this workspace (or agent): its tools keep the plain names and a session with no account choice uses it. Exactly one per app",

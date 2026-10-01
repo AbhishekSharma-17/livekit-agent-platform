@@ -19,3 +19,6 @@ export type ConnectMethod = "managed" | "custom_oauth" | "api_key" | "none";
 export type ConnectionStatus = "active" | "initiated" | "expired" | "failed" | "inactive" | "unknown";
 
 export type SubjectKind = "workspace" | "agent";
+
+/** What `AppConnectionOut.identity` is (V6-35): an address, a user name, a workspace, or another name. */
+export type IdentityKind = "email" | "username" | "workspace" | "other";

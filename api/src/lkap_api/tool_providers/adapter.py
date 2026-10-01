@@ -171,6 +171,13 @@ class ToolProviderAdapter(Protocol):
         """Run one action (V5-47 uses it; the worker has its own copy)."""
         ...
 
+    async def proxy(self, *, endpoint: str, method: str, connected_account_id: str) -> dict[str, Any]:
+        """One request to the app's own API on that account's sign-in (V6-35: who the account is).
+
+        Returns ``{data, status, headers}``; the vendor attaches the account's auth.
+        """
+        ...
+
     async def create_mcp_server(
         self, *, name: str, auth_config_ids: list[str], allowed_tools: list[str] | None = None
     ) -> dict[str, Any]:

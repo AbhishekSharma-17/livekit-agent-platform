@@ -17,6 +17,7 @@ import { Tag, TagList } from "@/components/shared/tag";
 import { VendorMark } from "@/components/shared/vendor-mark";
 import { ConnectAppDialog } from "@/components/console/tools/apps/connect-app-dialog";
 import { ConnectionRow } from "@/components/console/tools/apps/connection-row";
+import { UNIDENTIFIED_ACCOUNT, accountIdentity, accountName } from "@/components/console/tools/apps/account-identity";
 import { useToolProviderConnections } from "@/components/console/lib/api-hooks";
 import { useWriteGate } from "@/components/console/shared/write-gate";
 import { pluralize } from "@/lib/format";
@@ -85,9 +86,12 @@ export function AppCard({ toolkit }: { toolkit: ToolkitOut }) {
       {toolkit.connected && toolkit.connection_id ? (
         <div className="flex flex-col items-start gap-2">
           {accounts.length > 1 ? (
-            <Button type="button" variant="secondary" size="sm" onClick={() => setAccountsOpen(true)}>
-              Manage {pluralize(accounts.length, "account", "accounts")}
-            </Button>
+            <>
+              <AccountSummary accounts={accounts} appName={toolkit.name} />
+              <Button type="button" variant="secondary" size="sm" onClick={() => setAccountsOpen(true)}>
+                Manage {pluralize(accounts.length, "account", "accounts")}
+              </Button>
+            </>
           ) : (
             <ConnectionRow connectionId={toolkit.connection_id} toolkit={toolkit} />
           )}
@@ -111,6 +115,29 @@ export function AppCard({ toolkit }: { toolkit: ToolkitOut }) {
       {accounts.length > 1 ? <AppAccountsDialog open={accountsOpen} onOpenChange={setAccountsOpen} toolkit={toolkit} accounts={accounts} /> : null}
       <ConnectAppDialog toolkit={toolkit} open={addAccountOpen} onOpenChange={setAddAccountOpen} isAddingAccount />
     </div>
+  );
+}
+
+/** How many accounts the card names before "and N more". */
+const SUMMARY_ACCOUNTS = 3;
+
+/**
+ * Who each account of the app is (V6-35), right on the card: one short line per
+ * account ("Work · sam@example.com"), so a builder can tell them apart without
+ * opening the dialog.
+ */
+function AccountSummary({ accounts, appName }: { accounts: AppConnectionOut[]; appName: string }) {
+  const hidden = accounts.length - SUMMARY_ACCOUNTS;
+  return (
+    <ul aria-label={`${appName} accounts`} className="flex w-full min-w-0 flex-col gap-0.5 text-caption text-text-secondary">
+      {accounts.slice(0, SUMMARY_ACCOUNTS).map((account) => (
+        <li key={account.id} className="truncate">
+          {accountName(account, appName)}
+          {accountIdentity(account) ? null : ` · ${UNIDENTIFIED_ACCOUNT.toLowerCase()}`}
+        </li>
+      ))}
+      {hidden > 0 ? <li>and {hidden} more</li> : null}
+    </ul>
   );
 }
 

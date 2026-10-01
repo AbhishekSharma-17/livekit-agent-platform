@@ -10387,6 +10387,12 @@
             "description": "A connection id from apps_connect or apps_connections",
             "title": "Id",
             "type": "string"
+          },
+          "identify": {
+            "default": false,
+            "description": "Also ask the app now who the account is signed in as (one metered call)",
+            "title": "Identify",
+            "type": "boolean"
           }
         },
         "required": [

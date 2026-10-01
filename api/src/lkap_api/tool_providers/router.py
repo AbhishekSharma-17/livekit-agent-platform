@@ -352,7 +352,9 @@ async def get_connections(db: DbDep, vault: VaultDep, ctx: ReadCtx) -> AppConnec
     summary="Check a connected app",
     description=(
         "Asks Composio for the connection's current state (active, expired, failed, inactive) and "
-        "records it. A sign-in still in progress is reported without a call."
+        "records it. A sign-in still in progress is reported without a call. An active account "
+        "not identified lately is also asked who it is signed in as (`identity`). "
+        "With `identify=true` it is asked now."
     ),
 )
 async def get_connection(
@@ -362,6 +364,7 @@ async def get_connection(
     ctx: ReadCtx,
     factory: FactoryDep,
     limiter: RateLimiterDep,
+    identify: bool = False,
 ) -> AppConnectionOut:
     """Refresh and return one connection."""
     await enforce(
@@ -371,7 +374,7 @@ async def get_connection(
         per_seconds=60,
         what=f"{VENDOR_REFRESH_PER_MIN} Composio re-reads per minute",
     )
-    return await service.refresh_connection(db, vault, factory, ctx, connection_id)
+    return await service.refresh_connection(db, vault, factory, ctx, connection_id, identify=identify)
 
 
 @router.patch(

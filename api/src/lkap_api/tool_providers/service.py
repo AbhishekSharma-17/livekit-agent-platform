@@ -21,12 +21,15 @@ Connect dialog are forwarded to Composio and dropped. No log line, audit
 payload or error carries either, nor a vendor sign-in URL.
 
 Several accounts of one app (R-V5-13): a subject may hold several rows of one
-toolkit. Each carries a ``label`` (the user's, else the name Composio reports
-once active — ``state.val.displayName`` — else the app's name for the first
+toolkit. Each carries a ``label`` (the user's, else — on its first sign-in —
+the account's identity when it fits, V6-35, else the app's name for the first
 account and "<App> account <n>" after it) and ``is_default`` (exactly one per
 subject and app: the first account that became active wins, settled by
 :func:`settle_defaults`). A bag written before labels existed reads as the
 default account labelled with the app's name (lazy backfill, no migration).
+Each account also carries an ``identity`` (who it is signed in as, learnt by
+:mod:`.identity` at activation and on a check; never a token) kept in the same
+bag, so no migration was needed.
 The account's Composio ``alias`` is the slug of its label, with a counter on a
 collision among its siblings; it is sent on connect and ``PATCH``-ed on rename.
 Every ``provider`` tool of a connection carries the connection's connected
@@ -68,6 +71,7 @@ from lkap_contracts.tool_providers import (
     ConnectionRenameIn,
     ConnectionStatus,
     ConnectMethod,
+    IdentityKind,
     ToolkitOut,
     ToolkitPage,
     action_risk,
@@ -88,6 +92,7 @@ from lkap_api.db.models import Agent, Credential, Tool, WorkspaceProvider, utcno
 from lkap_api.errors import ApiError, ConflictError, NotFoundError, UnprocessableEntityError
 from lkap_api.logging import get_logger
 from lkap_api.settings import Settings
+from lkap_api.tool_providers import identity as account_identity
 from lkap_api.tool_providers import materialise
 from lkap_api.tool_providers.adapter import (
     AdapterFactory,
@@ -246,6 +251,14 @@ def _list(value: object) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+_IDENTITY_KINDS: Final[frozenset[str]] = frozenset({"email", "username", "workspace", "other"})
+
+
+def _identity_kind(value: object) -> IdentityKind:
+    text = _str(value)
+    return text if text in _IDENTITY_KINDS else "other"  # type: ignore[return-value]
+
+
 def _int(value: object) -> int | None:
     if isinstance(value, bool):
         return None
@@ -287,6 +300,11 @@ class AppConnection:
     #: ``PRIVATE`` or ``SHARED`` (Composio's ``experimental.account_type``; LKAP never sets it).
     account_type: str = "PRIVATE"
     display_name: str | None = None
+    #: V6-35: who the account is signed in as (the app's own answer), what that is, and when
+    #: LKAP last asked. Kept through a broken status so a "Needs reconnect" row still says who.
+    identity: str | None = None
+    identity_kind: IdentityKind | None = None
+    identity_checked_at: dt.datetime | None = None
 
     @property
     def id(self) -> str:
@@ -338,6 +356,9 @@ class AppConnection:
             alias=bag.get("alias") or None,
             account_type="SHARED" if bag.get("account_type") == "SHARED" else "PRIVATE",
             display_name=bag.get("display_name") or None,
+            identity=bag.get("identity") or None,
+            identity_kind=_identity_kind(bag.get("identity_kind")) if bag.get("identity") else None,
+            identity_checked_at=_parse_dt(bag.get("identity_checked_at")),
         )
 
     def bag(self) -> dict[str, str]:
@@ -365,6 +386,9 @@ class AppConnection:
             "alias": self.alias or "",
             "account_type": self.account_type,
             "display_name": self.display_name or "",
+            "identity": self.identity or "",
+            "identity_kind": (self.identity_kind or "") if self.identity else "",
+            "identity_checked_at": _iso(self.identity_checked_at),
         }
 
     def save(self, vault: Vault, *, checked_at: dt.datetime | None = None) -> None:
@@ -401,6 +425,9 @@ class AppConnection:
             agents_using=agents_using,
             label=self.account_label,
             is_default=self.is_default,
+            identity=self.identity,
+            identity_kind=self.identity_kind if self.identity else None,
+            identity_checked_at=self.identity_checked_at,
         )
 
     @property
@@ -539,6 +566,47 @@ async def _sync_alias(
     conn.alias = wanted
 
 
+async def _learn_identity(
+    adapter: ToolProviderAdapter,
+    conn: AppConnection,
+    account: dict[str, Any] | None,
+    now: dt.datetime,
+    *,
+    activation: bool = False,
+    force: bool = False,
+) -> None:
+    """Ask who the account is (V6-35, :mod:`.identity`); never raises, never breaks the caller.
+
+    At activation the answer replaces the identity outright (``None`` included). On a check,
+    Composio's display name (free) is always taken, the app is asked only when
+    :func:`identity.due` says so (or ``force``), and an unanswered ask keeps what was known.
+    """
+    if conn.method == "none" or not conn.connected_account_id:
+        return
+    if (
+        not activation
+        and not force
+        and not account_identity.due(identity=conn.identity, checked_at=conn.identity_checked_at, now=now)
+    ):
+        shown = account_identity.from_display_name(account) if account else None
+        if shown is not None:
+            conn.identity, conn.identity_kind = shown.value, shown.kind
+        return
+    found = await account_identity.identify(
+        adapter,
+        toolkit=conn.toolkit,
+        subject=conn.subject,
+        connected_account_id=conn.connected_account_id,
+        account=account,
+        connection_id=conn.id,
+    )
+    conn.identity_checked_at = now
+    if found is not None:
+        conn.identity, conn.identity_kind = found.value, found.kind
+    elif activation:
+        conn.identity, conn.identity_kind = None, None
+
+
 async def _after_activation(
     db: AsyncSession,
     vault: Vault,
@@ -546,17 +614,27 @@ async def _after_activation(
     workspace_id: str,
     conn: AppConnection,
     account: dict[str, Any],
+    *,
+    first: bool,
 ) -> None:
-    """An account just became active: its name, its default flag, its alias and its tools' pin."""
+    """An account just became active: who it is, its name, default flag, alias and its tools' pin.
+
+    ``first`` is true when the account had never finished connecting before. Only then does
+    an account nobody named take its identity as its label (V6-35): an existing account
+    keeps its label through a reconnect, and shows the identity beside it instead.
+    """
     conn.display_name = _account_display_name(account) or conn.display_name
     conn.account_type = _account_type(account) or conn.account_type
+    # A sign-in may be a different account than before, so the identity is always asked anew
+    # here and an unanswered ask clears it rather than keeping the previous account's.
+    await _learn_identity(adapter, conn, account, utcnow(), activation=True)
     records = await list_connection_records(db, vault, workspace_id)
     records = [conn if c.id == conn.id else c for c in records]
     siblings = [c for c in records if conn.same_app(c)]
-    if conn.label_source != "user" and conn.display_name:
+    if first and conn.label_source != "user" and conn.identity and len(conn.identity) <= MAX_ACCOUNT_LABEL:
         taken = {s.account_label.strip().casefold() for s in siblings}
-        if conn.display_name.casefold() not in taken:
-            conn.account_label = conn.display_name
+        if conn.identity.casefold() not in taken:
+            conn.account_label = conn.identity
     await _sync_alias(adapter, conn, siblings)
     for other in settle_defaults(app_accounts(records, conn)):
         if other is not conn:
@@ -1470,9 +1548,11 @@ async def connect(
                 conn.status = "active"
             if conn.status == "active":
                 conn.connected_at = now
-                await _after_activation(db, vault, adapter, ctx.workspace_id, conn, created_account)
+                await _after_activation(
+                    db, vault, adapter, ctx.workspace_id, conn, created_account, first=True
+                )
         elif conn.status == "active":
-            await _after_activation(db, vault, adapter, ctx.workspace_id, conn, {})
+            await _after_activation(db, vault, adapter, ctx.workspace_id, conn, {}, first=True)
     except ToolProviderError as exc:
         log.info("apps_connect_vendor_error", toolkit=toolkit_slug, method=payload.method, reason=exc.reason)
         raise api_error(redact(exc, payload.fields.values())) from None
@@ -1539,7 +1619,7 @@ async def reconnect(
                 if conn.status == "active":
                     conn.connected_at, conn.needs_reconnect = now, False
                     await _delete_quietly(adapter, old if old != conn.connected_account_id else None)
-                    await _after_activation(db, vault, adapter, ctx.workspace_id, conn, created)
+                    await _after_activation(db, vault, adapter, ctx.workspace_id, conn, created, first=False)
     except ToolProviderError as exc:
         raise api_error(redact(exc, fields.values())) from None
     conn.save(vault, checked_at=now)
@@ -1649,13 +1729,14 @@ async def handle_callback(
     if vendor_status(account.get("status")) != "active":
         return fail("not_active", consume=True)
     old = conn.previous_account_id
+    first = conn.connected_at is None
     conn.status, conn.connected_at, conn.needs_reconnect = "active", now, False
     conn.nonce_hash, conn.flow_expires_at, conn.previous_account_id = None, None, None
     conn.save(vault, checked_at=now)
     await _set_tools_enabled(db, workspace_id, [conn.id], enabled=True)
     await _delete_quietly(adapter, old if old and old != conn.connected_account_id else None)
-    # R-V5-13: the account's name, default flag, alias and its tools' pin (best effort at the vendor).
-    await _after_activation(db, vault, adapter, workspace_id, conn, account)
+    # R-V5-13 + V6-35: who it is, its name, default flag, alias and its tools' pin (best effort).
+    await _after_activation(db, vault, adapter, workspace_id, conn, account, first=first)
     conn.save(vault, checked_at=now)
     _audit(db, None, "apps.connect.ok", conn.id, workspace_id=workspace_id, toolkit=conn.toolkit)
     log.info("apps_connected", connection_id=conn.id, toolkit=conn.toolkit)
@@ -1669,9 +1750,19 @@ def cast_rowcount(result: Any) -> int:
 
 # ============================================================================ status
 async def refresh_connection(
-    db: AsyncSession, vault: Vault, factory: AdapterFactory, ctx: WorkspaceContext, connection_id: str
+    db: AsyncSession,
+    vault: Vault,
+    factory: AdapterFactory,
+    ctx: WorkspaceContext,
+    connection_id: str,
+    *,
+    identify: bool = False,
 ) -> AppConnectionOut:
-    """Re-read one connection's state from Composio (the five vendor states, D-V5-C9)."""
+    """Re-read one connection's state from Composio (the five vendor states, D-V5-C9).
+
+    An active account is also asked who it is (V6-35) when it has not been identified
+    lately, or every time with ``identify`` ("Check now"); a failed ask keeps what was known.
+    """
     conn = await load_connection(db, vault, ctx.workspace_id, connection_id)
     now = utcnow()
     if (
@@ -1699,6 +1790,8 @@ async def refresh_connection(
             conn.connected_at = now
         conn.display_name = _account_display_name(account) or conn.display_name
         conn.account_type = _account_type(account) or conn.account_type
+        if conn.status == "active":
+            await _learn_identity(adapter, conn, account, now, force=identify)
     # S5-22: a connection Composio reports broken pauses its tools; one that comes back
     # active resumes the tools this pause stopped (a tool an admin turned off stays off
     # unless the connection had been broken).

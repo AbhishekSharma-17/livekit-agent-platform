@@ -3169,6 +3169,18 @@ export interface AppConnectionOut {
   connected_at?: string | null;
   id: string;
   /**
+   * Who the account is signed in as, as the app reports it (V6-35): an address, a user name or a workspace name. Vendor text. Empty until the account has been identified
+   */
+  identity?: string | null;
+  /**
+   * When LKAP last asked the app who the account is (found or not)
+   */
+  identity_checked_at?: string | null;
+  /**
+   * What `identity` is
+   */
+  identity_kind?: ("email" | "username" | "workspace" | "other") | null;
+  /**
    * The app's default account for this workspace (or agent): its tools keep the plain names and a session with no account choice uses it. Exactly one per app
    */
   is_default?: boolean;

@@ -299,6 +299,17 @@ class ComposioAdapter:
             body["connected_account_id"] = connected_account_id
         return await self._object("POST", f"/tools/execute/{_seg(tool_slug)}", json=body)
 
+    async def proxy(self, *, endpoint: str, method: str, connected_account_id: str) -> dict[str, Any]:
+        """``POST /tools/execute/proxy``: a request to the app's own API with the account's auth.
+
+        Used only for a read that names the account (V6-35); the answer is never logged.
+        """
+        return await self._object(
+            "POST",
+            "/tools/execute/proxy",
+            json={"endpoint": endpoint, "method": method, "connected_account_id": connected_account_id},
+        )
+
     async def create_mcp_server(
         self, *, name: str, auth_config_ids: list[str], allowed_tools: list[str] | None = None
     ) -> dict[str, Any]:

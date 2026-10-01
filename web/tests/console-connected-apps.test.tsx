@@ -446,6 +446,29 @@ describe("ConnectedAppsCard", () => {
       expect(screen.getByText(/\(Personal\)/)).toBeTruthy();
       expect(screen.getAllByRole("button", { name: "Actions" })).toHaveLength(2);
     });
+
+    it("V6-35: every account in the chooser and in the app list says who it is signed in as", async () => {
+      const [work, personal] = connectionFixtureAccounts();
+      const accounts = [
+        { ...work, identity: "sam@example.com", identity_kind: "email" as const },
+        { ...personal, identity: "lee@example.com", identity_kind: "email" as const },
+      ];
+      stubApi((call) => {
+        if (call.url.includes("/tool-providers/composio/connections") && call.method === "GET") {
+          return { status: 200, body: connectionPage(accounts) };
+        }
+        return undefined;
+      });
+      const agentInServerMode = {
+        ...AGENT,
+        config: { ...AGENT.config, tools: { apps: { mode: "server", allowed_toolkits: ["github"] } } },
+      } as unknown as AgentOut;
+      render(<Harness agent={agentInServerMode} />);
+      await screen.findByText("Which accounts");
+
+      expect(screen.getByRole("checkbox", { name: /Work · sam@example\.com/ })).toBeTruthy();
+      expect(screen.getByRole("checkbox", { name: /Personal · lee@example\.com/ })).toBeTruthy();
+    });
   });
 });
 

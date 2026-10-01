@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { StatusChip } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
+import { accountIdentity, accountName } from "@/components/console/tools/apps/account-identity";
 import { useAppsStatus, useToolProviderActions, useToolProviderConnections, useTools } from "@/components/console/lib/api-hooks";
 import { ActionsDialog } from "@/components/console/tools/apps/actions-dialog";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
@@ -422,7 +423,7 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
           onOpenChange={closeActionsDialog}
           presetAgentId={agentId}
           onAdded={handleActionsAdded}
-          accountLabel={accountCountFor(actionsFor.toolkit) > 1 ? actionsFor.label : undefined}
+          accountLabel={accountCountFor(actionsFor.toolkit) > 1 ? accountName(actionsFor) : undefined}
         />
       ) : null}
     </Section>
@@ -446,6 +447,9 @@ function AppRow({
 }) {
   const name = connection.toolkit_name ?? connection.toolkit;
   const needsReconnect = connection.needs_reconnect || connection.status !== "active";
+  // V6-35: which account this row is. With several accounts of the app, its label and
+  // who it is signed in as; with one, who it is signed in as (when known).
+  const who = showAccountLabel ? accountName(connection, name) : accountIdentity(connection);
 
   return (
     <li className="flex flex-col gap-2 rounded border border-border p-2.5">
@@ -455,7 +459,7 @@ function AppRow({
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-foreground">
               {name}{" "}
-              {showAccountLabel ? <span className="font-normal text-text-secondary">({connection.label ?? name})</span> : null}
+              {who ? <span className="font-normal text-text-secondary">({who})</span> : null}
             </p>
             {needsReconnect ? (
               <Link href="/console/tools?tab=apps" className="text-xs text-warning-text underline underline-offset-2">
@@ -578,7 +582,7 @@ function AppAllowRow({
                   onCheckedChange={(v) => onToggleAccount(account.id, v === true)}
                 />
                 <Label htmlFor={accountInputId} className="flex items-center gap-1.5 text-label font-normal">
-                  {account.label ?? name}
+                  {accountName(account, name)}
                   {account.is_default ? (
                     <StatusChip tone="neutral" size="sm">
                       Default

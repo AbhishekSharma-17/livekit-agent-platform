@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { ChevronsUpDownIcon, CircleSlashIcon, PencilIcon, SearchIcon } from "lucide-react";
+import { VendorMark } from "@/components/shared/vendor-mark";
+import { vendorMarkFor } from "@/components/shared/vendor-marks";
 
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -126,6 +128,24 @@ export function ReasoningBadges({
         </span>
       ) : null}
     </>
+  );
+}
+
+/**
+ * A model id in mono, led by its maker's mark when the id names one
+ * ("openai/gpt-5-mini", "google/gemini-3-flash" on a gateway such as LiveKit
+ * Inference or OpenRouter). The maker's name is the id's first segment, so the
+ * mark always sits beside it (decorative).
+ */
+function ModelIdLine({ id }: { id: string }) {
+  const maker = id.includes("/") ? id.split("/")[0] : null;
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      {maker && vendorMarkFor(maker) ? <VendorMark vendor={maker} size="sm" className="size-4 bg-transparent" /> : null}
+      <span className="truncate font-mono text-caption text-text-secondary" title={id}>
+        {id}
+      </span>
+    </span>
   );
 }
 
@@ -417,7 +437,7 @@ function ModelComboboxView({
                         </span>
                         <ModelPriceHint priceQuotes={live.priceQuotes} modelId={model.id} />
                       </span>
-                      <span className="truncate font-mono text-caption text-text-secondary">{model.id}</span>
+                      <ModelIdLine id={model.id} />
                       <ModelBlurb text={blurbFor(model.id, catalogById.get(model.id))} />
                       {model.note ? <span className="text-caption text-text-secondary">{model.note}</span> : null}
                     </div>
@@ -457,9 +477,7 @@ function ModelComboboxView({
                         </span>
                         <ModelPriceHint priceQuotes={live.priceQuotes} modelId={item.id} />
                       </span>
-                      <span className="truncate font-mono text-caption text-text-secondary" title={item.id}>
-                        {item.id}
-                      </span>
+                      <ModelIdLine id={item.id} />
                       <ModelBlurb text={blurbFor(item.id, item)} />
                     </div>
                   </CommandItem>

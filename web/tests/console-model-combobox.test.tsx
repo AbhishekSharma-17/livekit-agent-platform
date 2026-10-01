@@ -120,6 +120,11 @@ describe("ModelCombobox — groups", () => {
     expect(within(catalog).queryByText(/Acme model/)).toBeNull();
     expect(within(group("Suggested")).queryByText("GPT-4.1")).toBeNull();
     expect(screen.getByText(/Use custom model:/).textContent).toContain("gem");
+    // A gateway id names its maker ("google/…"): the maker's mark leads the id, decorative.
+    const id = within(catalog).getByText("google/gemini-x-0");
+    const mark = id.parentElement?.querySelector('[data-slot="vendor-mark"]');
+    expect(mark?.getAttribute("data-mark")).toBe("google");
+    expect(mark?.getAttribute("aria-hidden")).toBe("true");
   });
 
   it("asks for the whole list once (limit=1000) with the slot's key, and never sends what is typed", async () => {

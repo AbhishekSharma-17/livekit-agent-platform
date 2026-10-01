@@ -7,6 +7,7 @@ import { CircleCheckIcon, CircleIcon } from "lucide-react";
 import { Icon } from "@/components/shared/icon";
 import { SkeletonRows } from "@/components/shared/loading-state";
 import { Section, SectionRow } from "@/components/shared/section";
+import { VendorMark } from "@/components/shared/vendor-mark";
 import { Button } from "@/components/ui/button";
 import { useAgents, useCredentials, useHealth, useSessions } from "@/components/console/lib/api-hooks";
 import { useWriteAccess } from "@/components/console/lib/roles";
@@ -22,6 +23,8 @@ interface ChecklistRow {
   help: string;
   done: boolean;
   action?: React.ReactNode;
+  /** Services the row names, shown as their marks after the help text (always beside the names, decorative). */
+  marks?: readonly string[];
 }
 
 /**
@@ -85,6 +88,7 @@ export function SetupChecklist() {
           : connections.total > 0
             ? "Run Test on a connection to confirm it can host agents."
             : "Add a LiveKit Cloud or self-hosted connection, then test it.",
+      marks: ["LiveKit"],
       // Ticked only by a connection whose last test passed (`status: "ok"`),
       // never by one that is merely saved — the connections list would show
       // it as "Unverified" (UI audit, v4).
@@ -99,6 +103,7 @@ export function SetupChecklist() {
       id: "credential",
       title: "Add a provider key (optional)",
       help: "LiveKit Inference needs no key. Add one to use Gemini Live, OpenAI, Deepgram, ElevenLabs…",
+      marks: ["LiveKit", "Gemini", "OpenAI", "Deepgram", "ElevenLabs"],
       done: (credentials?.total ?? 0) > 0,
       action: (
         <Button asChild size="sm" variant="secondary">
@@ -261,6 +266,13 @@ export function SetupChecklist() {
             <span className="sr-only">{row.done ? "Done: " : "Not done yet: "}</span>
             <p className="text-body font-medium text-foreground">{row.title}</p>
             <p className="mt-0.5 text-label text-text-secondary">{row.help}</p>
+            {row.marks ? (
+              <span data-slot="checklist-marks" className="mt-1.5 flex items-center gap-1">
+                {row.marks.map((vendor) => (
+                  <VendorMark key={vendor} vendor={vendor} size="sm" />
+                ))}
+              </span>
+            ) : null}
           </div>
           {/* Phones: the action drops under the text instead of squeezing it into a narrow column. */}
           {!row.done && row.action ? <div className="shrink-0 max-sm:basis-full max-sm:pl-7">{row.action}</div> : null}

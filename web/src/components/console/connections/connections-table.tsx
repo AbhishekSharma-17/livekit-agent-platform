@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowRightIcon, FlaskConicalIcon, KeyRoundIcon, PlugIcon, StarIcon, Trash2Icon } from "lucide-react";
 
-import { Icon, NewResourceButton, ResponsiveTable, RowMenu, StatusPill, Tag } from "@/components/shared";
+import { Icon, NewResourceButton, ResponsiveTable, RowMenu, StatusPill, Tag, VendorMark } from "@/components/shared";
 import type { RowMenuAction } from "@/components/shared/row-menu";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "@/components/shared/list-search";
@@ -112,7 +112,10 @@ export function ConnectionsTable() {
       header: "Type",
       cell: (connection) => (
         <div className="flex flex-col items-start gap-1">
-          <Tag>{typeLabel(connection)}</Tag>
+          <Tag>
+            <VendorMark vendor="LiveKit" size="sm" className="-ml-1 size-4 bg-transparent" />
+            {typeLabel(connection)}
+          </Tag>
           <span className="text-caption text-text-secondary">{modeLabel(connection)}</span>
         </div>
       ),
@@ -195,7 +198,10 @@ function ConnectionCard({ connection, query }: { connection: ConnectionOut; quer
         <ConnectionStatus connection={connection} />
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-secondary">
-        <span>{typeLabel(connection)}</span>
+        <span className="inline-flex items-center gap-1.5">
+          <VendorMark vendor="LiveKit" size="sm" className="size-4 bg-transparent" />
+          {typeLabel(connection)}
+        </span>
         <span aria-hidden="true">·</span>
         <span>{modeLabel(connection)}</span>
       </div>

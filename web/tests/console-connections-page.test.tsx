@@ -85,6 +85,8 @@ describe("ConnectionsTable", () => {
     // Status words come from the shared lifecycle map (docs/ui/DESIGN-SYSTEM.md 6.6): `ok` reads "Working".
     expect(table.getByText("Working")).toBeTruthy();
     expect(table.getByText("LiveKit Cloud")).toBeTruthy();
+    // LiveKit's own mark sits in the Type tag, beside the name.
+    expect(table.getByText("LiveKit Cloud").querySelector('[data-slot="vendor-mark"]')?.getAttribute("data-mark")).toBe("livekit");
     expect(screen.getAllByLabelText("Default connection").length).toBeGreaterThan(0);
   });
 

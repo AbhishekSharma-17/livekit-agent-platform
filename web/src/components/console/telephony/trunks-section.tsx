@@ -26,6 +26,7 @@ import { Section, SectionRow } from "@/components/shared/section";
 import { StatusPill } from "@/components/shared/status-chip";
 import { lifecycleStatus } from "@/components/shared/status-map";
 import { Tag } from "@/components/shared/tag";
+import { VendorMark } from "@/components/shared/vendor-mark";
 import { busyLabelFor } from "@/components/shared/busy-label";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
 import { ErrorBanner, errorMessage } from "@/components/console/shared/error-banner";
@@ -36,6 +37,16 @@ import { useCreateTrunk, useDeleteTrunk, useSyncTrunk, useTrunks } from "./hooks
 import { E164_PATTERN, type ProviderHint, sipEnabled, splitNumbers, type TrunkDirection } from "./model";
 
 const PROVIDER_LABEL: Record<ProviderHint, string> = { twilio: "Twilio", telnyx: "Telnyx", other: "Other" };
+
+/** The carrier's mark beside its name (decorative); any other SIP provider gets a plain server tile. */
+function CarrierMark({ hint }: { hint: ProviderHint }) {
+  if (hint !== "other") return <VendorMark vendor={PROVIDER_LABEL[hint]} className="mt-0.5" />;
+  return (
+    <span aria-hidden="true" className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-sm bg-muted-strong text-text-secondary">
+      <ServerIcon className="size-3.5" />
+    </span>
+  );
+}
 
 function directionLabel(trunk: TrunkOut): string {
   return trunk.direction === "inbound" ? "Inbound" : "Outbound";
@@ -65,13 +76,16 @@ export function TrunksSection({ connections }: { connections: ConnectionOut[] })
       id: "name",
       header: "Name",
       cell: (trunk) => (
-        <div className="min-w-0">
-          <p className="truncate font-medium text-foreground">
-            <Highlight text={trunk.name} query={query} />
-          </p>
-          <p className="truncate text-caption text-text-secondary">
-            {PROVIDER_LABEL[trunk.provider_hint ?? "other"]} · {connectionName(trunk.connection_id)}
-          </p>
+        <div className="flex min-w-0 items-start gap-2.5">
+          <CarrierMark hint={trunk.provider_hint ?? "other"} />
+          <div className="min-w-0">
+            <p className="truncate font-medium text-foreground">
+              <Highlight text={trunk.name} query={query} />
+            </p>
+            <p className="truncate text-caption text-text-secondary">
+              {PROVIDER_LABEL[trunk.provider_hint ?? "other"]} · {connectionName(trunk.connection_id)}
+            </p>
+          </div>
         </div>
       ),
     },

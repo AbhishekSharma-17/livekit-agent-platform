@@ -10,6 +10,8 @@ import { LoadingRegion } from "@/components/shared/loading-state";
 import { NoMatches } from "@/components/shared/empty-state";
 import { Tag, TagList } from "@/components/shared/tag";
 import { Icon } from "@/components/shared/icon";
+import { VendorMark } from "@/components/shared/vendor-mark";
+import { vendorMarkFor } from "@/components/shared/vendor-marks";
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useToolKits } from "@/components/console/lib/api-hooks";
@@ -98,8 +100,14 @@ function KitCardSkeleton() {
   );
 }
 
+/** The apps any of a kit's variants works with ("googlesheets", "airtable"), each once. */
+function kitApps(kit: ToolKit): string[] {
+  return [...new Set(kit.variants.flatMap((variant) => variant.requires?.apps ?? []))];
+}
+
 function KitCard({ kit, agent, query }: { kit: ToolKit; agent: AgentOut; query: string }) {
   const needs = kitNeeds(kit);
+  const apps = kitApps(kit);
   const gate = useWriteGate();
 
   return (
@@ -119,6 +127,16 @@ function KitCard({ kit, agent, query }: { kit: ToolKit; agent: AgentOut; query: 
         <TagList aria-label="Needs">
           {needs.map((need) => (
             <Tag key={need}>{need}</Tag>
+          ))}
+        </TagList>
+      ) : null}
+      {apps.length > 0 ? (
+        <TagList aria-label="Works with">
+          {apps.map((app) => (
+            <Tag key={app}>
+              <VendorMark vendor={app} size="sm" className="-ml-1 size-4 bg-transparent" />
+              {vendorMarkFor(app)?.title ?? app}
+            </Tag>
           ))}
         </TagList>
       ) : null}

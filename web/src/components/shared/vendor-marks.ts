@@ -22,6 +22,20 @@ import {
   lhTogether,
   lhVoyage,
   lhXai,
+  ofBeyondPresence,
+  ofCartesia,
+  ofComposio,
+  ofDid,
+  ofHume,
+  ofInworld,
+  ofPinecone,
+  ofRagie,
+  ofRime,
+  ofSpeechify,
+  ofSpeechmatics,
+  ofTavus,
+  ofWeaviate,
+  ofZilliz,
   siAirtable,
   siAnthropic,
   siAsana,
@@ -105,17 +119,23 @@ export type { VendorMarkIcon };
 /**
  * Third-party marks (docs/ui/DESIGN-SYSTEM.md section 5, "Third-party logos").
  *
- * One table from a vendor's normalised name to its official mark, from two
- * licence-clean sources. `scripts/gen-vendor-marks.mjs` copies each chosen
- * icon's path data into `vendor-mark-data.ts`, so only these paths reach the
- * bundle and the full packages are never parsed at run time:
+ * One table from a vendor's normalised name to its official mark, from three
+ * sources. `scripts/gen-vendor-marks.mjs` copies each chosen icon's path data
+ * into `vendor-mark-data.ts`, so only these paths reach the bundle and the
+ * full packages are never parsed at run time:
  *
  * 1. **Simple Icons** (`simple-icons`, CC0), wherever it has the brand.
  * 2. **Lobe Icons** (`@lobehub/icons-static-svg`, MIT) for the AI vendors it
  *    lacks (OpenAI, xAI, Cerebras, Groq, Cohere …).
- * 3. Otherwise the monogram in `VendorMark`. Never draw a mark by hand, and
- *    never borrow a different company's mark that shares the name (Simple
- *    Icons' "Rime" is an input method; its "X" is not xAI).
+ * 3. **Official** marks (`scripts/vendor-marks-official/`), each taken from the
+ *    company's own site or brand kit, for vendors neither package has.
+ *    docs/ui/VENDOR-MARKS.md records every source and the usage policy.
+ * 4. Otherwise the monogram in `VendorMark`. That includes brands whose
+ *    guidelines require a licence for logo use (Slack, Twilio, Salesforce,
+ *    Microsoft Outlook). Never draw a mark by hand, and never borrow a
+ *    different company's mark that shares the name (Simple Icons' "Rime" is an
+ *    input method, so Rime's mark is the official one from rime.ai; Simple
+ *    Icons' "X" is not xAI).
  *
  * Keys are `vendorKey(name)`: lower case, letters and digits only, so
  * "Mistral AI", "mistral-ai" and "mistralai" are one key.
@@ -250,8 +270,52 @@ const LOBE_ICONS: Readonly<Record<string, VendorMarkIcon>> = {
   azure: lhMicrosoft,
 };
 
-/** The merged table: Simple Icons first, Lobe Icons for the rest. */
-export const VENDOR_MARKS: Readonly<Record<string, VendorMarkIcon>> = { ...LOBE_ICONS, ...SIMPLE_ICONS };
+/**
+ * Vendors neither package has, from each company's own site or brand kit
+ * (`scripts/vendor-marks-official/manifest.json` records every source). Keys
+ * cover each label, slug and provider-id stem the console shows ("bey-avatar"
+ * resolves through "bey", "did-avatar" through "did").
+ */
+const OFFICIAL_MARKS: Readonly<Record<string, VendorMarkIcon>> = {
+  // Knowledge stores
+  pinecone: ofPinecone,
+  weaviate: ofWeaviate,
+  weaviatecloud: ofWeaviate,
+  zilliz: ofZilliz,
+  zillizcloud: ofZilliz,
+  ragie: ofRagie,
+  ragieai: ofRagie,
+  // Speech
+  cartesia: ofCartesia,
+  cartesiaai: ofCartesia,
+  speechmatics: ofSpeechmatics,
+  inworld: ofInworld,
+  inworldai: ofInworld,
+  rime: ofRime,
+  rimeai: ofRime,
+  rimelabs: ofRime,
+  hume: ofHume,
+  humeai: ofHume,
+  speechify: ofSpeechify,
+  // Tools
+  composio: ofComposio,
+  // Avatars
+  beyondpresence: ofBeyondPresence,
+  bey: ofBeyondPresence,
+  tavus: ofTavus,
+  did: ofDid,
+};
+
+/** The merged table: Simple Icons first, then Lobe Icons, then the official marks. */
+export const VENDOR_MARKS: Readonly<Record<string, VendorMarkIcon>> = { ...OFFICIAL_MARKS, ...LOBE_ICONS, ...SIMPLE_ICONS };
+
+/**
+ * Keys that always get the monogram, even where a leading word would match
+ * another mark. Each brand's guidelines require a licence or written
+ * permission to show its logo (docs/ui/VENDOR-MARKS.md), and Outlook must not
+ * borrow the Microsoft corporate mark through its "microsoft" prefix.
+ */
+export const MONOGRAM_ONLY: ReadonlySet<string> = new Set(["microsoftoutlook", "outlook", "slack", "twilio", "salesforce"]);
 
 /** "Mistral AI" / "mistral-ai" / "Cal.com" → "mistralai" / "mistralai" / "calcom". */
 export function vendorKey(vendor: string): string {
@@ -263,13 +327,19 @@ export function vendorKey(vendor: string): string {
  * monogram. A provider id falls back through its leading words
  * ("livekit-inference-stt" → "livekitinference"; "deepgram-flux-stt" →
  * "deepgram"), so a caller holding only an id still gets the vendor's mark.
+ * The walk stops at a `MONOGRAM_ONLY` key ("Microsoft Outlook" never falls
+ * through to "microsoft").
  */
 export function vendorMarkFor(vendor: string): VendorMarkIcon | null {
-  const exact = VENDOR_MARKS[vendorKey(vendor)];
+  const key = vendorKey(vendor);
+  if (MONOGRAM_ONLY.has(key)) return null;
+  const exact = VENDOR_MARKS[key];
   if (exact) return exact;
   const words = vendor.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   for (let n = words.length - 1; n >= 1; n--) {
-    const hit = VENDOR_MARKS[words.slice(0, n).join("")];
+    const prefix = words.slice(0, n).join("");
+    if (MONOGRAM_ONLY.has(prefix)) return null;
+    const hit = VENDOR_MARKS[prefix];
     if (hit) return hit;
   }
   return null;

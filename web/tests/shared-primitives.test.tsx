@@ -404,12 +404,12 @@ describe("Section, DescriptionList, VendorMark, CapabilityBadge, Kbd, RelativeTi
   });
 
   it("VendorMark falls back to a monogram with a stable tint, named only when labelled", () => {
-    const { container } = render(<VendorMark vendor="Cartesia" labelled />);
-    const mark = screen.getByRole("img", { name: "Cartesia" });
-    expect(mark.textContent).toBe("Ca");
+    const { container } = render(<VendorMark vendor="Gladia" labelled />);
+    const mark = screen.getByRole("img", { name: "Gladia" });
+    expect(mark.textContent).toBe("Gl");
     expect(mark.getAttribute("data-mark")).toBe("monogram");
     const first = mark.getAttribute("style");
-    const { container: second } = render(<VendorMark vendor="Cartesia" size="lg" />);
+    const { container: second } = render(<VendorMark vendor="Gladia" size="lg" />);
     const decorative = second.querySelector('[data-slot="vendor-mark"]');
     expect(decorative?.getAttribute("style")).toBe(first);
     expect(decorative?.getAttribute("aria-hidden")).toBe("true");

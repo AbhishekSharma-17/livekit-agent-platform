@@ -5,15 +5,16 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { VendorMark } from "@/components/shared/vendor-mark";
-import { VENDOR_MARKS, vendorKey, vendorMarkFor } from "@/components/shared/vendor-marks";
+import { MONOGRAM_ONLY, VENDOR_MARKS, vendorKey, vendorMarkFor } from "@/components/shared/vendor-marks";
 
 /**
- * The third-party mark table (docs/ui/DESIGN-SYSTEM.md section 5): every
- * vendor the console names resolves to its Simple Icons mark or, where
- * Simple Icons has none (or only another company's), to the monogram.
+ * The third-party mark table (docs/ui/DESIGN-SYSTEM.md section 5 and
+ * docs/ui/VENDOR-MARKS.md). Every vendor the console names resolves to its
+ * Simple Icons mark, else its Lobe Icons mark, else the official mark from the
+ * company's own site, else the monogram.
  */
 
-type Source = "simple-icons" | "lobehub";
+type Source = "simple-icons" | "lobehub" | "official";
 type Expected = [vendor: string, slug: string | null, source?: Source];
 
 /** Every vendor label in the provider registry (`contracts/generated/providers.json`) → expected mark. */
@@ -50,30 +51,33 @@ const REGISTRY: Expected[] = [
   ["Tavily", "tavily", "lobehub"],
   ["Amazon", "aws", "lobehub"],
   ["Microsoft", "microsoft", "lobehub"],
-  // Neither source has an official mark: monogram
-  ["Pinecone", null],
-  ["Weaviate", null],
-  ["Ragie", null],
-  ["Cartesia", null],
-  ["Speechmatics", null],
-  ["Inworld", null],
-  ["Hume", null],
-  ["Speechify", null],
+  // The company's own mark (scripts/vendor-marks-official/manifest.json)
+  ["Pinecone", "pinecone", "official"],
+  ["Weaviate", "weaviate", "official"],
+  ["Ragie", "ragie", "official"],
+  ["Cartesia", "cartesia", "official"],
+  ["Speechmatics", "speechmatics", "official"],
+  ["Inworld", "inworld", "official"],
+  ["Hume", "hume", "official"],
+  ["Speechify", "speechify", "official"],
+  ["Composio", "composio", "official"],
+  ["Beyond Presence", "beyondpresence", "official"],
+  ["Tavus", "tavus", "official"],
+  ["D-ID", "did", "official"],
+  // Simple Icons' "Rime" is an input method, never borrowed. This is rime.ai's own wordmark.
+  ["Rime", "rime", "official"],
+  // Logo use needs a licence or written permission (docs/ui/VENDOR-MARKS.md), so the monogram
   ["Twilio", null],
+  // No usable official mark (wordmark only, or the symbol only as a raster), so the monogram
   ["Telnyx", null],
-  ["Composio", null],
-  ["Beyond Presence", null],
   ["Simli", null],
-  ["Tavus", null],
   ["Anam", null],
-  ["D-ID", null],
+  // Not looked up yet, so the monogram
   ["LiveAvatar", null],
   ["LemonSlice", null],
   ["Gladia", null],
   ["Soniox", null],
   ["LKAP", null],
-  // Same name, different company in Simple Icons: never borrowed
-  ["Rime", null],
 ];
 
 /** Knowledge stores, apps and MCP servers the console shows. */
@@ -83,8 +87,9 @@ const SERVICES: Expected[] = [
   ["Postgres", "postgresql", "simple-icons"],
   ["Together AI", "together", "lobehub"],
   ["SambaNova", "sambanova", "lobehub"],
+  ["Zilliz", "zilliz", "official"],
+  // The mark depends on colour or tone a one-ink tile cannot carry (docs/ui/VENDOR-MARKS.md)
   ["Chroma", null],
-  ["Zilliz", null],
   ["Turbopuffer", null],
   ["Gmail", "gmail", "simple-icons"],
   ["Google Sheets", "googlesheets", "simple-icons"],
@@ -102,8 +107,9 @@ const SERVICES: Expected[] = [
   ["Stripe", "stripe", "simple-icons"],
   ["Atlassian (Jira, Confluence, Bitbucket, Loom)", "atlassian", "simple-icons"],
   ["Google Workspace", "google", "simple-icons"],
+  // Logo use needs a licence or written permission, and Outlook never borrows the Microsoft mark
   ["Outlook", null],
-  ["Microsoft Outlook", "microsoft", "lobehub"],
+  ["Microsoft Outlook", null],
   ["Slack", null],
   ["Salesforce", null],
 ];
@@ -122,7 +128,20 @@ const PROVIDER_IDS: Expected[] = [
   ["aws-polly-tts", "aws", "lobehub"],
   ["azure-tts", "microsoft", "lobehub"],
   ["cohere-rerank", "cohere", "lobehub"],
-  ["rime-tts", null],
+  ["rime-tts", "rime", "official"],
+  ["cartesia-tts", "cartesia", "official"],
+  ["speechmatics-stt", "speechmatics", "official"],
+  ["inworld-tts", "inworld", "official"],
+  ["hume-tts", "hume", "official"],
+  ["speechify-tts", "speechify", "official"],
+  ["bey-avatar", "beyondpresence", "official"],
+  ["tavus-avatar", "tavus", "official"],
+  ["did-avatar", "did", "official"],
+  ["twilio-sms", null],
+  ["telnyx-sms", null],
+  ["simli-avatar", null],
+  ["anam-avatar", null],
+  ["microsoft-outlook", null],
 ];
 
 describe("vendorMarkFor", () => {
@@ -154,8 +173,72 @@ describe("vendorMarkFor", () => {
   });
 });
 
+describe("monogram-only brands", () => {
+  it.each([...MONOGRAM_ONLY])("%s never resolves to a mark, as a label or an id prefix", (key) => {
+    expect(vendorMarkFor(key)).toBeNull();
+    expect(vendorMarkFor(`${key}-integration`)).toBeNull();
+  });
+});
+
+type Manifest = { marks: Record<string, { file: string; title: string; source: string; foundOn: string; guidelines: string; form: string; fetched: string; sha256: string }> };
+
+describe("official marks", () => {
+  const dir = path.resolve(__dirname, "../scripts/vendor-marks-official");
+  const manifest = JSON.parse(readFileSync(path.join(dir, "manifest.json"), "utf8")) as Manifest;
+  const officialInTable = new Set(
+    Object.values(VENDOR_MARKS)
+      .filter((icon) => icon.source === "official")
+      .map((icon) => icon.slug),
+  );
+
+  it.each(Object.entries(manifest.marks))("%s records its source, guideline note, date and hash, and is mapped", (_name, entry) => {
+    expect(entry.source).toMatch(/^https:\/\//);
+    expect(entry.foundOn).toMatch(/^https:\/\//);
+    expect(entry.guidelines.length).toBeGreaterThan(10);
+    expect(entry.form.length).toBeGreaterThan(10);
+    expect(entry.fetched).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(officialInTable.has(entry.file.replace(/\.svg$/, "")), entry.file).toBe(true);
+  });
+
+  it("follows the copy rule in every manifest note (no em dashes)", () => {
+    expect(readFileSync(path.join(dir, "manifest.json"), "utf8")).not.toContain("—");
+  });
+});
+
+describe("parseOfficialIcon", () => {
+  const ok = (body: string) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><title>T</title>\n${body}\n</svg>\n`;
+  const load = async () =>
+    (await import("../scripts/gen-vendor-marks.mjs")) as { parseOfficialIcon: (svg: string, file: string) => { d: string; fillRule?: string }[] };
+
+  it("reads plain paths and their fill rule", async () => {
+    const { parseOfficialIcon } = await load();
+    expect(parseOfficialIcon(ok('<path d="M0 0h24v24h-24z"/>\n<path fill-rule="evenodd" d="M1 1h2v2h-2z"/>'), "t.svg")).toEqual([
+      { d: "M0 0h24v24h-24z" },
+      { d: "M1 1h2v2h-2z", fillRule: "evenodd" },
+    ]);
+  });
+
+  it.each([
+    ["a script", ok('<script>alert(1)</script><path d="M0 0h24v24z"/>')],
+    ["a link", ok('<a href="https://example.com"><path d="M0 0h24v24z"/></a>')],
+    ["an embedded raster", ok('<image href="data:image/png;base64,AAAA"/>')],
+    ["a style", ok('<path style="fill:red" d="M0 0h24v24z"/>')],
+    ["a paint", ok('<path fill="#f00" d="M0 0h24v24z"/>')],
+    ["a transform", ok('<path transform="scale(2)" d="M0 0h24v24z"/>')],
+    ["an event handler", ok('<path onload="x()" d="M0 0h24v24z"/>')],
+    ["an external reference", ok('<path d="M0 0h24v24z" fill-rule="url(#x)"/>')],
+    ["another viewBox", ok('<path d="M0 0h24v24z"/>').replace("0 0 24 24", "0 0 48 48")],
+    ["a coloured root", ok('<path d="M0 0h24v24z"/>').replace('fill="currentColor"', 'fill="#000"')],
+  ])("rejects %s", async (_label, svg) => {
+    const { parseOfficialIcon } = await load();
+    expect(() => parseOfficialIcon(svg, "t.svg")).toThrow();
+  });
+});
+
 describe("vendor-mark-data.ts", () => {
-  it("matches simple-icons and @lobehub/icons-static-svg (rerun scripts/gen-vendor-marks.mjs when they change)", async () => {
+  it("matches simple-icons, @lobehub/icons-static-svg and scripts/vendor-marks-official (rerun scripts/gen-vendor-marks.mjs when they change)", async () => {
     const { render: generate } = (await import("../scripts/gen-vendor-marks.mjs")) as { render: () => Promise<string> };
     const current = readFileSync(path.resolve(__dirname, "../src/components/shared/vendor-mark-data.ts"), "utf8");
     expect(current).toBe(await generate());
@@ -206,11 +289,20 @@ describe("VendorMark", () => {
     expect(paths[0].getAttribute("fill-rule")).toBe("evenodd");
   });
 
+  it("draws an official mark from the company's own site, every path, in currentColor", () => {
+    const { container } = render(<VendorMark vendor="D-ID" />);
+    const mark = container.querySelector('[data-slot="vendor-mark"]')!;
+    expect(mark.getAttribute("data-mark")).toBe("did");
+    expect(mark.getAttribute("data-source")).toBe("official");
+    expect(mark.querySelector("svg")!.getAttribute("fill")).toBe("currentColor");
+    expect(mark.querySelectorAll("svg path").length).toBe(VENDOR_MARKS.did.paths.length);
+  });
+
   it("falls back to the monogram for a vendor with no mark", () => {
-    const { container } = render(<VendorMark vendor="Pinecone" />);
+    const { container } = render(<VendorMark vendor="Telnyx" />);
     const mark = container.querySelector('[data-slot="vendor-mark"]')!;
     expect(mark.getAttribute("data-mark")).toBe("monogram");
-    expect(mark.textContent).toBe("Pi");
+    expect(mark.textContent).toBe("Te");
     expect(mark.querySelector("svg")).toBeNull();
   });
 });

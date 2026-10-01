@@ -1,5 +1,5 @@
 {
-  "$comment": "Official vendor marks, the third source of scripts/gen-vendor-marks.mjs. Each SVG here was taken from the company's own site, brand page or brand kit on the date shown, then normalised to a 24 x 24 currentColor file (transforms applied, uniform scale, centred, strokes outlined, symbol isolated from a lockup where the brand itself uses the symbol alone). Shapes are never redrawn. sha256 is of the file as downloaded (for an inline header logo, of the <svg> element as cut from the page). docs/ui/VENDOR-MARKS.md holds the coverage table and the usage policy.",
+  "$comment": "Official vendor marks, the third source of scripts/gen-vendor-marks.mjs. Each SVG here was taken from the company's own site, brand page or brand kit on the date shown, then normalised to a 24 x 24 currentColor file (transforms applied, uniform scale, centred, strokes outlined, symbol isolated from a lockup where the brand itself uses the symbol alone). Shapes are never redrawn. sha256 is of the file as downloaded (for an inline header logo, of the <svg> element as cut from the page, with xmlns added where the element lacked it). docs/ui/VENDOR-MARKS.md holds the coverage table and the usage policy.",
   "marks": {
     "ofBeyondPresence": {
       "file": "beyondpresence.svg",

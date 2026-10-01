@@ -86,6 +86,13 @@ describe("design-lint rules", () => {
     ["legacy-token", 'className="transition-colors ease-out"'],
     ["legacy-token", 'const tone = "var(--danger)";'],
     ["legacy-token", ".x { box-shadow: var(--shadow-sm); }"],
+    // the house copy style has no em dash (UI-R2b)
+    ["em-dash", "<p>Save your changes first — a run plays the saved version.</p>"],
+    ["em-dash", 'toast.error("Couldn\'t save — try again");'],
+    ["em-dash", "const title = `${name} — live session`;"],
+    ["em-dash", 'aria-label={"Binding 1 \\u2014 card"}'],
+    ["em-dash", "<span>A &mdash; B</span>"],
+    ["em-dash", "<span>A &#8212; B</span>"],
   ])("flags %s in `%s`", (rule, source) => {
     expect(rules("src/components/x.tsx", source)).toContain(rule);
   });
@@ -106,6 +113,12 @@ describe("design-lint rules", () => {
     "const selected = items.filter(Boolean);",
     'className="rounded-lg shadow-raised"',
     'const url = "https://example.com/#cafe";',
+    // em dashes in comments are not copy; hyphens and middle dots are fine
+    "// the editor rail — see DESIGN-SYSTEM.md",
+    "/* one place — the token file */",
+    "{/* JSX comment — not rendered */}",
+    'const meta = "12 sessions · $0.40";',
+    'const hint = "A well-known, low-latency model.";',
   ])("does not flag `%s`", (source) => {
     expect(rules("src/components/x.tsx", source)).toEqual([]);
   });
@@ -190,6 +203,18 @@ describe("allowlist ratchet", () => {
   it("honours exempt prefixes per rule", () => {
     expect(lint("exempt opacity-colour src/components/").errors).toEqual([]);
     expect(lint("exempt palette-class src/components/").errors).toHaveLength(1);
+  });
+
+  it("fails an em dash in copy unless the file is exempt or holds a deliberate allowance", () => {
+    const copy = { "src/components/console/x.tsx": '<p>Save first — then run.</p>\nconst t = "a — b";' };
+    const run = (text: string) => (runDesignLint({ files: copy, tokenCss, allowlistText: text }) as { errors: string[] }).errors;
+    expect(run("")).toEqual([expect.stringContaining("2 em-dash violation(s), 0 allowed")]);
+    expect(run("allow em-dash 2 src/components/console/x.tsx  # keep: a quoted product name")).toEqual([]);
+    expect(run("exempt em-dash src/components/console/  vendored copy")).toEqual([]);
+    // the checked-in allowlist keeps the leave-alone trees out of the copy rule
+    const leaveAlone = { "src/panels/x.tsx": "<p>A — B</p>", "src/contracts/x.ts": 'const a = "A — B";' };
+    const errors = (runDesignLint({ files: leaveAlone, tokenCss, allowlistText }) as { errors: string[] }).errors;
+    expect(errors.filter((e) => e.includes("/x.ts"))).toEqual([]);
   });
 
   it("rejects unknown rules and malformed lines", () => {

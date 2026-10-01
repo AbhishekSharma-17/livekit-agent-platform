@@ -354,19 +354,6 @@ class ComposioAdapter:
             json={"endpoint": endpoint, "method": method, "connected_account_id": connected_account_id},
         )
 
-    async def create_mcp_server(
-        self, *, name: str, auth_config_ids: list[str], allowed_tools: list[str] | None = None
-    ) -> dict[str, Any]:
-        """``POST /mcp/servers`` (Composio marks this API deprecated in favour of sessions)."""
-        body: dict[str, Any] = {"name": name, "auth_config_ids": auth_config_ids}
-        if allowed_tools is not None:
-            body["allowed_tools"] = allowed_tools
-        return await self._object("POST", "/mcp/servers", json=body)
-
-    async def delete_mcp_server(self, server_id: str) -> None:
-        """``DELETE /mcp/{id}``."""
-        await self._call("DELETE", f"/mcp/{_seg(server_id)}")
-
     async def create_router_session(self, *, subject: str, options: dict[str, Any]) -> dict[str, Any]:
         """``POST /tool_router/session``."""
         return await self._object("POST", "/tool_router/session", json={**options, "user_id": subject})

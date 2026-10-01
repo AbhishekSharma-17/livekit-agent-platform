@@ -205,16 +205,6 @@ class ToolProviderAdapter(Protocol):
         """
         ...
 
-    async def create_mcp_server(
-        self, *, name: str, auth_config_ids: list[str], allowed_tools: list[str] | None = None
-    ) -> dict[str, Any]:
-        """Create an app server (MCP) config (V5-47)."""
-        ...
-
-    async def delete_mcp_server(self, server_id: str) -> None:
-        """Delete an app server config (V5-47)."""
-        ...
-
     async def create_router_session(self, *, subject: str, options: dict[str, Any]) -> dict[str, Any]:
         """Create a tool-finder (Tool Router) session (V5-47)."""
         ...

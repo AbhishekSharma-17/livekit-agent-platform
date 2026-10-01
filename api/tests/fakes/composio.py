@@ -445,15 +445,6 @@ class FakeComposio:
         result = canned(connected_account_id) if callable(canned) else canned
         return dict(copy.deepcopy(result))
 
-    async def create_mcp_server(
-        self, *, name: str, auth_config_ids: list[str], allowed_tools: list[str] | None = None
-    ) -> dict[str, Any]:
-        self._enter("create_mcp_server", name=name, auth_config_ids=auth_config_ids)
-        return {"id": self.world.next_id("mcp")}
-
-    async def delete_mcp_server(self, server_id: str) -> None:
-        self._enter("delete_mcp_server", server_id=server_id)
-
     async def create_router_session(self, *, subject: str, options: dict[str, Any]) -> dict[str, Any]:
         self._enter("create_router_session", subject=subject, options=options)
         session_id = self.world.next_id("trs")

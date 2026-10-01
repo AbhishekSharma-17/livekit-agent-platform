@@ -5,18 +5,18 @@
 > and bring-your-own stores), HTTP/MCP tools, lookup tables and tool kits,
 > connected apps through Composio, panels (a notebook, a drawing board and
 > more blocks), live extraction and rules, telephony, sessions, QA,
-> simulated-caller tests, caller memory, guardrails and costs — all reachable by a coding agent through one
+> simulated-caller tests, caller memory, guardrails and costs, all reachable by a coding agent through one
 > MCP server, `lkap` (package name lkap-mcp, `mcp/`). There is no CLI.
 
 Start with the platform guide, then the reference docs below. A coding agent
 should call `lkap_guide()` (an MCP tool the server exposes) rather than
-reading these files directly whenever that tool is available; the files
+reading these files directly whenever that tool is available. The files
 exist for Codex, generic agents, and anyone browsing the checkout.
 
 ## Guidance
 
 - [AGENTS.md](AGENTS.md): connect the MCP server, the workflow, the safety
-  rules — written for Codex and other agents that read this file
+  rules, written for Codex and other agents that read this file
   automatically.
 - [mcp/README.md](mcp/README.md): install for every client (Claude Code,
   Codex CLI, Cursor, generic), every environment variable, the tool catalog
@@ -27,20 +27,20 @@ exist for Codex, generic agents, and anyone browsing the checkout.
 
 ## Design docs
 
-- [docs/v3/AGENT-ACCESS.md](docs/v3/AGENT-ACCESS.md): the full design —
-  object model, the tool catalog, the console's connect flow, safety
-  mechanisms, remote mode.
+- [docs/v3/AGENT-ACCESS.md](docs/v3/AGENT-ACCESS.md): the full design
+  (object model, the tool catalog, the console's connect flow, safety
+  mechanisms, remote mode).
 - [docs/v2/HANDOFF.md](docs/v2/HANDOFF.md): the platform itself (connections,
   agents, packs, panels, telephony) below the agent-access layer.
-- [docs/v5/ARCHITECTURE-V5.md](docs/v5/ARCHITECTURE-V5.md): what v5 added —
-  the knowledge service, connected apps, MCP sign-in, caller files, consent,
+- [docs/v5/ARCHITECTURE-V5.md](docs/v5/ARCHITECTURE-V5.md): what v5 added
+  (the knowledge service, connected apps, MCP sign-in, caller files, consent,
   privacy, languages, tests, telephony, listen-in, guardrails, memory, panel
-  blocks — with an index of every v5 decision and ruling.
-- [docs/v6/ARCHITECTURE-V6.md](docs/v6/ARCHITECTURE-V6.md): what v6 added —
-  streaming speech and the recommended stacks, OpenRouter prices, the
+  blocks), with an index of every v5 decision and ruling.
+- [docs/v6/ARCHITECTURE-V6.md](docs/v6/ARCHITECTURE-V6.md): what v6 added
+  (streaming speech and the recommended stacks, OpenRouter prices, the
   notebook, drawing board and next panel blocks, tool context and bindings,
   live extraction and rules, lookup tables, the flow tool step, tool kits,
-  the claims-intake starter, avatar framing, connection names and workers —
+  the claims-intake starter, avatar framing, connection names and workers),
   with an index of every v6 decision and ruling
   ([docs/v6/README.md](docs/v6/README.md) indexes the v6 docs).
 

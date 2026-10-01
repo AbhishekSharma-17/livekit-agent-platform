@@ -1,10 +1,10 @@
-# V6-24 live check — the five next-block renderers
+# V6-24 live check for the five next-block renderers
 
-Not run in this sandbox: no dev server, worker restart or `pnpm build` was permitted here (ask
+Not run in this sandbox, because no dev server, worker restart or `pnpm build` was permitted here (ask
 #242). This is the coordinator's walk once a worker on V6-23's tools and a web build of this
-package are both up. Prerequisites: the worker restarted (V6-23's five builtin tools —
-`request_signature`, `show_chart`, `start_timer`, `show_code`, `cart_set` — must already be
-registered); no migration; a `Demo — ` agent with a `composite` panel carrying one block of each
+package are both up. Prerequisites: the worker restarted (V6-23's five builtin tools
+`request_signature`, `show_chart`, `start_timer`, `show_code` and `cart_set` must already be
+registered), no migration, a `Demo — ` agent with a `composite` panel carrying one block of each
 of the five types (`signature`, `chart`, `timer`, `code`, `cart`), or reuse `FIXTURE_LAYOUT`'s ids
 (`sign`, `claims_chart`, `timer`, `record`, `order`) by seeding the panel the same way. The PLAN's
 live rules apply: `Demo — ` objects only, a Builder key minted for the run and revoked after,
@@ -16,48 +16,48 @@ once it is run.
 `pnpm exec tsc --noEmit`, `pnpm lint` (0 errors), `pnpm exec vitest run` (153 files / 2696 tests,
 including the 28 new cases in `web/tests/panel-next-blocks.test.tsx` and the S6-8/S6-9 fixes'
 tests). Not run here: `e2e/a11y.spec.ts`'s five new `scene=blocks` routes (need `pnpm dev`/`next
-start`); `scripts/check-bundle.mjs` (needs a `next build` log) — all five renderers are
+start`), and `scripts/check-bundle.mjs` (needs a `next build` log). All five renderers are
 `React.lazy`, so `/s/[slug]`'s first load should be unaffected, but this was not measured.
 
-## 1. Text chat — the signature answers "needs the web page"
+## 1. Text chat, the signature answers "needs the web page"
 
-1. `chat_start` on the `Demo — ` agent; `chat_send("Can you have me sign the estimate?")`.
-2. The model calls `request_signature`; on a text channel the tool answers at once with "Nothing
-   can be signed here: a signature needs the web page." — no block state changes, no event
+1. `chat_start` on the `Demo — ` agent, then `chat_send("Can you have me sign the estimate?")`.
+2. The model calls `request_signature`. On a text channel the tool answers at once with "Nothing
+   can be signed here. A signature needs the web page." No block state changes and no event
    recorded. Confirm via `chat_send` that the model relays this in plain words.
 3. `show_chart`, `start_timer` and `show_code` all work on text chat too (they are not
-   voice/web-only) — `chat_send("Show me a chart of claims by month")` should produce a
+   voice/web-only). `chat_send("Show me a chart of claims by month")` should produce a
    `show_chart` call and a description of it in `describe_panel`'s next read.
 
-## 2. Voice session — the full walk (needs the console or a WebRTC test harness)
+## 2. Voice session, the full walk (needs the console or a WebRTC test harness)
 
 Connect to the session's room with a browser (the console's session page, or `/s/<slug>` directly)
 so the five blocks are visible.
 
 ### Signature
 
-1. Say "Can you have me sign the repair estimate?" The model calls `request_signature`; the
+1. Say "Can you have me sign the repair estimate?" The model calls `request_signature`. The
    `signature` block shows the disclosure wording as plain text, a small drawing pad and Sign / Not
    now (unless the block's `allow_decline` is off).
-2. Draw something in the pad with the mouse or a touchscreen — confirm no network activity happens
-   yet (the strokes are local only; watch the room's `lkap.ui.ink` stream in devtools/the listen-in
+2. Draw something in the pad with the mouse or a touchscreen. Confirm no network activity happens
+   yet (the strokes are local only. Watch the room's `lkap.ui.ink` stream in devtools/the listen-in
    tab and confirm nothing is sent there for this block).
-3. Tap Sign. Confirm: (a) `block_submit {values: {signed: true}}` fires; (b) shortly after, the
+3. Tap Sign. Confirm: (a) `block_submit {values: {signed: true}}` fires, (b) shortly after, the
    worker's `lkap.ui.request {method: "snapshot"}` arrives for this block and the page answers with
-   one PNG on `lkap.ui.upload` (≤ 1 MiB); (c) the block settles to "Signed" with a timestamp and (if
-   `panel.assets` resolves the stored picture) a small thumbnail; (d) a `signature` session event is
-   recorded with a `text_hash` and no picture bytes; (e) the model acknowledges briefly.
-4. Repeat and tap **Not now** instead — confirm `{signed: false}`, no snapshot request, the block
+   one PNG on `lkap.ui.upload` (≤ 1 MiB), (c) the block settles to "Signed" with a timestamp and (if
+   `panel.assets` resolves the stored picture) a small thumbnail, (d) a `signature` session event is
+   recorded with a `text_hash` and no picture bytes, and (e) the model acknowledges briefly.
+4. Repeat and tap **Not now** instead and confirm `{signed: false}`, no snapshot request, the block
    shows "Not signed", and the model respects it without pressing further.
-5. Repeat once more and **speak over the request** (barge-in) before signing — confirm the block
+5. Repeat once more and **speak over the request** (barge-in) before signing, and confirm the block
    goes to `cancelled` (nothing to press) and the model asks whether to try again (R-V5-1).
 
 ### Timer
 
-1. Say "Give me two minutes to find my policy number." The model calls `start_timer`; the `timer`
+1. Say "Give me two minutes to find my policy number." The model calls `start_timer`. The `timer`
    block shows a countdown from the page's own clock (confirm it does **not** jump if the browser's
-   clock is skewed from the server's — the acceptance test for this).
-2. Let it run out (or start one with `duration_s=30` for a faster check): confirm `timer_ended` is
+   clock is skewed from the server's, which is the acceptance test for this).
+2. Let it run out (or start one with `duration_s=30` for a faster check). Confirm `timer_ended` is
    recorded, the model is told in one line and says something appropriate, and the block shows
    "Time's up".
 
@@ -73,7 +73,7 @@ so the five blocks are visible.
 ### Code
 
 1. Ask the agent to "show me the raw policy record." Confirm `show_code` renders the JSON (or
-   whichever language) as plain fixed-width text — never as Markdown (a payload with a literal
+   whichever language) as plain fixed-width text, never as Markdown (a payload with a literal
    ```` ``` ```` fence inside it must render as visible text, not break the block).
 
 ### Cart

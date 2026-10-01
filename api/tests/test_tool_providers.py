@@ -236,6 +236,7 @@ async def test_key_test_fallback_still_refuses_a_bad_key(
     assert body["ok"] is False
 
 
+@pytest.mark.usefixtures("frozen_rate_limiter")
 async def test_key_test_is_rate_limited_per_workspace(
     admin_client: httpx.AsyncClient, world: ComposioWorld
 ) -> None:
@@ -706,6 +707,7 @@ async def test_an_unknown_flow_leaves_no_audit_row(
     assert await _audit_rows(database, "apps.connect.failed") == []
 
 
+@pytest.mark.usefixtures("frozen_rate_limiter")
 async def test_callback_is_rate_limited_per_client(client: httpx.AsyncClient, world: ComposioWorld) -> None:
     from lkap_api.tool_providers.router import CALLBACK_PER_MIN
 

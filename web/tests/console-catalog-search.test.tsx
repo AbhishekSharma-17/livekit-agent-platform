@@ -80,34 +80,65 @@ async function openDialog() {
   return screen.findByRole("dialog");
 }
 
+/**
+ * The dialog's footer, where Previous and Next live. A role query across the
+ * whole dialog also weighs the 200 rows' Test buttons, and jsdom computes the
+ * accessible name and visibility of every candidate: 3 to 5 s per lookup under
+ * the full suite's load, four lookups per test. Scoped to the footer, the same
+ * role and name query costs a few milliseconds.
+ */
+function pager(dialog: HTMLElement) {
+  const footer = dialog.querySelector<HTMLElement>('[data-slot="dialog-footer"]');
+  if (!footer) throw new Error("the catalog dialog has no footer");
+  return within(footer);
+}
+
+/**
+ * Waits for the range line to read `text`. Each step behind it re-renders a
+ * 200-row list, and the search step also spans the 250 ms debounce, a fetch at
+ * the old offset and the reset to page one; under load that chain can outlast
+ * `waitFor`'s 1 s default, so the wait gets an explicit budget well inside the
+ * test's 20 s.
+ */
+async function expectRange(dialog: HTMLElement, text: string | RegExp) {
+  await waitFor(
+    () => {
+      const range = within(dialog).getByTestId("catalog-range").textContent;
+      if (typeof text === "string") expect(range).toBe(text);
+      else expect(range).toMatch(text);
+    },
+    { timeout: 10_000 },
+  );
+}
+
 describe("Catalog dialog — paging and search", () => {
   it("pages 200 at a time and shows the api's total", async () => {
     const { calls } = stub("admin");
     withClient(<CatalogDialog provider={OPENROUTER} />);
     const dialog = await openDialog();
-    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 1 to 200 of 458"));
+    await expectRange(dialog, "Showing 1 to 200 of 458");
     expect(calls.find((c) => c.url.includes("/catalog"))?.url).toContain("limit=200");
 
-    fireEvent.click(within(dialog).getByRole("button", { name: /Next/ }));
-    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 201 to 400 of 458"));
+    fireEvent.click(pager(dialog).getByRole("button", { name: /Next/ }));
+    await expectRange(dialog, "Showing 201 to 400 of 458");
     expect(calls.some((c) => c.url.includes("offset=200"))).toBe(true);
-    fireEvent.click(within(dialog).getByRole("button", { name: /Next/ }));
-    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 401 to 458 of 458"));
-    expect(within(dialog).getByRole("button", { name: /Next/ }).hasAttribute("disabled")).toBe(true);
-    fireEvent.click(within(dialog).getByRole("button", { name: /Previous/ }));
-    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 201 to 400 of 458"));
+    fireEvent.click(pager(dialog).getByRole("button", { name: /Next/ }));
+    await expectRange(dialog, "Showing 401 to 458 of 458");
+    expect(pager(dialog).getByRole("button", { name: /Next/ }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(pager(dialog).getByRole("button", { name: /Previous/ }));
+    await expectRange(dialog, "Showing 201 to 400 of 458");
   });
 
   it("search asks the api's cached list (`q`, never the vendor) and starts again on page one", async () => {
     const { calls } = stub("admin");
     withClient(<CatalogDialog provider={OPENROUTER} />);
     const dialog = await openDialog();
-    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 1 to 200 of 458"));
-    fireEvent.click(within(dialog).getByRole("button", { name: /Next/ }));
-    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toContain("201 to 400"));
+    await expectRange(dialog, "Showing 1 to 200 of 458");
+    fireEvent.click(pager(dialog).getByRole("button", { name: /Next/ }));
+    await expectRange(dialog, /201 to 400/);
 
     fireEvent.change(within(dialog).getByRole("searchbox", { name: /Search the models/ }), { target: { value: "gemini" } });
-    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 1 to 30 of 30"));
+    await expectRange(dialog, "Showing 1 to 30 of 30");
     expect(within(dialog).getByText("Gemini 0", { selector: "p" })).toBeTruthy();
     expect(within(dialog).queryByText("Model 40")).toBeNull();
     const search = calls.filter((c) => c.url.includes("q=gemini"));

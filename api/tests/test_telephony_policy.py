@@ -160,6 +160,7 @@ async def test_policy_less_workspace_is_422_with_an_actionable_message(
 
 
 # ------------------------------------------------------------------------ bucket
+@pytest.mark.usefixtures("frozen_rate_limiter")
 async def test_eleventh_call_in_a_minute_is_429_and_audited(
     admin_client: httpx.AsyncClient, world: World, database: Database
 ) -> None:

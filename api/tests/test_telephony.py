@@ -1180,6 +1180,7 @@ async def test_policy_set_through_the_workspace_route_opens_dialing(
     assert call.status_code == 201, call.text
 
 
+@pytest.mark.usefixtures("frozen_rate_limiter")
 async def test_eleventh_call_in_a_minute_is_429_rate_limited(
     admin_client: httpx.AsyncClient, world: World, database: Database
 ) -> None:

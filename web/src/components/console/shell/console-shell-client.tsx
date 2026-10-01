@@ -98,11 +98,14 @@ function ShellFrame({ children, tabBarHiddenByPage }: { children: React.ReactNod
 
 /**
  * The console app shell (docs/ui/DESIGN-SYSTEM.md sections 7.1 and 7.2), the
- * client half of `app/console/layout.tsx`:
+ * client half of `app/console/layout.tsx` (`console-shell.tsx` is the server
+ * half, which reads the remembered sidebar state from its cookie):
  *
- * - wider than 820 px: the 248 px sidebar on the app background and the
- *   inset main panel (8 px inset, 12 px radius, hairline, raised shadow)
- *   holding the sticky frosted top bar and `<main id="main-content">`;
+ * - wider than 820 px: the 248 px sidebar on the app background (or the
+ *   58 px icon rail once collapsed, `defaultCollapsed` on the first paint)
+ *   and the inset main panel (8 px inset, 12 px radius, hairline, raised
+ *   shadow) holding the sticky frosted top bar and `<main id="main-content">`.
+ *   The panel is `flex-1`, so it fills whatever the sidebar leaves;
  * - 820 px and below: no sidebar, a full-bleed panel and a hamburger that
  *   opens the full-screen Menu dialog;
  * - 640 px and below: the phone bottom tab bar, with the page and toasts
@@ -112,12 +115,19 @@ function ShellFrame({ children, tabBarHiddenByPage }: { children: React.ReactNod
  * elements keep working. `TooltipProvider` stays above everything that
  * renders a Radix tooltip.
  */
-export function ConsoleShell({ children }: { children: React.ReactNode }) {
+export function ConsoleShellClient({
+  children,
+  defaultCollapsed = false,
+}: {
+  children: React.ReactNode;
+  /** The desktop sidebar starts as the icon rail (the remembered choice). */
+  defaultCollapsed?: boolean;
+}) {
   return (
     <ConsoleQueryProvider>
       <BreadcrumbProvider>
         <TooltipProvider>
-          <SidebarProvider>
+          <SidebarProvider defaultCollapsed={defaultCollapsed}>
             <BottomTabBarProvider>
               {(hidden) => <ShellFrame tabBarHiddenByPage={hidden}>{children}</ShellFrame>}
             </BottomTabBarProvider>

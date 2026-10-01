@@ -9,6 +9,7 @@ import { Icon } from "@/components/shared/icon";
 import { StateMeter } from "@/components/shared/state-meter";
 import {
   Sidebar,
+  SidebarCollapseTrigger,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
@@ -18,6 +19,8 @@ import {
   SidebarMenuButton,
   SidebarMenuDialog,
   SidebarMenuItem,
+  SidebarMenuLabel,
+  SidebarRailTooltip,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useHealth } from "@/components/console/lib/api-hooks";
@@ -26,15 +29,26 @@ import { NAV_GROUPS, isNavItemActive, type NavItem } from "./nav-config";
 import { useLiveSessionCount } from "./nav-state";
 import { AccountMenu } from "./account-menu";
 
-/** The Sessions link's live indicator: a 7 px pulsing dot with its count for screen readers. */
+/**
+ * The Sessions link's live indicator: a 7 px pulsing dot with its count for
+ * screen readers. In the icon rail it moves onto the icon's top right corner.
+ */
 function LiveDot({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span className="ml-auto flex items-center">
+    <span
+      data-slot="sidebar-live-dot"
+      className="ml-auto flex items-center group-data-[state=collapsed]/sidebar:absolute group-data-[state=collapsed]/sidebar:top-1.5 group-data-[state=collapsed]/sidebar:left-[27px]"
+    >
       <span aria-hidden="true" data-slot="status-dot" data-pulse="" className="size-[7px] rounded-pill bg-brand" />
       <span className="sr-only">, {count} live</span>
     </span>
   );
+}
+
+/** In the icon rail (desktop only), a link's name also shows in a tooltip. */
+function RailTooltip({ label, touch, children }: { label: string; touch: boolean; children: React.ReactElement }) {
+  return touch ? children : <SidebarRailTooltip label={label}>{children}</SidebarRailTooltip>;
 }
 
 /**
@@ -42,12 +56,18 @@ function LiveDot({ count }: { count: number }) {
  * wordmark, the nav grouped by job, then the account menu at the foot above a
  * hairline. Rendered twice from one component: in the desktop sidebar, and in
  * the full-screen Menu dialog at 820 px and below (48 px rows there).
+ *
+ * On desktop the header also holds the collapse control. Collapsed, the
+ * sidebar is a 58 px icon rail: the wordmark and the link labels fade (the
+ * links keep their names), each link gets a tooltip, the live dot sits on
+ * its icon and the account menu is just the avatar. The Menu dialog never
+ * collapses.
  */
 function SidebarBody({ touch = false }: { touch?: boolean }) {
   const pathname = usePathname() ?? "/console";
   const { data: health } = useHealth();
   const liveCount = useLiveSessionCount();
-  const { setMenuOpen } = useSidebar();
+  const { setMenuOpen, collapsed } = useSidebar();
   const docsUrl = process.env.NEXT_PUBLIC_DOCS_URL;
   // In the Menu dialog, following a link closes it (focus goes back to the hamburger).
   const onNavigate = touch ? () => setMenuOpen(false) : undefined;
@@ -56,31 +76,40 @@ function SidebarBody({ touch = false }: { touch?: boolean }) {
     const active = isNavItemActive(item, pathname);
     return (
       <SidebarMenuItem key={item.href}>
-        <SidebarMenuButton asChild isActive={active} size={touch ? "touch" : "default"}>
-          <Link href={item.href} onClick={onNavigate}>
-            <Icon as={item.icon} size="nav" />
-            <span>{item.label}</span>
-            {item.href === "/console/sessions" ? <LiveDot count={liveCount} /> : null}
-          </Link>
-        </SidebarMenuButton>
+        <RailTooltip label={item.label} touch={touch}>
+          <SidebarMenuButton asChild isActive={active} size={touch ? "touch" : "default"}>
+            <Link href={item.href} onClick={onNavigate}>
+              <Icon as={item.icon} size="nav" />
+              <SidebarMenuLabel>{item.label}</SidebarMenuLabel>
+              {item.href === "/console/sessions" ? <LiveDot count={liveCount} /> : null}
+            </Link>
+          </SidebarMenuButton>
+        </RailTooltip>
       </SidebarMenuItem>
     );
   };
 
   return (
     <>
-      <SidebarHeader className={touch ? "pr-12" : undefined}>
+      <SidebarHeader
+        className={
+          touch
+            ? "pr-12"
+            : "group-data-[state=collapsed]/sidebar:flex-col group-data-[state=collapsed]/sidebar:items-stretch group-data-[state=collapsed]/sidebar:gap-1"
+        }
+      >
         <Link
           href="/console"
           onClick={onNavigate}
-          className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded px-2 outline-none focus-visible:shadow-focus"
+          className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded px-2 outline-none focus-visible:shadow-focus group-data-[state=collapsed]/sidebar:flex-none group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
         >
           <StateMeter state="idle" size="sm" bars={4} />
-          <span className="min-w-0 flex-1 truncate text-control">
+          <span className="min-w-0 flex-1 truncate text-control group-data-[state=collapsed]/sidebar:sr-only">
             <span className="font-semibold text-foreground">LKAP</span>{" "}
             <span className="font-normal text-text-secondary">Console</span>
           </span>
         </Link>
+        {touch ? null : <SidebarCollapseTrigger className="group-data-[state=collapsed]/sidebar:self-center" />}
       </SidebarHeader>
       <SidebarContent>
         <nav aria-label="Console" className="flex flex-col gap-4">
@@ -99,17 +128,22 @@ function SidebarBody({ touch = false }: { touch?: boolean }) {
       </SidebarContent>
       <SidebarFooter>
         {docsUrl ? (
-          <a
-            href={docsUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            className={cn(touch ? "h-12" : "h-[34px]", "flex items-center gap-2.5 rounded px-2.5 text-control font-medium text-text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-sidebar-hover hover:text-foreground focus-visible:shadow-focus")}
-          >
-            <Icon as={ExternalLinkIcon} size="nav" />
-            <span className="min-w-0 flex-1 truncate">Documentation</span>
-          </a>
+          <RailTooltip label="Documentation" touch={touch}>
+            <a
+              href={docsUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className={cn(
+                touch ? "h-12" : "h-[34px]",
+                "flex items-center gap-2.5 rounded px-2.5 text-control font-medium whitespace-nowrap text-text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-sidebar-hover hover:text-foreground focus-visible:shadow-focus",
+              )}
+            >
+              <Icon as={ExternalLinkIcon} size="nav" />
+              <SidebarMenuLabel>Documentation</SidebarMenuLabel>
+            </a>
+          </RailTooltip>
         ) : null}
-        <AccountMenu version={health?.version} touch={touch} />
+        <AccountMenu version={health?.version} touch={touch} rail={!touch && collapsed} />
       </SidebarFooter>
     </>
   );

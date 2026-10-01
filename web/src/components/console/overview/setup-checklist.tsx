@@ -72,7 +72,7 @@ export function SetupChecklist() {
       id: "sign-in",
       title: "Sign in",
       help: authUnavailable
-        ? "Workspace accounts aren't set up yet — the console is reachable directly."
+        ? "Workspace accounts aren't set up yet. The console is reachable directly."
         : "You're signed in to this workspace.",
       done: true,
     },

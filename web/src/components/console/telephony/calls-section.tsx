@@ -178,7 +178,7 @@ export function CallsSection() {
             variant="plain"
             icon={PhoneIcon}
             title="No calls yet"
-            description="Inbound calls appear once a number is routed; place one from an agent's Test call menu."
+            description="Inbound calls appear once a number is routed. Place one from an agent's Test call menu."
           />
         </SectionRow>
       ) : (

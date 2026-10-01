@@ -55,8 +55,8 @@ export function DeleteConnectionDialog({
         <li>The connection&apos;s settings and its worker settings</li>
       </ul>
       <p>
-        Agents bound to this connection block the delete: move them to another connection first.
-        {connection.is_default ? " The default connection can't be deleted either: make another one the default first." : null}
+        Agents bound to this connection block the delete. Move them to another connection first.
+        {connection.is_default ? " The default connection can't be deleted either. Make another one the default first." : null}
       </p>
     </TypedConfirmDialog>
   );

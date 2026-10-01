@@ -210,7 +210,7 @@ export function WorkspacePricesDialog({ open, onOpenChange, prefill }: Workspace
           <DialogTitle>Your prices</DialogTitle>
           <DialogDescription>
             Prices you enter here are used by every estimate and cost line before OpenRouter&apos;s live sheet and
-            the list-price table — for vendors billed by plan, where no published per-unit price exists.
+            the list-price table. Use them for vendors billed by plan, where no published per-unit price exists.
           </DialogDescription>
         </DialogHeader>
         <DialogBody>

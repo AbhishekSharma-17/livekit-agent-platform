@@ -360,7 +360,7 @@ export function ConnectionCreateForm() {
         </div>
         {!testPassed && testResult ? (
           <p className="text-right text-caption text-text-secondary">
-            {testedPayloadKey !== payloadKey ? "Details changed since the last test — test again to enable Save." : "Save unlocks once the test passes."}
+            {testedPayloadKey !== payloadKey ? "Details changed since the last test. Test again to enable Save." : "Save unlocks once the test passes."}
           </p>
         ) : null}
       </div>

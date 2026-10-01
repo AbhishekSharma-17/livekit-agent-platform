@@ -123,7 +123,7 @@ export const TRANSCRIPT_WARNING =
   "Your coding agent stores every tool call, including any LiveKit or vendor secret you paste into the chat, " +
   "in its own local transcript on your machine, and any hooks or plugins it runs may copy that same tool-call " +
   "input into their own logs before LKAP ever sees it. LKAP itself never shows a secret again after you paste " +
-  "it. Prefer a reference instead: give the agent an env:NAME or file:~/.config/lkap/dev.env#NAME value. " +
+  "it. Prefer a reference instead. Give the agent an env:NAME or file:~/.config/lkap/dev.env#NAME value. " +
   "Paste a secret only if you accept those local copies.";
 
 /** R-V3-40 (verdict C1): the acknowledgement checkbox label, widened the same way as {@link TRANSCRIPT_WARNING}. */

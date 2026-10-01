@@ -643,7 +643,7 @@ function JsonTextarea({
               onChange(JSON.stringify(JSON.parse(value), null, 2));
               setFormatError(null);
             } catch {
-              setFormatError("Not valid JSON — check commas and quotes.");
+              setFormatError("Not valid JSON. Check commas and quotes.");
             }
           }}
         >
@@ -746,7 +746,7 @@ function CatalogPickerField({
   const [search, setSearch] = React.useState("");
   const searchId = `${id}-search`;
 
-  const note = isError ? "Couldn't load the catalog — paste the id instead." : (data?.error ?? null);
+  const note = isError ? "Couldn't load the catalog. Paste the id instead." : (data?.error ?? null);
 
   if (manual || (!isLoading && items.length === 0)) {
     return (

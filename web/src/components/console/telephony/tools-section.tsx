@@ -146,7 +146,7 @@ export function PhoneCallsCard() {
             </h3>
             <p className="mt-0.5 max-w-[72ch] text-label text-text-secondary">
               The only people or numbers the agent may transfer a caller to. Use a number like +15551234567 or a
-              sip: address; each must be allowed by the workspace&apos;s outbound dialing policy (Telephony page).
+              sip: address. Each must be allowed by the workspace&apos;s outbound dialing policy (Telephony page).
             </p>
           </div>
           {fields.length > 0 ? (
@@ -225,7 +225,7 @@ export function PhoneCallsCard() {
             </ul>
           ) : (
             <p className="text-label text-text-secondary">
-              No destinations: the agent cannot transfer calls.
+              No destinations. The agent cannot transfer calls.
             </p>
           )}
           <div>
@@ -389,8 +389,8 @@ export function SmsContactsCard() {
   return (
     <Section
       id="tools-sms-contacts"
-      title="Send a text message — saved contacts"
-      description="On a phone call, the agent can text the caller automatically. To let it text anyone else — on a phone call, a browser chat or a text chat — save their number here with a name; the agent can only pick from this list, never a number typed on the spot."
+      title="Send a text message: saved contacts"
+      description="On a phone call, the agent can text the caller automatically. To let it text anyone else (on a phone call, a browser chat or a text chat), save their number here with a name. The agent can only pick from this list, never a number typed on the spot."
     >
       <SectionRow>
         <div className="flex flex-col gap-3">
@@ -444,7 +444,7 @@ export function SmsContactsCard() {
             </ul>
           ) : (
             <p className="text-label text-text-secondary">
-              No saved contacts: off a phone call, the agent has no one to text.
+              No saved contacts. Off a phone call, the agent has no one to text.
             </p>
           )}
           <div>

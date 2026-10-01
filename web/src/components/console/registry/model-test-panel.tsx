@@ -146,7 +146,7 @@ export function useTestedState(
   return { state, record: sendable ? (record.data ?? null) : null, fingerprint };
 }
 
-/** "Too many tests right now — try again in 12 s." and friends; never repeats the model id. */
+/** "Too many tests right now. Try again in 12 s." and friends; never repeats the model id. */
 export function testErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 429) {
@@ -154,8 +154,8 @@ export function testErrorMessage(error: unknown): string {
       const retry = details.retry_after_s ?? details.retry_after;
       const seconds = typeof retry === "number" && Number.isFinite(retry) ? Math.max(1, Math.ceil(retry)) : null;
       return seconds
-        ? `Too many tests right now — try again in ${seconds} s.`
-        : "Too many tests right now — try again in a minute.";
+        ? `Too many tests right now. Try again in ${seconds} s.`
+        : "Too many tests right now. Try again in a minute.";
     }
     if (error.status === 403) return "Testing a model needs the builder role or higher.";
     if (error.status === 422) return `Couldn't run the test: ${error.message}`;
@@ -427,7 +427,7 @@ export function ModelTestPanel({
         {costLine}
       </p>
       <p className="text-caption text-pretty text-text-secondary" data-testid="test-caveat">
-        A pass proves the vendor accepts this model with this key, not that the agent can load it; the first call checks that.
+        A pass proves the vendor accepts this model with this key, not that the agent can load it. The first call checks that.
       </p>
       {result.cached && onRunAgain ? (
         <Button type="button" size="sm" className="self-start" onClick={onRunAgain}>

@@ -264,7 +264,7 @@ export function useTestModel(providerId: string) {
   return useMutation<ModelTestResult, Error, ModelTestRequest>({
     mutationFn: async (body) => {
       if (!isSendableModelId(body.model)) {
-        throw new ApiError(422, "invalid_model_id", "The model id can't be tested: fix it first.");
+        throw new ApiError(422, "invalid_model_id", "The model id can't be tested. Fix it first.");
       }
       return api.post<ModelTestResult>(`providers/${providerId}/test-model`, body);
     },
@@ -280,7 +280,7 @@ export function useDeclareModel(providerId: string) {
   return useMutation<ProviderModelOut, Error, { modelId: string; declared: ModelCapabilities }>({
     mutationFn: async ({ modelId, declared }) => {
       if (!isSendableModelId(modelId)) {
-        throw new ApiError(422, "invalid_model_id", "The model id can't be saved: fix it first.");
+        throw new ApiError(422, "invalid_model_id", "The model id can't be saved. Fix it first.");
       }
       return api.put<ProviderModelOut>(`providers/${providerId}/models/${modelIdPath(modelId)}`, { declared });
     },

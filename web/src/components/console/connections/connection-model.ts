@@ -89,7 +89,7 @@ export function instanceStatusLabel(status: WorkerInstanceOut["status"] | undefi
 
 /** The Agent name field's hint, on the create form and the edit form. */
 export const AGENT_NAME_HINT =
-  "Workers register under this name. Must be unique on this LiveKit server — if another app or connection uses it, calls get split between them.";
+  "Workers register under this name. Must be unique on this LiveKit server. If another app or connection uses it, calls get split between them.";
 
 /** The api's 409 code when another connection uses the agent name on the same LiveKit server. */
 export const AGENT_NAME_IN_USE = "agent_name_in_use";
@@ -105,11 +105,11 @@ type DeploymentMode = NonNullable<ConnectionOut["deployment_mode"]>;
 
 /** Shown under Deployment mode on the create form. */
 export const WORKER_NEEDED_NOTE =
-  "Each connection needs its own worker. After you create this connection, start a worker for it — agents bound here won't answer calls until one is running.";
+  "Each connection needs its own worker. After you create this connection, start a worker for it. Agents bound here won't answer calls until one is running.";
 
 /** Who starts that worker, per mode (the create form's note). */
 export const WORKER_START_BY_MODE: Record<DeploymentMode, string> = {
-  external: "External: you start it — the connection's page gives you its worker settings and the start command.",
+  external: "External: you start it. The connection's page gives you its worker settings and the start command.",
   supervised: "Supervised: LKAP starts it once you press Start on the connection's Fleet tab.",
   cloud_hosted: "Cloud-hosted: deploy it to LiveKit Cloud with the bundle from the connection's Deploy tab.",
 };

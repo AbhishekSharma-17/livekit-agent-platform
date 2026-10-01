@@ -51,7 +51,7 @@ function useCompliance(workspaceId: string | undefined) {
 
 const TITLE = "Consent and disclosure";
 const DESCRIPTION =
-  "What callers are told, and asked, before an agent records them or tells them it's an AI. A starting point, not legal advice: have counsel review every wording for where you operate.";
+  "What callers are told, and asked, before an agent records them or tells them it's an AI. A starting point, not legal advice. Have counsel review every wording for where you operate.";
 
 export function ComplianceTab() {
   const { workspace: membership, isLoading: meLoading } = useActiveWorkspace();

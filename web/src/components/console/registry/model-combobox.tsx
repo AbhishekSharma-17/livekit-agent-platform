@@ -388,7 +388,7 @@ function ModelComboboxView({
         <Command shouldFilter={false} label="Models">
           <CommandInput value={query} onValueChange={setQuery} placeholder="Search models or type an id" />
           {provider && isOpenRouterSpeech(provider.id) ? (
-            <p className="px-3 pt-2 text-caption text-warning-text">Not for live calls — OpenRouter answers one whole request per utterance.</p>
+            <p className="px-3 pt-2 text-caption text-warning-text">Not for live calls. OpenRouter answers one whole request per utterance.</p>
           ) : null}
           {hasVision ? (
             <div className="flex items-center gap-2 px-3 pt-2 text-caption text-text-secondary">
@@ -452,7 +452,7 @@ function ModelComboboxView({
                     <span>Catalog</span>
                     <span className="font-normal tabular-nums">
                       {visibleCatalogAll.length > CATALOG_RENDER_CAP
-                        ? `${CATALOG_RENDER_CAP} of ${visibleCatalogAll.length} — keep typing`
+                        ? `${CATALOG_RENDER_CAP} of ${visibleCatalogAll.length}, keep typing`
                         : visibleCatalogAll.length}
                     </span>
                   </span>

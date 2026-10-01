@@ -183,7 +183,7 @@ export interface CapabilityMeta {
 export const CAPABILITY_META: Record<CapabilityKey, CapabilityMeta> = {
   camera: {
     label: "Camera",
-    description: "Callers can turn on their camera; the agent sees frames when the model supports vision.",
+    description: "Callers can turn on their camera. The agent sees frames when the model supports vision.",
     iconName: "video",
     icon: VideoIcon,
   },

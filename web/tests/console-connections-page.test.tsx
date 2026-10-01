@@ -234,6 +234,6 @@ describe("ConnectionCreateForm", () => {
 
     fireEvent.change(screen.getByLabelText("API key"), { target: { value: "key-456" } });
     expect((screen.getByRole("button", { name: "Create connection" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/test again to enable Save/)).toBeTruthy();
+    expect(screen.getByText(/Test again to enable Save/)).toBeTruthy();
   });
 });

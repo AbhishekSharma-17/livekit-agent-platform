@@ -253,7 +253,7 @@ describe("Test model", () => {
     ]);
     withClient(<Harness kind="llm" initial={CUSTOM_LLM} />);
     await clickTest();
-    expect(await screen.findByText("Too many tests right now — try again in 12 s.")).toBeTruthy();
+    expect(await screen.findByText("Too many tests right now. Try again in 12 s.")).toBeTruthy();
   });
 
   it("a 422 renders the api's message and never the id", async () => {

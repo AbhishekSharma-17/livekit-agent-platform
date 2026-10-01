@@ -344,7 +344,7 @@ function KeyStep({
           description={
             <>
               Off by default. Dialing also needs the MCP process started with{" "}
-              <code className="font-mono">LKAP_MCP_ALLOW_DIAL=1</code> and a confirmation on every call; the
+              <code className="font-mono">LKAP_MCP_ALLOW_DIAL=1</code> and a confirmation on every call. The
               workspace&apos;s dialing policy (allowed prefixes, rate limits) always applies.
             </>
           }

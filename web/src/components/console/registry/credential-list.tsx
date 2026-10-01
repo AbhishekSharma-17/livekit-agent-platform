@@ -294,7 +294,7 @@ export function CredentialList() {
       <PageHeader
         back={{ href: "/console/providers", label: "Back to providers" }}
         title="Credentials"
-        description="Vendor keys your agents and tools use: encrypted at rest, and only a fingerprint is ever shown."
+        description="Vendor keys your agents and tools use. They are encrypted at rest, and only a fingerprint is ever shown."
         actions={rows.length > 0 ? addButton : undefined}
       />
       {rows.length > 0 && !credentialsQuery.isLoading && !credentialsQuery.isError ? (
@@ -695,8 +695,8 @@ function DeleteCredentialDialog({
                       {agent.name}
                     </Link>
                   </React.Fragment>
-                ))}{" "}
-                — change those agents first.
+                ))}
+                . Change those agents first.
               </p>
             ) : (
               <p>{conflict}</p>

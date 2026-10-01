@@ -144,12 +144,12 @@ export function slotAvailability(spec: ProviderSpec, ctx: SlotConnectionContext 
 export function unavailableCopy(spec: ProviderSpec, ctx: SlotConnectionContext = {}): { chip: string; reason: string } {
   switch (slotAvailability(spec, ctx)) {
     case "disabled":
-      return { chip: "Disabled", reason: `${spec.label} is disabled for this workspace — enable it on the Providers page.` };
+      return { chip: "Disabled", reason: `${spec.label} is disabled for this workspace. Enable it on the Providers page.` };
     case "cloud-only":
       return {
         chip: "Cloud only",
         reason:
-          "Not available on self-hosted connections — LiveKit Inference needs LiveKit Cloud. Use your own STT/LLM/TTS keys (Deepgram + Cartesia is a recommended streaming pair).",
+          "Not available on self-hosted connections. LiveKit Inference needs LiveKit Cloud. Use your own STT/LLM/TTS keys (Deepgram + Cartesia is a recommended streaming pair).",
       };
     case "not-installed":
       return {

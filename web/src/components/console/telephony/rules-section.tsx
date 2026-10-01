@@ -145,8 +145,8 @@ export function RulesSection({ agents }: { agents: AgentOut[] }) {
             title="No dispatch rules"
             description={
               inboundTrunks.length === 0
-                ? "Routing a number to an agent creates one; a catch-all rule needs an inbound trunk first."
-                : "Routing a number to an agent creates one; add a catch-all rule here."
+                ? "Routing a number to an agent creates one. A catch-all rule needs an inbound trunk first."
+                : "Routing a number to an agent creates one. Add a catch-all rule here."
             }
           />
         </SectionRow>

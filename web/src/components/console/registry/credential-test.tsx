@@ -45,7 +45,7 @@ export const OUTCOME_LABEL: Record<CredentialTestOutcome, string> = {
   passed: "Key works",
   failed: "Test failed",
   "not-implemented": "No test for this provider",
-  "timed-out": "Timed out — try again",
+  "timed-out": "Timed out. Try again",
 };
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | "timeout"> {

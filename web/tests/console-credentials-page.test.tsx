@@ -337,7 +337,7 @@ describe("CredentialList", () => {
     const dialog = await screen.findByRole("alertdialog", { name: "Delete OpenAI team key" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete credential" }));
     const alert = await within(dialog).findByRole("alert");
-    expect(alert.textContent).toContain("change those agents first");
+    expect(alert.textContent).toContain(". Change those agents first");
     expect(within(alert).getByRole("link", { name: "Claims intake" }).getAttribute("href")).toBe(
       "/console/agents/a1?section=providers",
     );

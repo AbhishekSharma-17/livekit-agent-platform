@@ -542,7 +542,7 @@ function RunChoiceControl({
   recommended?: boolean;
 }) {
   const options: { value: RunChoice; title: string; hint: string }[] = [
-    { value: "inference", title: "LiveKit Inference", hint: "No key needed; billed through LiveKit Cloud." },
+    { value: "inference", title: "LiveKit Inference", hint: "No key needed. Billed through LiveKit Cloud." },
     { value: "own", title: "Your own key", hint: "Pick a vendor and use your account with them." },
   ];
   return (

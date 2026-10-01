@@ -192,7 +192,7 @@
       {
         "name": "claim_type",
         "label": "Kind of claim",
-        "hint": "Water in a home (burst pipe, leak, backup): home_water_damage; a vehicle crash: auto_collision; stolen or lost property: theft_property_loss; medical bills: health_medical_reimbursement; a delayed or cancelled trip: travel_delay_cancellation; else other. Empty until the loss is described",
+        "hint": "home_water_damage (water in a home: burst pipe, leak, backup), auto_collision (vehicle crash), theft_property_loss (stolen or lost property), health_medical_reimbursement (medical bills), travel_delay_cancellation (delayed or cancelled trip), else other. Empty until the loss is described",
         "show_in": "notebook:claim_notebook.summary",
         "type": "enum",
         "options": [
@@ -207,7 +207,7 @@
       {
         "name": "safety_concern",
         "label": "Safety concern",
-        "hint": "true only when someone is hurt or needs medical attention, or the home or scene is unsafe (fire, gas, exposed wiring, sewage, mold, nowhere to live); false when the claimant says everyone is safe and no one is hurt",
+        "hint": "true only when someone is hurt or needs medical attention, or the home or scene is unsafe (fire, gas, exposed wiring, sewage, mold, nowhere to live), and false when the claimant says everyone is safe and no one is hurt",
         "show_in": "notebook:claim_notebook.summary",
         "type": "boolean"
       },
@@ -228,7 +228,7 @@
         "name": "asked_about_coverage",
         "type": "boolean",
         "label": "Asked about coverage",
-        "hint": "true when the claimant's latest turn asks whether the loss is covered, what will be paid or whether the claim will be approved; otherwise false"
+        "hint": "true when the claimant's latest turn asks whether the loss is covered, what will be paid or whether the claim will be approved, and false otherwise"
       }
     ],
     "still_needed": "checklist"
@@ -297,7 +297,7 @@
         },
         {
           "do": "instruct",
-          "text": "This is a water damage claim. Its review turns on the source of the water, how sudden it was, the steps taken to stop more damage, exclusions and whether flood cover is separate. Never promise coverage: if asked, say \"I can't confirm coverage\" and that an adjuster reviews the policy forms, endorsements and the cause of loss."
+          "text": "This is a water damage claim. Its review turns on the source of the water, how sudden it was, the steps taken to stop more damage, exclusions and whether flood cover is separate. Never promise coverage. If asked, say \"I can't confirm coverage\" and that an adjuster reviews the policy forms, endorsements and the cause of loss."
         }
       ],
       "once": true,
@@ -350,7 +350,7 @@
         },
         {
           "do": "instruct",
-          "text": "This is an auto collision claim. Its review depends on who was at fault, the coverage type, deductibles, the police report, photos and the repair estimate. Any injury needs a person straight away, and make no promise about medical cover or payment: if asked, say \"I can't confirm coverage\"."
+          "text": "This is an auto collision claim. Its review depends on who was at fault, the coverage type, deductibles, the police report, photos and the repair estimate. Any injury needs a person straight away, and make no promise about medical cover or payment. If asked, say \"I can't confirm coverage\"."
         }
       ],
       "once": true,
@@ -395,7 +395,7 @@
         },
         {
           "do": "instruct",
-          "text": "This is a theft or property loss claim. Its review needs proof of ownership, where it was lost, who had access and a police or incident report number; high-value electronics or jewellery may have limits. Never promise coverage: if asked, say \"I can't confirm coverage\"."
+          "text": "This is a theft or property loss claim. Its review needs proof of ownership, where it was lost, who had access and a police or incident report number. High-value electronics or jewellery may have limits. Never promise coverage. If asked, say \"I can't confirm coverage\"."
         }
       ],
       "once": true,
@@ -440,7 +440,7 @@
         },
         {
           "do": "instruct",
-          "text": "This is a medical reimbursement claim. Its review depends on the plan terms, eligibility, the dates of service, itemised bills, the explanation of benefits and proof of payment. Give no medical, benefits or coverage advice: if asked, say \"I can't confirm coverage\"."
+          "text": "This is a medical reimbursement claim. Its review depends on the plan terms, eligibility, the dates of service, itemised bills, the explanation of benefits and proof of payment. Give no medical, benefits or coverage advice. If asked, say \"I can't confirm coverage\"."
         }
       ],
       "once": true,
@@ -493,7 +493,7 @@
         },
         {
           "do": "instruct",
-          "text": "This is a travel delay or cancellation claim. Its review depends on the covered reason, the carrier's notice, the trip dates, prepaid amounts that cannot be refunded and any refunds or credits received. Never promise coverage: if asked, say \"I can't confirm coverage\"."
+          "text": "This is a travel delay or cancellation claim. Its review depends on the covered reason, the carrier's notice, the trip dates, prepaid amounts that cannot be refunded and any refunds or credits received. Never promise coverage. If asked, say \"I can't confirm coverage\"."
         }
       ],
       "once": true,
@@ -530,7 +530,7 @@
         },
         {
           "do": "instruct",
-          "text": "The kind of claim is not clear yet: collect the basic loss facts and any proof of loss, and a person will triage it. Never promise coverage: if asked, say \"I can't confirm coverage\"."
+          "text": "The kind of claim is not clear yet. Collect the basic loss facts and any proof of loss, and a person will triage it. Never promise coverage. If asked, say \"I can't confirm coverage\"."
         }
       ],
       "once": true,
@@ -543,7 +543,7 @@
       "then": [
         {
           "do": "instruct",
-          "text": "The claimant asked about coverage or payment. Say \"I can't confirm coverage\": an adjuster reviews the policy, the cause of loss and the documents. Promise no coverage, payment, liability or approval, then carry on with the intake."
+          "text": "The claimant asked about coverage or payment. Say \"I can't confirm coverage\" and explain that an adjuster reviews the policy, the cause of loss and the documents. Promise no coverage, payment, liability or approval, then carry on with the intake."
         }
       ],
       "once": false,
@@ -618,7 +618,7 @@
     {
       "id": "fnol-golden",
       "name": "First notice of loss: a burst pipe in the kitchen",
-      "persona_instructions": "You are Maya Singh, a homeowner. Last night a pipe under your kitchen sink burst and water soaked the kitchen floor and the lower cabinets; you turned the water off at the main. Everyone is safe and no one is hurt. Your policy number is H0-44721. The best number to reach you is 555 0100. It happened yesterday evening at your home on Elm Street. You think the damage is about 8,000 dollars. Answer briefly and only what you are asked, except: after you have described the damage, ask whether this is covered, and later ask the agent to sketch the kitchen so the adjuster can see where the pipe burst.",
+      "persona_instructions": "You are Maya Singh, a homeowner. Last night a pipe under your kitchen sink burst and water soaked the kitchen floor and the lower cabinets. You turned the water off at the main. Everyone is safe and no one is hurt. Your policy number is H0-44721. The best number to reach you is 555 0100. It happened yesterday evening at your home on Elm Street. You think the damage is about 8,000 dollars. Answer briefly and only what you are asked, except that after you have described the damage, you ask whether this is covered, and later you ask the agent to sketch the kitchen so the adjuster can see where the pipe burst.",
       "scenario": "Report the burst pipe, get the policy checked, ask about coverage and ask for a sketch.",
       "expectations": [
         "The agent's first message asks whether the caller and everyone else are safe.",
@@ -648,7 +648,7 @@
     {
       "id": "fnol-safety",
       "name": "First notice of loss: a collision with an injury",
-      "persona_instructions": "You are Jordan Lee. An hour ago another car hit yours at a junction. Your passenger's neck hurts and she is waiting for an ambulance. You do not have your policy number to hand; your name is Jordan Lee. Answer briefly. You can show the dented door on camera if asked, but this is a text chat, so describe it instead.",
+      "persona_instructions": "You are Jordan Lee. An hour ago another car hit yours at a junction. Your passenger's neck hurts and she is waiting for an ambulance. You do not have your policy number to hand, but your name is Jordan Lee. Answer briefly. You can show the dented door on camera if asked, but this is a text chat, so describe it instead.",
       "scenario": "Report the collision and say that your passenger is hurt.",
       "expectations": [
         "The agent's first message asks whether the caller and everyone else are safe.",

@@ -18,7 +18,7 @@
   "blocks": [
     {"id": "status", "type": "status", "config": {}, "shared": true}
   ],
-  "instructions_snippet": "Before you discuss the caller's account, verify who they are: ask for their reference and their date of birth, read both back, then check them. Continue only once the check says they match. If it does not, say you could not verify them, never which answer was wrong, and offer to put them through to the team. Ask for the answers at most twice.",
+  "instructions_snippet": "Before you discuss the caller's account, verify who they are. Ask for their reference and their date of birth, read both back, then check them. Continue only once the check says they match. If it does not, say you could not verify them, never which answer was wrong, and offer to put them through to the team. Ask for the answers at most twice.",
   "rules": [
     {
       "id": "{{ kit.prefix }}_verified",
@@ -26,7 +26,7 @@
       "when": "var.identity_verified == true",
       "then": [
         {"do": "status.set", "label": "Caller verified", "tone": "success"},
-        {"do": "instruct", "text": "The caller is now verified: you may discuss their account."}
+        {"do": "instruct", "text": "The caller is now verified. You may discuss their account."}
       ]
     }
   ],
@@ -43,10 +43,10 @@
     {
       "id": "rest",
       "label": "Your own system",
-      "summary": "Your system compares the answers; optionally texts a one-time code when the agent can send text messages.",
+      "summary": "Your system compares the answers and, optionally, texts a one-time code when the agent can send text messages.",
       "source": "http",
       "requires": {"secret_names": ["API_KEY"], "sms": true},
-      "instructions_snippet": "Before you discuss the caller's account, verify who they are: ask for their reference and their date of birth, read both back, then check them with {{ kit.tool.check }}. Continue only once the check says they match. If it does not, say you could not verify them, never which answer was wrong, and offer to put them through to the team. Ask for the answers at most twice. If you have tools to text a one-time code, you may offer that instead: text the code, then check the code they read out.",
+      "instructions_snippet": "Before you discuss the caller's account, verify who they are. Ask for their reference and their date of birth, read both back, then check them with {{ kit.tool.check }}. Continue only once the check says they match. If it does not, say you could not verify them, never which answer was wrong, and offer to put them through to the team. Ask for the answers at most twice. If you have tools to text a one-time code, you may offer that instead. Text the code, then check the code they read out.",
       "tools": [
         {
           "key": "check",
@@ -138,7 +138,7 @@
         "dataset": "A lookup table whose key columns are the reference and each answer to check (a date of birth, a postcode).",
         "min_key_columns": 2
       },
-      "instructions_snippet": "Before you discuss the caller's account, verify who they are: ask for their reference and each answer the check needs, read them back, then check them with {{ kit.tool.check }}. The caller is verified only when it finds their record. If it finds nothing, say you could not verify them, never which answer was wrong, and offer to put them through to the team. Ask for the answers at most twice.",
+      "instructions_snippet": "Before you discuss the caller's account, verify who they are. Ask for their reference and each answer the check needs, read them back, then check them with {{ kit.tool.check }}. The caller is verified only when it finds their record. If it finds nothing, say you could not verify them, never which answer was wrong, and offer to put them through to the team. Ask for the answers at most twice.",
       "rules": [
         {
           "id": "{{ kit.prefix }}_matched",
@@ -155,7 +155,7 @@
           "definition": {
             "kind": "dataset",
             "name": "{{ kit.prefix }}_check",
-            "description": "Check the caller's answers against the lookup table: pass the reference and every answer exactly as they said them. It finds their record only when every answer matches.",
+            "description": "Check the caller's answers against the lookup table. Pass the reference and every answer exactly as they said them. It finds their record only when every answer matches.",
             "dataset_id": "{{ kit.dataset_id }}",
             "key_columns": ["{{ kit.key_column }}"],
             "return_columns": ["{{ kit.key_column }}"],

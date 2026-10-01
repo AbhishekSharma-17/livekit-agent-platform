@@ -23,7 +23,7 @@
       "config": {"columns": []}
     }
   ],
-  "instructions_snippet": "When the caller gives a reference, look the record up with {{ kit.tool.lookup }} before you answer. Read back only what they need, never the whole record. If nothing is found, say so and ask them to check the reference; never guess a record.",
+  "instructions_snippet": "When the caller gives a reference, look the record up with {{ kit.tool.lookup }} before you answer. Read back only what they need, never the whole record. If nothing is found, say so and ask them to check the reference, and never guess a record.",
   "rules": [
     {
       "id": "{{ kit.prefix }}_found",

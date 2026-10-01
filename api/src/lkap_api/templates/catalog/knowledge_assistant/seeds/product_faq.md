@@ -1,6 +1,6 @@
 # Acme Meter product FAQ
 
-Acme Meter is a fictional smart energy meter with a companion app. This FAQ is sample content for the Knowledge assistant starter; replace it with your own documents.
+Acme Meter is a fictional smart energy meter with a companion app. This FAQ is sample content for the Knowledge assistant starter. Replace it with your own documents.
 
 ## Plans
 
@@ -20,7 +20,7 @@ Q: Which plan includes API access?
 A: Only the Pro plan includes API access.
 
 Q: Can I change plans at any time?
-A: Yes. Upgrades apply immediately; downgrades apply at the start of the next billing month.
+A: Yes. Upgrades apply immediately, and downgrades apply at the start of the next billing month.
 
 ## Limits
 

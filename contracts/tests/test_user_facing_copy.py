@@ -5,7 +5,8 @@ joining two statements in a message (split it into two sentences instead). This 
 the strings the backend copy pass cleaned:
 
 * every string of the starter templates, tool kits and seed documents the api ships, and
-  the insurance pack's seed documents (shown in the gallery, spoken, or seeded as data);
+  the insurance pack's seed documents (shown in the gallery, spoken, or seeded as data),
+  plus the other text files shipped as content (the MCP docs and the policy directory CSV);
 * the provider registry's help, notes and other notes the console renders;
 * error, validation-issue and test-result messages in the api, contracts, agent and mcp
   sources (the literal first arguments and ``message=``-style keywords of their
@@ -30,12 +31,26 @@ REPO = Path(__file__).resolve().parents[2]
 DASHES = re.compile(r"[\N{EM DASH}\N{EN DASH}]")
 #: A semicolon joining two statements ("X; do Y"), as opposed to one inside code or a list.
 STATEMENT_SEMICOLON = re.compile(r"; [a-z]")
+#: The same rule for seed files, where a wrapped line can end in the semicolon, and where
+#: `` -- `` standing in for a dash is also out.
+SEED_SEMICOLON = re.compile(r";\s+[A-Za-z]")
+SEED_DASH = re.compile(r"[\N{EM DASH}\N{EN DASH}]| -- ")
+#: Template fields whose value is a list of items separated by semicolons (mock policy rows).
+SEMICOLON_LIST_KEYS = frozenset({"deductibles", "coverages"})
 
 #: Files the guard reads; each is skipped when this checkout does not contain it.
 TEMPLATE_DIRS = (
     REPO / "api" / "src" / "lkap_api" / "templates",
     REPO / "packs" / "src" / "packs" / "insurance_claim" / "seeds",
 )
+CATALOG = REPO / "api" / "src" / "lkap_api" / "templates" / "catalog"
+#: Other text shipped and loaded as content; checked for dashes only.
+CONTENT_FILES = (
+    CATALOG / "claims_intake" / "seeds" / "policy_directory.csv",
+    REPO / "api" / "src" / "lkap_api" / "custom_models" / "probes" / "fixtures" / "README",
+    REPO / "mcp" / "src" / "lkap_mcp" / "docs" / "__init__.py",
+)
+MCP_DOCS = REPO / "mcp" / "src" / "lkap_mcp" / "docs"
 MESSAGE_SOURCES = (
     REPO / "api" / "src" / "lkap_api",
     REPO / "contracts" / "src" / "lkap_contracts",
@@ -79,26 +94,55 @@ def _template_files() -> list[Path]:
     return files
 
 
+def _seed_problems(
+    file: Path, pattern: re.Pattern[str], *, skip_keys: frozenset[str] = frozenset()
+) -> list[str]:
+    """Every place in ``file`` where a string (JSON) or the text (anything else) matches ``pattern``."""
+    text = file.read_text(encoding="utf-8")
+    where = str(file.relative_to(REPO))
+    if file.suffix == ".json":
+        return [
+            f"{where}:{path}: {value!r}"
+            for path, value in _json_strings(json.loads(text))
+            if path.rsplit(".", 1)[-1] not in skip_keys and pattern.search(value)
+        ]
+    return [
+        f"{where}:{text.count(chr(10), 0, match.start()) + 1}: {match.group(0)!r}"
+        for match in pattern.finditer(text)
+    ]
+
+
 def test_template_kit_and_seed_text_has_no_dashes() -> None:
     files = _template_files()
     if not files:
         pytest.skip("the api templates and pack seeds are not in this checkout")
     offenders: list[str] = []
     for file in files:
-        text = file.read_text(encoding="utf-8")
-        if file.suffix == ".json":
-            offenders += [
-                f"{file.relative_to(REPO)}:{path}: {value!r}"
-                for path, value in _json_strings(json.loads(text))
-                if DASHES.search(value)
-            ]
-        else:
-            offenders += [
-                f"{file.relative_to(REPO)}:{number}: {line!r}"
-                for number, line in enumerate(text.splitlines(), 1)
-                if DASHES.search(line)
-            ]
-    assert not offenders, "em/en dashes in user-facing template text:\n" + "\n".join(offenders)
+        offenders += _seed_problems(file, SEED_DASH)
+    assert not offenders, "dashes in user-facing template text:\n" + "\n".join(offenders)
+
+
+def test_template_kit_and_seed_text_has_no_joining_semicolons() -> None:
+    files = _template_files()
+    if not files:
+        pytest.skip("the api templates and pack seeds are not in this checkout")
+    offenders: list[str] = []
+    for file in files:
+        offenders += _seed_problems(file, SEED_SEMICOLON, skip_keys=SEMICOLON_LIST_KEYS)
+    message = "semicolons joining statements in template text (split the sentence):\n"
+    assert not offenders, message + "\n".join(offenders)
+
+
+def test_other_shipped_content_has_no_dashes() -> None:
+    files = [file for file in CONTENT_FILES if file.is_file()]
+    if MCP_DOCS.is_dir():
+        files += sorted(MCP_DOCS.rglob("*.md"))
+    if not files:
+        pytest.skip("the shipped content files are not in this checkout")
+    offenders: list[str] = []
+    for file in files:
+        offenders += _seed_problems(file, SEED_DASH if file.suffix != ".py" else DASHES)
+    assert not offenders, "dashes in shipped content:\n" + "\n".join(offenders)
 
 
 def test_demo_names_use_a_middle_dot() -> None:

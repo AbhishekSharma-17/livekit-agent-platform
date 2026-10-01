@@ -97,7 +97,7 @@
         "id": "global",
         "kind": "global",
         "label": "Global",
-        "instructions": "You are the receptionist of Acme Dental. Be brief and warm. Use search_knowledge for opening hours, location and services. If the caller asks for a person, call escalate_to_human. Never invent availability: use the tools.",
+        "instructions": "You are the receptionist of Acme Dental. Be brief and warm. Use search_knowledge for opening hours, location and services. If the caller asks for a person, call escalate_to_human. Never invent availability. Use the tools.",
         "tools": [
           "search_knowledge",
           "escalate_to_human",
@@ -113,7 +113,7 @@
         "id": "identify",
         "kind": "agent",
         "label": "Identify the caller",
-        "instructions": "Get the caller's full name and phone number; confirm the phone number back digit by digit.",
+        "instructions": "Get the caller's full name and phone number, and confirm the phone number back digit by digit.",
         "extract": [
           "caller_name",
           "phone"
@@ -255,7 +255,7 @@
       "definition": {
         "kind": "http",
         "name": "check_availability",
-        "description": "Check free slots for a service on a date; returns the nearest alternatives when the slot is taken",
+        "description": "Check free slots for a service on a date and return the nearest alternatives when the slot is taken",
         "parameters": {
           "type": "object",
           "properties": {
@@ -287,7 +287,7 @@
       "definition": {
         "kind": "http",
         "name": "book_appointment",
-        "description": "Book the appointment; returns the confirmation id",
+        "description": "Book the appointment and return the confirmation id",
         "parameters": {
           "type": "object",
           "properties": {

@@ -115,7 +115,7 @@
         "id": "budget",
         "kind": "agent",
         "label": "Budget",
-        "instructions": "Ask whether they have a budget range in mind; accept 'not sure'.",
+        "instructions": "Ask whether they have a budget range in mind, and accept 'not sure'.",
         "extract": [
           "budget_range"
         ],
@@ -128,7 +128,7 @@
         "id": "book_demo",
         "kind": "agent",
         "label": "Book a demo",
-        "instructions": "Offer a demo with a specialist; ask for the best email and a preferred day. Call set_status with qualified.",
+        "instructions": "Offer a demo with a specialist and ask for the best email and a preferred day. Call set_status with qualified.",
         "extract": [
           "email"
         ],

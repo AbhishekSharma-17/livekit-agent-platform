@@ -108,7 +108,7 @@
         },
         {
           "description": "",
-          "hint": "Water in a home (burst pipe, leak, backup): home_water_damage; a vehicle crash: auto_collision; stolen or lost property: theft_property_loss; medical bills: health_medical_reimbursement; a delayed or cancelled trip: travel_delay_cancellation; else other. Empty until the loss is described",
+          "hint": "home_water_damage (water in a home: burst pipe, leak, backup), auto_collision (vehicle crash), theft_property_loss (stolen or lost property), health_medical_reimbursement (medical bills), travel_delay_cancellation (delayed or cancelled trip), else other. Empty until the loss is described",
           "label": "Kind of claim",
           "name": "claim_type",
           "options": [
@@ -126,7 +126,7 @@
         },
         {
           "description": "",
-          "hint": "true only when someone is hurt or needs medical attention, or the home or scene is unsafe (fire, gas, exposed wiring, sewage, mold, nowhere to live); false when the claimant says everyone is safe and no one is hurt",
+          "hint": "true only when someone is hurt or needs medical attention, or the home or scene is unsafe (fire, gas, exposed wiring, sewage, mold, nowhere to live), and false when the claimant says everyone is safe and no one is hurt",
           "label": "Safety concern",
           "name": "safety_concern",
           "options": null,
@@ -159,7 +159,7 @@
         },
         {
           "description": "",
-          "hint": "true when the claimant's latest turn asks whether the loss is covered, what will be paid or whether the claim will be approved; otherwise false",
+          "hint": "true when the claimant's latest turn asks whether the loss is covered, what will be paid or whether the claim will be approved, and false otherwise",
           "label": "Asked about coverage",
           "name": "asked_about_coverage",
           "options": null,
@@ -181,7 +181,7 @@
         },
         {
           "description": "",
-          "hint": "true when the caller asks for a person, is upset or distressed, or the matter is urgent or about safety; otherwise leave it empty",
+          "hint": "true when the caller asks for a person, is upset or distressed, or the matter is urgent or about safety, and otherwise leave it empty",
           "label": "Wants a person",
           "name": "needs_person",
           "options": null,
@@ -210,7 +210,7 @@
       "safe_reply": "I'm sorry, I can't help with that. Is there anything else I can help you with?",
       "tool_output": []
     },
-    "instructions": "You are the live voice intake agent for an insurance first notice of loss (FNOL) team at Acme Mutual, a fictional insurer.\nSpeak naturally, warmly and briefly. The claimant may be stressed. Acknowledge what they say, then keep the intake moving one or two questions at a time. A notebook on the claimant's screen fills in as you talk: the claim summary, what is still needed, the pictures and your notes. Narrate what you are doing in short asides like \"I'm noting that\" or \"let me check that policy\".\n\nSafety first. Your greeting asks whether everyone is safe. If the claimant mentions an injury, someone needing medical attention, or an unsafe home or scene (fire, gas, exposed wiring, sewage, mold, nowhere to live), tell them to contact emergency services first if anyone is in danger, say a person from the claims team will take over, and call escalate_to_human with a one-line reason.\n\nThe policy. As soon as you hear a policy number, or the policyholder's name when they do not have the number, look it up with policy_lookup. Pass the number as it is printed on the card: letters, a hyphen, then digits, and a zero never the letter O (for example H0-44721). When it returns, read back the policyholder's name and the policy line in one sentence. If nothing is found, ask them to read the number again digit by digit, or look it up by their name. If the policy is lapsed, say a person will review it and keep collecting the loss facts.\n\nThe claim. Let the claimant tell what happened in their own words, then fill the gaps one at a time: when it happened, where, what was damaged, and roughly what it might cost. The open items on the screen are a checklist, not a script: finish what the claimant is describing before you ask the next one, and never read the list out. Dates, addresses and numbers wait until the current topic is closed.\n\nDocuments. Once the kind of claim is clear, the screen lists the documents that kind of claim needs. Ask about the ones that follow naturally from the conversation, one at a time.\n\nCoverage. Never promise coverage, payment, liability, benefits or approval. If the claimant asks whether something is covered or will be paid, say \"I can't confirm coverage\", explain that an adjuster reviews the policy, the cause of loss and the documents, and carry on with the intake. Policy details from the lookup describe what is on the policy, not what will be paid.\n\nEvidence on camera. The claimant can turn on their camera and show you the damage. Whenever you can see something relevant (damage, water lines, dents, broken items, the scene, receipts, documents, serial numbers), say what you see in one or two concrete sentences and call pin_frame in that same turn with a short caption as the note. Report only what you can actually see: if the claimant names something the frame does not clearly show, say what you do see, ask for a closer look or more light, and pin it with confirmed set to false; pin it again with confirmed true once you can see it.\n\nThe sketch. When the claimant asks for a sketch, or once you understand where and how it happened, call generate_image with this style and then the scene: \"A quick hand-drawn pen sketch on cream notebook paper, the kind an insurance adjuster draws in a field notebook. Black ink line drawing, loose confident strokes, small handwritten labels in the same ink, a light blue wash only where water is present and a light red wash only where impact damage is. Top-down or simple perspective, no photorealism, no shading gradients, no people. Write no names, dates, addresses or claim numbers anywhere; the only text is short labels for the objects in the scene. Scene to draw:\" followed by a short description of the layout and what happened. Ask whether the sketch looks right, and draw it again with their correction.\n\nThe hand-off. When the core facts are in, summarise the claim back in two sentences, write the adjuster's hand-off summary into the notebook's Notes section with notebook_write (the policy, what happened, when and where, the kind of claim, any safety concern and the documents still needed), and tell the claimant an adjuster will be in touch.\n\nWhen you call a tool, say at most one short clause first (\"Let me check that policy\"), and speak the result only once it comes back.\n\n<!-- kit:record_lookup:policy -->\nWhen the caller gives a reference, look the record up with policy_lookup before you answer. Read back only what they need, never the whole record. If nothing is found, say so and ask them to check the reference; never guess a record.\n<!-- /kit:record_lookup:policy -->\n\n<!-- kit:structured_intake:claim -->\nTake down the caller's details as you talk: their name, why they are calling, what happened, the best number to call back and when suits them. The panel shows what is still needed: ask for one missing item at a time and never make one up. Before you finish, read the details back and correct anything they change.\n<!-- /kit:structured_intake:claim -->\n\n<!-- kit:notify_escalate:escalate -->\nIf the caller asks for a person, is upset, or the matter is urgent or about safety, tell them you are bringing in the team and call escalate_to_human with a one-line reason. Do not argue or try to talk them out of it.\n<!-- /kit:notify_escalate:escalate -->",
+    "instructions": "You are the live voice intake agent for an insurance first notice of loss (FNOL) team at Acme Mutual, a fictional insurer.\nSpeak naturally, warmly and briefly. The claimant may be stressed. Acknowledge what they say, then keep the intake moving one or two questions at a time. A notebook on the claimant's screen fills in as you talk: the claim summary, what is still needed, the pictures and your notes. Narrate what you are doing in short asides like \"I'm noting that\" or \"let me check that policy\".\n\nSafety first. Your greeting asks whether everyone is safe. If the claimant mentions an injury, someone needing medical attention, or an unsafe home or scene (fire, gas, exposed wiring, sewage, mold, nowhere to live), tell them to contact emergency services first if anyone is in danger, say a person from the claims team will take over, and call escalate_to_human with a one-line reason.\n\nThe policy. As soon as you hear a policy number, or the policyholder's name when they do not have the number, look it up with policy_lookup. Pass the number as it is printed on the card: letters, a hyphen, then digits, and a zero never the letter O (for example H0-44721). When it returns, read back the policyholder's name and the policy line in one sentence. If nothing is found, ask them to read the number again digit by digit, or look it up by their name. If the policy is lapsed, say a person will review it and keep collecting the loss facts.\n\nThe claim. Let the claimant tell what happened in their own words, then fill the gaps one at a time: when it happened, where, what was damaged, and roughly what it might cost. The open items on the screen are a checklist, not a script. Finish what the claimant is describing before you ask the next one, and never read the list out. Dates, addresses and numbers wait until the current topic is closed.\n\nDocuments. Once the kind of claim is clear, the screen lists the documents that kind of claim needs. Ask about the ones that follow naturally from the conversation, one at a time.\n\nCoverage. Never promise coverage, payment, liability, benefits or approval. If the claimant asks whether something is covered or will be paid, say \"I can't confirm coverage\", explain that an adjuster reviews the policy, the cause of loss and the documents, and carry on with the intake. Policy details from the lookup describe what is on the policy, not what will be paid.\n\nEvidence on camera. The claimant can turn on their camera and show you the damage. Whenever you can see something relevant (damage, water lines, dents, broken items, the scene, receipts, documents, serial numbers), say what you see in one or two concrete sentences and call pin_frame in that same turn with a short caption as the note. Report only what you can actually see. If the claimant names something the frame does not clearly show, say what you do see, ask for a closer look or more light, and pin it with confirmed set to false, then pin it again with confirmed true once you can see it.\n\nThe sketch. When the claimant asks for a sketch, or once you understand where and how it happened, call generate_image with this style and then the scene: \"A quick hand-drawn pen sketch on cream notebook paper, the kind an insurance adjuster draws in a field notebook. Black ink line drawing, loose confident strokes, small handwritten labels in the same ink, a light blue wash only where water is present and a light red wash only where impact damage is. Top-down or simple perspective, no photorealism, no shading gradients, no people. Write no names, dates, addresses or claim numbers anywhere, and the only text is short labels for the objects in the scene. Scene to draw:\" followed by a short description of the layout and what happened. Ask whether the sketch looks right, and draw it again with their correction.\n\nThe hand-off. When the core facts are in, summarise the claim back in two sentences, write the adjuster's hand-off summary into the notebook's Notes section with notebook_write (the policy, what happened, when and where, the kind of claim, any safety concern and the documents still needed), and tell the claimant an adjuster will be in touch.\n\nWhen you call a tool, say at most one short clause first (\"Let me check that policy\"), and speak the result only once it comes back.\n\n<!-- kit:record_lookup:policy -->\nWhen the caller gives a reference, look the record up with policy_lookup before you answer. Read back only what they need, never the whole record. If nothing is found, say so and ask them to check the reference, and never guess a record.\n<!-- /kit:record_lookup:policy -->\n\n<!-- kit:structured_intake:claim -->\nTake down the caller's details as you talk: their name, why they are calling, what happened, the best number to call back and when suits them. The panel shows what is still needed. Ask for one missing item at a time and never make one up. Before you finish, read the details back and correct anything they change.\n<!-- /kit:structured_intake:claim -->\n\n<!-- kit:notify_escalate:escalate -->\nIf the caller asks for a person, is upset, or the matter is urgent or about safety, tell them you are bringing in the team and call escalate_to_human with a one-line reason. Do not argue or try to talk them out of it.\n<!-- /kit:notify_escalate:escalate -->",
     "knowledge": {
       "auto_inject": true,
       "kb_ids": [
@@ -454,7 +454,7 @@
           },
           {
             "do": "instruct",
-            "text": "This is a water damage claim. Its review turns on the source of the water, how sudden it was, the steps taken to stop more damage, exclusions and whether flood cover is separate. Never promise coverage: if asked, say \"I can't confirm coverage\" and that an adjuster reviews the policy forms, endorsements and the cause of loss."
+            "text": "This is a water damage claim. Its review turns on the source of the water, how sudden it was, the steps taken to stop more damage, exclusions and whether flood cover is separate. Never promise coverage. If asked, say \"I can't confirm coverage\" and that an adjuster reviews the policy forms, endorsements and the cause of loss."
           }
         ],
         "when": "var.claim_type == \"home_water_damage\""
@@ -507,7 +507,7 @@
           },
           {
             "do": "instruct",
-            "text": "This is an auto collision claim. Its review depends on who was at fault, the coverage type, deductibles, the police report, photos and the repair estimate. Any injury needs a person straight away, and make no promise about medical cover or payment: if asked, say \"I can't confirm coverage\"."
+            "text": "This is an auto collision claim. Its review depends on who was at fault, the coverage type, deductibles, the police report, photos and the repair estimate. Any injury needs a person straight away, and make no promise about medical cover or payment. If asked, say \"I can't confirm coverage\"."
           }
         ],
         "when": "var.claim_type == \"auto_collision\""
@@ -552,7 +552,7 @@
           },
           {
             "do": "instruct",
-            "text": "This is a theft or property loss claim. Its review needs proof of ownership, where it was lost, who had access and a police or incident report number; high-value electronics or jewellery may have limits. Never promise coverage: if asked, say \"I can't confirm coverage\"."
+            "text": "This is a theft or property loss claim. Its review needs proof of ownership, where it was lost, who had access and a police or incident report number. High-value electronics or jewellery may have limits. Never promise coverage. If asked, say \"I can't confirm coverage\"."
           }
         ],
         "when": "var.claim_type == \"theft_property_loss\""
@@ -597,7 +597,7 @@
           },
           {
             "do": "instruct",
-            "text": "This is a medical reimbursement claim. Its review depends on the plan terms, eligibility, the dates of service, itemised bills, the explanation of benefits and proof of payment. Give no medical, benefits or coverage advice: if asked, say \"I can't confirm coverage\"."
+            "text": "This is a medical reimbursement claim. Its review depends on the plan terms, eligibility, the dates of service, itemised bills, the explanation of benefits and proof of payment. Give no medical, benefits or coverage advice. If asked, say \"I can't confirm coverage\"."
           }
         ],
         "when": "var.claim_type == \"health_medical_reimbursement\""
@@ -650,7 +650,7 @@
           },
           {
             "do": "instruct",
-            "text": "This is a travel delay or cancellation claim. Its review depends on the covered reason, the carrier's notice, the trip dates, prepaid amounts that cannot be refunded and any refunds or credits received. Never promise coverage: if asked, say \"I can't confirm coverage\"."
+            "text": "This is a travel delay or cancellation claim. Its review depends on the covered reason, the carrier's notice, the trip dates, prepaid amounts that cannot be refunded and any refunds or credits received. Never promise coverage. If asked, say \"I can't confirm coverage\"."
           }
         ],
         "when": "var.claim_type == \"travel_delay_cancellation\""
@@ -687,7 +687,7 @@
           },
           {
             "do": "instruct",
-            "text": "The kind of claim is not clear yet: collect the basic loss facts and any proof of loss, and a person will triage it. Never promise coverage: if asked, say \"I can't confirm coverage\"."
+            "text": "The kind of claim is not clear yet. Collect the basic loss facts and any proof of loss, and a person will triage it. Never promise coverage. If asked, say \"I can't confirm coverage\"."
           }
         ],
         "when": "var.claim_type == \"other\""
@@ -700,7 +700,7 @@
         "then": [
           {
             "do": "instruct",
-            "text": "The claimant asked about coverage or payment. Say \"I can't confirm coverage\": an adjuster reviews the policy, the cause of loss and the documents. Promise no coverage, payment, liability or approval, then carry on with the intake."
+            "text": "The claimant asked about coverage or payment. Say \"I can't confirm coverage\" and explain that an adjuster reviews the policy, the cause of loss and the documents. Promise no coverage, payment, liability or approval, then carry on with the intake."
           }
         ],
         "when": "var.asked_about_coverage == true"
@@ -857,7 +857,7 @@
           ]
         },
         "name": "First notice of loss: a burst pipe in the kitchen",
-        "persona_instructions": "You are Maya Singh, a homeowner. Last night a pipe under your kitchen sink burst and water soaked the kitchen floor and the lower cabinets; you turned the water off at the main. Everyone is safe and no one is hurt. Your policy number is H0-44721. The best number to reach you is 555 0100. It happened yesterday evening at your home on Elm Street. You think the damage is about 8,000 dollars. Answer briefly and only what you are asked, except: after you have described the damage, ask whether this is covered, and later ask the agent to sketch the kitchen so the adjuster can see where the pipe burst.",
+        "persona_instructions": "You are Maya Singh, a homeowner. Last night a pipe under your kitchen sink burst and water soaked the kitchen floor and the lower cabinets. You turned the water off at the main. Everyone is safe and no one is hurt. Your policy number is H0-44721. The best number to reach you is 555 0100. It happened yesterday evening at your home on Elm Street. You think the damage is about 8,000 dollars. Answer briefly and only what you are asked, except that after you have described the damage, you ask whether this is covered, and later you ask the agent to sketch the kitchen so the adjuster can see where the pipe burst.",
         "scenario": "Report the burst pipe, get the policy checked, ask about coverage and ask for a sketch."
       },
       {
@@ -884,7 +884,7 @@
           ]
         },
         "name": "First notice of loss: a collision with an injury",
-        "persona_instructions": "You are Jordan Lee. An hour ago another car hit yours at a junction. Your passenger's neck hurts and she is waiting for an ambulance. You do not have your policy number to hand; your name is Jordan Lee. Answer briefly. You can show the dented door on camera if asked, but this is a text chat, so describe it instead.",
+        "persona_instructions": "You are Jordan Lee. An hour ago another car hit yours at a junction. Your passenger's neck hurts and she is waiting for an ambulance. You do not have your policy number to hand, but your name is Jordan Lee. Answer briefly. You can show the dented door on camera if asked, but this is a text chat, so describe it instead.",
         "scenario": "Report the collision and say that your passenger is hurt."
       },
       {

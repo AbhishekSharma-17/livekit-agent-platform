@@ -28,7 +28,7 @@
       }
     }
   ],
-  "instructions_snippet": "When the caller needs something your team has to follow up on, open a case: sum the problem up in one or two sentences, read it back and open it only once they agree. Tell them the case reference afterwards.",
+  "instructions_snippet": "When the caller needs something your team has to follow up on, open a case. Sum the problem up in one or two sentences, read it back and open it only once they agree. Tell them the case reference afterwards.",
   "test_case": {
     "name": "Opens a case and gives the reference",
     "persona_instructions": "You are a customer whose delivery arrived damaged. You want someone to follow up. Agree when the agent reads the summary back.",
@@ -45,7 +45,7 @@
       "summary": "Opens and checks cases through your own helpdesk's address (a key is optional, and without one the calls carry no key).",
       "source": "http",
       "requires": {"secret_names": ["API_KEY"]},
-      "instructions_snippet": "When the caller needs something your team has to follow up on, open a case: sum the problem up in one or two sentences, read it back and open it with {{ kit.tool.create }} only once they agree. Tell them the case reference afterwards. If they ask about an existing case, ask for its reference and check it with {{ kit.tool.status }}.",
+      "instructions_snippet": "When the caller needs something your team has to follow up on, open a case. Sum the problem up in one or two sentences, read it back and open it with {{ kit.tool.create }} only once they agree. Tell them the case reference afterwards. If they ask about an existing case, ask for its reference and check it with {{ kit.tool.status }}.",
       "rules": [
         {
           "id": "{{ kit.prefix }}_opened",
@@ -122,7 +122,7 @@
       "summary": "Opens the case with a connected app's action (Zendesk, Jira or Linear). Connect the app under Apps first.",
       "source": "composio_action",
       "requires": {"apps": ["zendesk", "jira", "linear"]},
-      "instructions_snippet": "When the caller needs something your team has to follow up on, open a case: sum the problem up in one or two sentences, read it back and open it with {{ kit.tool.create }} only once they agree. Tell them the case reference afterwards.",
+      "instructions_snippet": "When the caller needs something your team has to follow up on, open a case. Sum the problem up in one or two sentences, read it back and open it with {{ kit.tool.create }} only once they agree. Tell them the case reference afterwards.",
       "rules": [
         {
           "id": "{{ kit.prefix }}_opened",
@@ -160,7 +160,7 @@
       "label": "Linear (sign in)",
       "summary": "Adds Linear's own server of tools. Sign in to Linear from the tool's page, then choose which of its tools the agent may use.",
       "source": "mcp_preset",
-      "instructions_snippet": "When the caller needs something your team has to follow up on, open an issue in Linear: sum the problem up in one or two sentences, read it back and open it only once they agree. Tell them the issue's identifier afterwards.",
+      "instructions_snippet": "When the caller needs something your team has to follow up on, open an issue in Linear. Sum the problem up in one or two sentences, read it back and open it only once they agree. Tell them the issue's identifier afterwards.",
       "tools": [
         {
           "key": "server",
@@ -181,7 +181,7 @@
       "label": "Jira through Atlassian (sign in)",
       "summary": "Adds Atlassian's own server of tools (Jira and Confluence). Sign in from the tool's page, then choose which of its tools the agent may use.",
       "source": "mcp_preset",
-      "instructions_snippet": "When the caller needs something your team has to follow up on, open a Jira issue: sum the problem up in one or two sentences, read it back and open it only once they agree. Tell them the issue key afterwards.",
+      "instructions_snippet": "When the caller needs something your team has to follow up on, open a Jira issue. Sum the problem up in one or two sentences, read it back and open it only once they agree. Tell them the issue key afterwards.",
       "tools": [
         {
           "key": "server",

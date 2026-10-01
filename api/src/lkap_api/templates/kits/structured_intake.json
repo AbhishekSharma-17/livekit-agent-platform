@@ -7,7 +7,7 @@
   "blocks": [
     {"id": "checklist", "type": "checklist", "title": "Still needed", "config": {}, "shared": true}
   ],
-  "instructions_snippet": "Take down the caller's details as you talk: their name, why they are calling, what happened, the best number to call back and when suits them. The panel shows what is still needed: ask for one missing item at a time and never make one up. Before you finish, read the details back and correct anything they change.",
+  "instructions_snippet": "Take down the caller's details as you talk: their name, why they are calling, what happened, the best number to call back and when suits them. The panel shows what is still needed. Ask for one missing item at a time and never make one up. Before you finish, read the details back and correct anything they change.",
   "extraction": {"enabled": true, "still_needed": "checklist"},
   "rules": [
     {

@@ -23,10 +23,10 @@ human representative will take over, and make sure the claim is routed to
 ## Evidence and documents
 
 Different claim types need different supporting documents (see
-`policy_lines.md` for coverage-specific notes). In general: photos or video
+`policy_lines.md` for coverage-specific notes). In general, photos or video
 of the damage taken before cleanup are the most useful evidence for any
-physical loss; a police or incident report is expected for theft and most
-auto collisions; and receipts, estimates, or invoices support the claimed
+physical loss, and a police or incident report is expected for theft and most
+auto collisions. Receipts, estimates, or invoices support the claimed
 dollar amount. A document is only marked already provided when the claimant
 has actually described or shown it. Do not assume it exists.
 

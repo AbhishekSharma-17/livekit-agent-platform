@@ -181,6 +181,7 @@ Tools: `apps_list(query, category, connected_only)`, `apps_actions(toolkit, quer
 - agent: the provider tool posts the exact body and headers, applies `result_path`/`max_result_chars`, maps `successful=false` and auth-shaped errors, strips URLs, refuses a non-Composio host in an origin-tagged MCP definition; `run_with_policy` receives the definition's execution; the tripwire that `COMPOSIO_MULTI_EXECUTE_TOOL` is never backgrounded.
 - web: the Enable Composio empty state and dialog (Test key states: idle, testing, passed with the name, failed; Save gating), the status header with Validate / Rotate / Disable, the Keys page showing the same row; the gallery, the Connect dialog per method, the polling states, the Actions picker, the card and mode picker; no jargon, no `sheet`, axe, 375 px.
 - mcp: snapshot rows, `apps_connect(plan=true)`, doc lint.
+- Account identity (V6-35): `api/tests/test_tool_provider_identity.py` (display name first and no call, the per-toolkit answers, pinned to each account, refusal of odd shapes, failure and timeout leave it empty, check backoff and `identify=true`, no rename on reconnect, the proxy wire body), `mcp/tests/test_tools_apps.py` (untrusted `identity`), `web/tests/console-app-account-identity.test.tsx` (dialog, card summary, Check now).
 
 ## 9. Live check (the user's key is present; run once V5-47 and V5-48 have merged, R-V4-17 rules)
 

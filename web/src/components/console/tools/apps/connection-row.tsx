@@ -109,7 +109,7 @@ export function ConnectionRow({
   async function makeDefault() {
     try {
       await updateMutation.mutateAsync({ id: connectionId, body: { is_default: true } });
-      toast.success(`${label} is now ${toolkit.name}'s default account`);
+      toast.success(`${accountName(connection!, toolkit.name)} is now ${toolkit.name}'s default account`);
     } catch (error) {
       appsErrorToast("set the default", error);
     }

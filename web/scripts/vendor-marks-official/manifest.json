@@ -1,0 +1,159 @@
+{
+  "$comment": "Official vendor marks, the third source of scripts/gen-vendor-marks.mjs. Each SVG here was taken from the company's own site, brand page or brand kit on the date shown, then normalised to a 24 x 24 currentColor file (transforms applied, uniform scale, centred, strokes outlined, symbol isolated from a lockup where the brand itself uses the symbol alone). Shapes are never redrawn. sha256 is of the file as downloaded (for an inline header logo, of the <svg> element as cut from the page, with xmlns added where the element lacked it). docs/ui/VENDOR-MARKS.md holds the coverage table and the usage policy.",
+  "marks": {
+    "ofBeyondPresence": {
+      "file": "beyondpresence.svg",
+      "title": "Beyond Presence",
+      "source": "https://cdn.prod.website-files.com/67ff9faac266bb379ddc0ea2/6807e5a16cc2f96271e59302_Logo.svg",
+      "foundOn": "https://www.beyondpresence.ai/ (header logo)",
+      "guidelines": "No public brand guidelines found.",
+      "form": "Symbol isolated from the header lockup. The site uses the symbol alone as its app icon.",
+      "colours": "White in the original, drawn in one ink here.",
+      "fetched": "2026-10-01",
+      "sha256": "cb6e2c2da0006935f71b03310ff705d1d2f08222d7d862e5776364f404d22721"
+    },
+    "ofCartesia": {
+      "file": "cartesia.svg",
+      "title": "Cartesia",
+      "source": "https://www.cartesia.ai/Cartesia-brand-assets.zip (Archie/svg/black-archie.svg)",
+      "foundOn": "https://www.cartesia.ai/brand",
+      "guidelines": "https://www.cartesia.ai/brand forbids recolouring or distorting Archie without written permission. The kit ships approved black and white versions, which is what the foreground ink renders (dark on light, light on dark).",
+      "form": "Standalone brand symbol (Archie) from the official kit.",
+      "colours": "Black version used. Kit also has white and green (#309D4B).",
+      "fetched": "2026-10-01",
+      "sha256": "03c0671ee3cc83b1bc11820828e7641a1b36db302230a672932f5c58aa3cbcc7"
+    },
+    "ofComposio": {
+      "file": "composio.svg",
+      "title": "Composio",
+      "source": "https://brand.composio.dev/logos/Logomark-Black.svg",
+      "foundOn": "https://brand.composio.dev/logo",
+      "guidelines": "https://brand.composio.dev/guidelines asks for black on light and white on dark, the logomark for tight spaces, and no recolouring. The foreground ink renders exactly that.",
+      "form": "Standalone logomark. Its stroke was outlined to a filled shape (same geometry).",
+      "colours": "Black version used.",
+      "fetched": "2026-10-01",
+      "sha256": "54f2d0ed73bb9d6fc9bf52f288dc046a33d8d99b4819b1e4d1015434dc397817"
+    },
+    "ofDid": {
+      "file": "did.svg",
+      "title": "D-ID",
+      "source": "https://www.d-id.com/wp-content/uploads/2023/11/d-id-logo.svg",
+      "foundOn": "https://www.d-id.com/ (header logo)",
+      "guidelines": "No public brand guidelines found.",
+      "form": "Full logo, which D-ID also uses as its favicon. There is no separate symbol.",
+      "colours": "White and orange (#FF882E) in the original, drawn in one ink here.",
+      "fetched": "2026-10-01",
+      "sha256": "6005326b69655e44ebdfdbea4df5873674db5f65751980f789e66f05c4f66260"
+    },
+    "ofHume": {
+      "file": "hume.svg",
+      "title": "Hume",
+      "source": "https://www.hume.ai/ (inline header logo SVG)",
+      "foundOn": "https://www.hume.ai/",
+      "guidelines": "No public brand guidelines found.",
+      "form": "Symbol (seven dots) isolated from the header lockup. The site uses the dots alone as its favicon.",
+      "colours": "One colour (currentColor) in the original.",
+      "fetched": "2026-10-01",
+      "sha256": "8b92976b64793e6fbd0a1ac8fc342685504593016f9d8e9315a79c018ad74b12"
+    },
+    "ofInworld": {
+      "file": "inworld.svg",
+      "title": "Inworld",
+      "source": "https://inworld.ai/ (inline header logo SVG)",
+      "foundOn": "https://inworld.ai/",
+      "guidelines": "No public brand guidelines found.",
+      "form": "Symbol isolated from the header lockup. The site uses the symbol alone as its favicon.",
+      "colours": "One colour (currentColor) in the original.",
+      "fetched": "2026-10-01",
+      "sha256": "025e8b6f02579a170f52df6e91d06db6e2e7bab09e9e73c53428cbd6d562526a"
+    },
+    "ofPinecone": {
+      "file": "pinecone.svg",
+      "title": "Pinecone",
+      "source": "https://www.pinecone.io/ (inline header logo SVG)",
+      "foundOn": "https://www.pinecone.io/",
+      "guidelines": "No public brand guidelines found.",
+      "form": "Symbol isolated from the header lockup. The site uses the symbol alone as its favicon.",
+      "colours": "The site's text colour (one ink) in the original.",
+      "fetched": "2026-10-01",
+      "sha256": "454d4d021bf905af37cb494377321ef6b28726b14440061ef888e9400f8cbf8d"
+    },
+    "ofRagie": {
+      "file": "ragie.svg",
+      "title": "Ragie",
+      "source": "https://cdn.prod.website-files.com/66834c6ee9ee484e8e47a9af/68658d24b3e078f3510ea992_ragie-logo-h-tm.svg",
+      "foundOn": "https://www.ragie.ai/ (header logo)",
+      "guidelines": "No public brand guidelines found.",
+      "form": "Symbol isolated from the header lockup, strokes outlined to filled shapes (same geometry). The site uses the symbol alone as its app icon.",
+      "colours": "Green, grey and blue circles with light lines in the original, drawn in one ink here.",
+      "fetched": "2026-10-01",
+      "sha256": "1bf4f0ef2fba1c65ecc0e1a2e275f14852aed777587238638d41fddef710dc13"
+    },
+    "ofRime": {
+      "file": "rime.svg",
+      "title": "Rime",
+      "source": "https://www.rime.ai/ (inline header logo SVG)",
+      "foundOn": "https://www.rime.ai/",
+      "guidelines": "No public brand guidelines found.",
+      "form": "Full wordmark. Rime has no separate symbol and uses the wordmark as its favicon.",
+      "colours": "One colour (currentColor) in the original.",
+      "fetched": "2026-10-01",
+      "sha256": "bb1db4e7b66c9279db72fe5434a162588215d7414b087e1addbea2b88ef31f38"
+    },
+    "ofSpeechify": {
+      "file": "speechify.svg",
+      "title": "Speechify",
+      "source": "https://preview.website.cdn.speechify.com/Speechify-Logo.zip (Logomark_black.svg)",
+      "foundOn": "https://speechify.com/brand-kit/",
+      "guidelines": "https://speechify.com/brand-kit/ recommends the black or white monochrome versions for most uses, which is what the foreground ink renders.",
+      "form": "Standalone logomark from the official kit.",
+      "colours": "Black version used. Kit also has white and blue.",
+      "fetched": "2026-10-01",
+      "sha256": "cb0efe84a663b855c3a3840b57b8dc7d7b7ade7b2e411281011ea8ff8fd8810e"
+    },
+    "ofSpeechmatics": {
+      "file": "speechmatics.svg",
+      "title": "Speechmatics",
+      "source": "https://www.speechmatics.com/_next/static/media/SM-Logo-main.b945b6cd.svg",
+      "foundOn": "https://www.speechmatics.com/brand",
+      "guidelines": "https://www.speechmatics.com/brand forbids changing the logo colours and approves black and white versions, which is what the foreground ink renders. Its black and white SVG downloads embed a raster image, so the geometry comes from the vector main logo.",
+      "form": "Symbol isolated from the lockup. The site uses the symbol alone as its favicon.",
+      "colours": "Dark teal (#0D3C48) in the main logo, drawn as the approved black or white version here.",
+      "fetched": "2026-10-01",
+      "sha256": "294000779aa6e68a679619e3693dbdc7f91c2d2022270bbc1a56e9f419504ecf"
+    },
+    "ofTavus": {
+      "file": "tavus.svg",
+      "title": "Tavus",
+      "source": "https://cdn.prod.website-files.com/68c8e57d6e512b9573db146f/68defe67290d1a25593c5525_Tavus%20Brand%20Lite.zip (Logos/Tavus Symbol/TAVUS-SYMBOL4.svg)",
+      "foundOn": "https://www.tavus.io/ (brand kit link)",
+      "guidelines": "The kit has no written guidelines. It ships dark and white symbol versions.",
+      "form": "Standalone symbol from the official kit.",
+      "colours": "Near-black (#140206) version used.",
+      "fetched": "2026-10-01",
+      "sha256": "fd2c66c3cb512264df13fc66c1dcf47fb9406c728fd6883e54a5446007d3bb37"
+    },
+    "ofWeaviate": {
+      "file": "weaviate.svg",
+      "title": "Weaviate",
+      "source": "https://weaviate.io/img/site/2026/weaviate-logo-2-colours-dark-green.svg",
+      "foundOn": "https://weaviate.io/ (header logo)",
+      "guidelines": "No public brand guidelines found.",
+      "form": "Symbol isolated from the header lockup. The site uses the symbol alone as its favicon.",
+      "colours": "Green gradient in the original, drawn in one ink here.",
+      "fetched": "2026-10-01",
+      "sha256": "6018672acf7dd58a10da38028316a0a4e3ba4d3e2b92471a6f9ec8dece17d92b"
+    },
+    "ofZilliz": {
+      "file": "zilliz.svg",
+      "title": "Zilliz",
+      "source": "https://zilliz.com/ (inline header logo SVG)",
+      "foundOn": "https://zilliz.com/",
+      "guidelines": "https://zilliz.com/brand-assets says downloading its kits means agreeing to its terms, so the kits were not used. The header logo on the public site was used instead.",
+      "form": "Symbol isolated from the header lockup. The site uses the symbol alone as its favicon.",
+      "colours": "Gradient in the original, drawn in one ink here.",
+      "fetched": "2026-10-01",
+      "sha256": "9db3d7a89cb6ec2beee3e172fdde5157ae6e218fd34b7e10322f16bc1f6e3ce4"
+    }
+  }
+}

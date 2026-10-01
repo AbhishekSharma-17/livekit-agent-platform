@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 /**
  * Copies the chosen third-party marks into `src/components/shared/vendor-mark-data.ts`
- * from two licence-clean packages:
+ * from three sources:
  *
  * - `simple-icons` (CC0, https://simpleicons.org), the first source;
  * - `@lobehub/icons-static-svg` (MIT, https://github.com/lobehub/lobe-icons), for
- *   the AI vendors Simple Icons lacks (its monochrome `currentColor` files only).
+ *   the AI vendors Simple Icons lacks (its monochrome `currentColor` files only);
+ * - `scripts/vendor-marks-official/`, for the vendors neither package has. Each
+ *   file is the company's own mark, taken from its site or brand kit and
+ *   normalised to a 24 x 24 `currentColor` file. `manifest.json` there records
+ *   each file's source URL, brand guideline note, fetch date and hash, and
+ *   docs/ui/VENDOR-MARKS.md holds the policy.
  *
  * Why a copy instead of a runtime import: `simple-icons`' entry module is
  * 5.2 MB and takes about half a second to parse, which every console test
@@ -15,7 +20,7 @@
  * bundle, and nothing parses the full packages at run time.
  *
  * Usage (from `web/`): `node scripts/gen-vendor-marks.mjs` writes the file,
- * `--check` fails when it no longer matches the packages
+ * `--check` fails when it no longer matches its sources
  * (`tests/vendor-marks.test.tsx` runs the same comparison).
  */
 import { readFileSync, writeFileSync } from "node:fs";
@@ -133,6 +138,18 @@ export const LOBEHUB_ICONS = {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LOBE_DIR = path.join(root, "node_modules/@lobehub/icons-static-svg/icons");
+const OFFICIAL_DIR = path.join(root, "scripts/vendor-marks-official");
+
+/**
+ * Export name → official file and the brand's name, read from
+ * `vendor-marks-official/manifest.json`. Add a brand there (the file and its
+ * manifest entry, then a key in `vendor-marks.ts`) and rerun.
+ */
+export const OFFICIAL_MARKS = Object.fromEntries(
+  Object.entries(JSON.parse(readFileSync(path.join(OFFICIAL_DIR, "manifest.json"), "utf8")).marks).map(
+    ([name, { file, title }]) => [name, { file, title }],
+  ),
+);
 const OUT = path.join(root, "src/components/shared/vendor-mark-data.ts");
 
 /** `{ d, fillRule? }[]` from one monochrome Lobe Icons SVG; throws on anything but plain paths. */
@@ -155,6 +172,37 @@ export function parseLobeIcon(svg, file) {
   return paths;
 }
 
+/**
+ * `{ d, fillRule? }[]` from one normalised official SVG. Stricter than the Lobe
+ * parser because these files are collected by hand. The root may carry only
+ * `xmlns`, `viewBox="0 0 24 24"` and `fill="currentColor"`, then one `<title>`
+ * and `<path>` elements with nothing but `d` and `fill-rule`. A script, link,
+ * image, style, paint or transform throws.
+ */
+export function parseOfficialIcon(svg, file) {
+  const open = svg.match(/^\s*<svg\b([^>]*)>/);
+  if (!open) throw new Error(`${file}: not an <svg> document`);
+  const rootAttrs = [...open[1].matchAll(/\s([\w:-]+)="([^"]*)"/g)].map(([, k, v]) => `${k}=${v}`).sort();
+  const expected = ["fill=currentColor", "viewBox=0 0 24 24", "xmlns=http://www.w3.org/2000/svg"];
+  if (rootAttrs.join("|") !== expected.join("|")) throw new Error(`${file}: the root may carry only ${expected.join(", ")}`);
+  if (/<script|<image|<foreignObject|<use\b|<style|href=|url\(|style=|\son\w+=/i.test(svg)) throw new Error(`${file}: unsafe markup`);
+  const body = svg
+    .slice(open[0].length)
+    .replace(/<\/svg>\s*$/, "")
+    .replace(/<title>[^<]*<\/title>/, "");
+  const leftover = body.replace(/<path\b[^>]*?\/>/g, "").trim();
+  if (leftover) throw new Error(`${file}: unsupported markup ${leftover.slice(0, 60)}`);
+  const paths = [...body.matchAll(/<path\b([^>]*?)\/>/g)].map(([, attrs]) => {
+    const names = [...attrs.matchAll(/\s([\w:-]+)=/g)].map(([, k]) => k);
+    if (names.some((k) => k !== "d" && k !== "fill-rule")) throw new Error(`${file}: a path carries ${names.join(", ")}`);
+    const d = attrs.match(/\sd="([^"]+)"/)?.[1];
+    if (!d || !/^[MLHVCSQTAZmlhvcsqtaz0-9.,\s-]+$/.test(d)) throw new Error(`${file}: a path without plain path data`);
+    return /\sfill-rule="evenodd"/.test(attrs) ? { d, fillRule: "evenodd" } : { d };
+  });
+  if (paths.length === 0) throw new Error(`${file}: no paths`);
+  return paths;
+}
+
 /** The generated module's text. */
 export async function render() {
   const simpleIcons = await import("simple-icons");
@@ -170,23 +218,31 @@ export async function render() {
     const mark = { slug: file, title, source: "lobehub", paths: parseLobeIcon(svg, `${file}.svg`) };
     return `export const ${name}: VendorMarkIcon = ${JSON.stringify(mark)};`;
   });
+  const official = Object.entries(OFFICIAL_MARKS).map(([name, { file, title }]) => {
+    const svg = readFileSync(path.join(OFFICIAL_DIR, file), "utf8");
+    const mark = { slug: file.replace(/\.svg$/, ""), title, source: "official", paths: parseOfficialIcon(svg, file) };
+    return `export const ${name}: VendorMarkIcon = ${JSON.stringify(mark)};`;
+  });
   return `${[
     "// Generated by scripts/gen-vendor-marks.mjs. Do not edit by hand: change the lists in the",
-    "// script and rerun it. Marks from simple-icons (CC0, https://simpleicons.org) and",
-    "// @lobehub/icons-static-svg (MIT, https://github.com/lobehub/lobe-icons).",
+    "// script (or scripts/vendor-marks-official/) and rerun it. Marks from simple-icons (CC0,",
+    "// https://simpleicons.org), @lobehub/icons-static-svg (MIT, https://github.com/lobehub/lobe-icons)",
+    "// and the vendors' own sites (scripts/vendor-marks-official/manifest.json, docs/ui/VENDOR-MARKS.md).",
     "",
     "/** One mark, whichever source it came from: 24 x 24 path data drawn in `currentColor`. */",
     "export interface VendorMarkIcon {",
     "  slug: string;",
     '  /** The brand\'s own name ("Google Sheets", "OpenAI"), for a label beside the mark. */',
     "  title: string;",
-    '  source: "simple-icons" | "lobehub";',
+    '  source: "simple-icons" | "lobehub" | "official";',
     '  paths: readonly { d: string; fillRule?: "evenodd" }[];',
     "}",
     "",
     ...simple,
     "",
     ...lobe,
+    "",
+    ...official,
   ].join("\n")}\n`;
 }
 
@@ -197,11 +253,12 @@ async function main() {
       console.error("vendor-mark-data.ts is out of date: run `node scripts/gen-vendor-marks.mjs`");
       process.exit(1);
     }
-    console.log("vendor-mark-data.ts matches the packages");
+    console.log("vendor-mark-data.ts matches its sources");
     return;
   }
   writeFileSync(OUT, next);
-  console.log(`wrote ${path.relative(root, OUT)} (${Object.keys(SIMPLE_ICONS).length + Object.keys(LOBEHUB_ICONS).length} marks)`);
+  const count = Object.keys(SIMPLE_ICONS).length + Object.keys(LOBEHUB_ICONS).length + Object.keys(OFFICIAL_MARKS).length;
+  console.log(`wrote ${path.relative(root, OUT)} (${count} marks)`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

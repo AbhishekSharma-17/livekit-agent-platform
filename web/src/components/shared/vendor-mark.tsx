@@ -54,8 +54,11 @@ const SIZE_CLASSES = {
  * A third-party service's identity (docs/ui/DESIGN-SYSTEM.md section 5).
  *
  * - **The official mark** when `vendor-marks.ts` knows the vendor (Simple
- *   Icons, else Lobe Icons), in monochrome `currentColor` (foreground ink on a
- *   muted tile), so it reads in both themes whatever the brand colour is.
+ *   Icons, else Lobe Icons, else the company's own mark), in monochrome
+ *   `currentColor` (foreground ink on a muted tile), so it reads in both
+ *   themes whatever the brand colour is. For brands that forbid recolouring,
+ *   this ink is their approved black (light theme) or white (dark theme)
+ *   version (docs/ui/VENDOR-MARKS.md).
  * - **Otherwise a monogram** in a square faintly tinted with a per-vendor
  *   hue, mixed into theme tokens so it reads in both themes.
  *

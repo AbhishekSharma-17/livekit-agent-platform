@@ -322,3 +322,14 @@ describe("Combobox (spec 6.3): row cap, free text, accent-insensitive search, pa
     );
   });
 });
+
+describe("dedupeGroups", () => {
+  it("keeps one row per value across groups, first occurrence wins", async () => {
+    const { dedupeGroups } = await import("@/components/ui/searchable-select");
+    const out = dedupeGroups([
+      { options: [{ value: "a", label: "Accounting" }, { value: "b", label: "Billing" }, { value: "a", label: "Accounting again" }] },
+      { heading: "More", options: [{ value: "b", label: "Billing dup" }, { value: "c", label: "CRM" }] },
+    ]);
+    expect(out.flatMap((g) => g.options.map((o) => o.label))).toEqual(["Accounting", "Billing", "CRM"]);
+  });
+});

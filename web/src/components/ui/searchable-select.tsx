@@ -76,6 +76,19 @@ function normalize(text: string): string {
   return text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 }
 
+/** Drop repeated values (first occurrence wins) so every row has a unique value and key. */
+export function dedupeGroups(groups: SearchableSelectGroup[]): SearchableSelectGroup[] {
+  const seen = new Set<string>()
+  return groups.map((group) => ({
+    ...group,
+    options: group.options.filter((option) => {
+      if (seen.has(option.value)) return false
+      seen.add(option.value)
+      return true
+    }),
+  }))
+}
+
 /** Keep at most `limit` rows across groups (pinned rows always stay). */
 function capGroups(groups: SearchableSelectGroup[], limit: number): { groups: SearchableSelectGroup[]; hidden: number } {
   let remaining = limit
@@ -166,8 +179,10 @@ export function SearchableSelect({
   const [query, setQuery] = React.useState("")
   const [highlighted, setHighlighted] = React.useState("")
 
+  // One row per value across all groups: a source that repeats a value (e.g. a vendor's
+  // category list) would otherwise render duplicate keys and confuse the list's identity.
   const groups = React.useMemo<SearchableSelectGroup[]>(
-    () => groupsProp ?? (options ? [{ options }] : []),
+    () => dedupeGroups(groupsProp ?? (options ? [{ options }] : [])),
     [groupsProp, options],
   )
   const allOptions = React.useMemo(() => groups.flatMap((group) => group.options), [groups])

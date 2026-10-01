@@ -65,7 +65,9 @@ export function AppGallery() {
 
   const categoryOptions: SearchableSelectOption[] = React.useMemo(() => {
     const raw = categoriesQuery.data?.items ?? [];
-    return raw
+    // Composio repeats some categories (same id twice); keep one row per id.
+    const unique = raw.filter((cat, index) => raw.findIndex((other) => other.id === cat.id) === index);
+    return unique
       .map((cat) => ({ value: cat.id, label: cat.name ? sentenceCase(cat.name) : humanizeCategoryId(cat.id) }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [categoriesQuery.data]);

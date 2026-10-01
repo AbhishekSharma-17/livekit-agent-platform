@@ -11,7 +11,7 @@ All four files under `~/work/insurance_claim_live_agent_team/livekit_agent_platf
 **Header**
 - Review completed 2026-09-19 by the architect (Fable 5.1).
 - Status line: "Fixes applied on 2026-09-19: WP-A, WP-B, WP-C, WP-D all report done."
-- WP-D checked this against the code. Test results: agent 331 passed; packs 189 passed + 5 expected xfailed; api 230 passed (`-m "not live"`); web lint, typecheck and test green (181 tests, 13 files).
+- WP-D checked this against the code. Test results: agent 331 passed. Packs 189 passed + 5 expected xfailed. Api 230 passed (`-m "not live"`). Web lint, typecheck and test green (181 tests, 13 files).
 - Precedence for implementers: `DECISIONS-W2.md` (including D-W3) > REVIEW-FINAL §4 > `CONTRACTS.md` > everything else.
 
 **Decisions**
@@ -22,7 +22,7 @@ All four files under `~/work/insurance_claim_live_agent_team/livekit_agent_platf
   - `escalate_to_human` emits `escalation`. The insurance pack emits it on the route transition into `emergency_escalation`, inside `render_and_patch`.
 - **D-W3-2:** `freeze()` in `web/src/lib/livekit.ts` does nothing until a connect has been attempted (this fixes StrictMode). Known edge: if you freeze during an in-flight fetch and that fetch rejects, the source is dead. This is only safe because `SessionExperience` remounts a fresh `LiveSession` on each attempt.
 
-**Verdict:** "MVP-grade for a supervised local test on LiveKit credentials; not for exposure to anyone but the operator."
+**Verdict:** "MVP-grade for a supervised local test on LiveKit credentials, not for exposure to anyone but the operator."
 
 **Five warnings to the user**
 1. `/api/console/*` has no authentication. Anyone who can reach localhost:3000 is an admin, so do not tunnel it.
@@ -46,9 +46,9 @@ All four files under `~/work/insurance_claim_live_agent_team/livekit_agent_platf
 - Doc and copy items handled by WP-D: F-19, F-20, F-22 (copy only), F-23, F-24, F-25, F-31, F-32.
 
 **Deferred or open (the tech debt):**
-- **F-06 HIGH:** the web console proxy has no auth; `?mode=test` rides on it.
+- **F-06 HIGH:** the web console proxy has no auth, and `?mode=test` rides on it.
 - **F-07 HIGH:** public `POST /v1/agents/{slug}/connect` has no rate limit, no concurrency cap and no session budget. Each call mints a 2 h token.
-- **F-08 HIGH:** static `dev-admin` / `dev-service` tokens; no minimum strength.
+- **F-08 HIGH:** static `dev-admin` / `dev-service` tokens. No minimum strength.
 - **F-13 MEDIUM:** the public connect endpoint honours a client-chosen `participant_identity` and unbounded `participant_metadata`.
 - **F-14 MEDIUM:** the HTTP-tool allowlist is a union of per-tool and platform lists. No private-range block, no DNS-rebinding defence.
 - **F-15 MEDIUM:** an unknown `{{ secret.NAME }}` renders as an empty string.
@@ -145,9 +145,9 @@ The architect says he would refuse to deploy without the first five.
 | `LKAP_PACKS` | worker (must match api) | `packs.insurance_claim,packs.generic` |
 | `LKAP_HTTP_TOOL_ALLOWED_HOSTS` | worker, optional | comma list |
 | `LKAP_VISION_MAX_FRAME_AGE_S` | worker, optional | 8 |
-| `LKAP_IDLE_HANGUP_S` | worker, optional | 120; 0 or unset disables |
+| `LKAP_IDLE_HANGUP_S` | worker, optional | 120, and 0 or unset disables |
 | `NEXT_PUBLIC_API_BASE_URL` | web | `http://localhost:8080` |
-| `LIVEKIT_AGENT_NAME` | worker, optional | leave unset; if set it must be `lkap-agent` |
+| `LIVEKIT_AGENT_NAME` | worker, optional | leave unset, and if set it must be `lkap-agent` |
 
 **One-time setup**
 - `cd contracts && uv sync && uv run python -m lkap_contracts.export && cd .. && scripts/export_contracts.sh`
@@ -157,23 +157,23 @@ The architect says he would refuse to deploy without the first five.
 
 **Start order**
 1. api: `cd api && uv run uvicorn lkap_api.main:app --host 127.0.0.1 --port 8080`, then `curl -s localhost:8080/v1/health`.
-2. worker: `cd agent && uv run python -m lkap_agent.main dev`. Expect `registered worker {"agent_name":"lkap-agent"}`; on the first job expect `accepting job agent_name=lkap-agent`.
+2. worker: `cd agent && uv run python -m lkap_agent.main dev`. Expect `registered worker {"agent_name":"lkap-agent"}`. On the first job expect `accepting job agent_name=lkap-agent`.
 3. web: `cd web && pnpm dev`, then open http://localhost:3000/console.
 - `scripts/dev.sh` starts all three at once.
 - Before every live run, check there is exactly one worker: `ps aux | grep lkap_agent.main`, and `lk agent list` must show no cloud `lkap-agent`.
 
 **Restarting the worker (D-W2-13)**
-- Config edits never need a restart; code edits always do. There is no hot reload in `dev`.
+- Config edits never need a restart. Code edits always do. There is no hot reload in `dev`.
 - Stop sequence: SIGINT, wait ≥15 s (dev) or `drain_timeout` (start mode, 3600 s), and SIGKILL only if it is still alive.
 - In start mode, SIGTERM only drains, which is how two workers once served `lkap-agent` at the same time.
 - `agent/Dockerfile` sets `STOPSIGNAL SIGINT`. The compose example uses `stop_grace_period: 1h`.
 
 **Pack seeding**
 - `generic`: cascaded Inference `deepgram/nova-3` → `google/gemma-4-31b-it` → `inworld/inworld-tts-2` (voice Ashley).
-- `insurance_claim`: LLM `google/gemini-3.5-flash`; camera and chat on; seeds two knowledge bases.
+- `insurance_claim`: LLM `google/gemini-3.5-flash`. Camera and chat on. Seeds two knowledge bases.
 - The only models flagged `supports_video`: `google/gemini-3.5-flash` and three Gemini Live models.
 
-**Manual feature tests (§3, rows 1–9b):** dispatch, voice both ways, typed chat, tools → panel, hangup → summary, test call on a draft, camera/screen → pin, model sees the frame, knowledge base, insurance end to end, sketch.
+**Manual feature tests (§3, rows 1 to 9b):** dispatch, voice both ways, typed chat, tools → panel, hangup → summary, test call on a draft, camera/screen → pin, model sees the frame, knowledge base, insurance end to end, sketch.
 
 **Automated gates**
 - Python packages: `uv run ruff check . && uv run ruff format --check . && uv run mypy src/ --strict && uv run pytest -q -m "not live"`.
@@ -188,7 +188,7 @@ The architect says he would refuse to deploy without the first five.
 - The room-level tests create `E2E …` agents that accumulate, because agents with sessions cannot be deleted.
 
 **Live results so far**
-- Stages 0–9 passed. Stage 7b failed on gemma and passed on gemini-3.5-flash.
+- Stages 0 to 9 passed. Stage 7b failed on gemma and passed on gemini-3.5-flash.
 - 9b (sketch) was skipped, 10 (avatar) and 11 (Gemini Live) were not run.
 - 12 (cloud deploy): build not verified, and no `lkap-agent` is deployed.
 - The browser runs covered only the typed path, because the Browser pane blocks mic and camera.
@@ -215,7 +215,7 @@ The architect says he would refuse to deploy without the first five.
 
 ## 3. LIVE_TEST_PLAN.md
 
-**Principles:** prove one new thing per stage; LiveKit credentials alone carry the MVP; spend the cheapest tokens first (text mode before audio).
+**Principles:** prove one new thing per stage. LiveKit credentials alone carry the MVP. Spend the cheapest tokens first (text mode before audio).
 
 **Part A: integration sequence**
 - A0 preconditions, A1 bring-up order, A2 seed agents (`smoke-generic`, `smoke-vision`, `smoke-kb`), A3 who fixes what, A4 the `test_e2e_generic.py` spec (7 steps).
@@ -231,11 +231,11 @@ The architect says he would refuse to deploy without the first five.
 | 2 | Audio round trip: greeting via `session.say` (inworld), STT deepgram/nova-3, `inference.TurnDetector`, reply. `agent_state` cycles. |
 | 3 | Typed chat: `lk.chat` → `platform_text_input_cb` → `on_user_turn_completed` → `generate_reply`. |
 | 4 | Built-in tools, `UiChannel` patches, initial snapshot (D-W2-9a), generic panel, `tool_call_*` events. |
-| 5 | End call → summary: `close_on_disconnect` → `ctx.shutdown` → `PUT summary`. Row `ended` ≤10 s with transcript, usage and `final_ui_state`; exactly one row per call. |
-| 6 | Test mode on an unpublished agent via the console proxy. Public route shows 403; `?mode=test` connects. |
+| 5 | End call → summary: `close_on_disconnect` → `ctx.shutdown` → `PUT summary`. Row `ended` ≤10 s with transcript, usage and `final_ui_state`. Exactly one row per call. |
+| 6 | Test mode on an unpublished agent via the console proxy. Public route shows 403. `?mode=test` connects. |
 | 7a | Frame → `pin_frame` asset with `meta.source` camera, then screen, then camera. |
-| 7b | The LLM sees the frame (per-turn injection plus `describe_current_frame`); one image per call; auto-degrade R5. |
-| 8 | Knowledge base: ingestion, `/internal/v1/kb/search`, auto-inject, `search_knowledge`; `k=0` returns 422. |
+| 7b | The LLM sees the frame (per-turn injection plus `describe_current_frame`). One image per call. Auto-degrade R5. |
+| 8 | Knowledge base: ingestion, `/internal/v1/kb/search`, auto-inject, `search_knowledge`. `k=0` returns 422. |
 | 9 | Insurance end to end: seed from pack, pack tools, background workflow, notebook, urgent `emergency_escalation` path, `escalation`/`workflow_run` events. |
 | 9b | Sketch (Google key): `draw_incident_sketch` → confirm round trip. |
 | 10 | Avatar: `avatar.start` → `wait_for_join` → `session.start` ordering, D-W2-7 identities, `useAgentRpc` avatar exclusion. |
@@ -243,7 +243,7 @@ The architect says he would refuse to deploy without the first five.
 | 12 | Cloud deploy: Dockerfile builds, `lk agent create/deploy`, `lk agent list` shows `other-project-agent` and `lkap-agent`, Stages 1/3/4/5 rerun against the cloud worker. |
 
 **Part C: definition of done**
-- Blocking: stages 0–5, 6, 7a, 7b with the fallback model, 8, 9 without 9b, 12 build + register, and the offline gates including `test_e2e_generic` under `-m live`.
+- Blocking: stages 0 to 5, 6, 7a, 7b with the fallback model, 8, 9 without 9b, 12 build + register, and the offline gates including `test_e2e_generic` under `-m live`.
 - Known gaps (not blocking): 9b, 10, 11, 7b on gemma (closed), 12 end-to-end, full reconnect.
 
 **Part D: what the user supplies**
@@ -269,7 +269,7 @@ The architect says he would refuse to deploy without the first five.
 
 ## 4. UI_UX_SPEC.md
 
-**Status:** "decided" (Fable 5.1). It supersedes ARCHITECTURE §12 for the web app and changes no API or protocol contract. **It gives no completion status for any WP**: each package has acceptance criteria but nothing is marked done.
+**Status:** "decided" (Fable 5.1). It supersedes ARCHITECTURE §12 for the web app and changes no API or protocol contract. **It gives no completion status for any WP.** Each package has acceptance criteria but nothing is marked done.
 
 ### Design system
 
@@ -287,7 +287,7 @@ The architect says he would refuse to deploy without the first five.
 - Semantic tones `info`, `success` (= brand), `warning`, `danger`, each with `-soft` and `-text` variants.
 - `sidebar-*`, plus `stage` / `stage-foreground` for the session.
 - Shadows: `--shadow-sm/md/lg`.
-- Radius: xs 4, sm 6, md 8, lg 12, xl 16, 2xl 20; `--radius` = sm.
+- Radius: xs 4, sm 6, md 8, lg 12, xl 16, 2xl 20. `--radius` = sm.
 - Easing: `--ease-out`, `--ease-in-out`, `--ease-drawer`.
 - Durations: `--dur-1` 120 ms, `--dur-2` 180 ms, `--dur-3` 240 ms, `--dur-4` 320 ms.
 - Contrast targets are enforced by `scripts/check-contrast.mjs` (`pnpm check:contrast`).
@@ -297,11 +297,11 @@ The architect says he would refuse to deploy without the first five.
 
 **Layout:** 4 px spacing scale. Console content max 1200 px, forms 720 px, editor summary rail 280 px, sidebar 232 px (56 px collapsed). Cards do not nest (use `divide-y` inside). Focus is a 2 px brand ring. Hit targets ≥40 px on the session surface and mobile, ≥32 px on desktop.
 
-**Motion:** ≤320 ms; animate transform, opacity, clip-path and filter only; press feedback `active:scale-[0.98]`; no animation on keyboard-driven navigation; honour `prefers-reduced-motion`.
+**Motion:** ≤320 ms. Animate transform, opacity, clip-path and filter only. Press feedback `active:scale-[0.98]`. No animation on keyboard-driven navigation. Honour `prefers-reduced-motion`.
 
 **Icons:** Lucide only, via `Icon`, stroke 1.75. `@phosphor-icons/react` is removed.
 
-**shadcn:** never run `shadcn init`; add components one at a time. WP-0 adds: sidebar, sheet, tooltip, dropdown-menu, popover, command, separator, progress, alert, label, checkbox, radio-group, scroll-area, collapsible, breadcrumb, kbd, input-group. `button.tsx` gains `variant="brand"` and `size="xl"`.
+**shadcn:** never run `shadcn init`. Add components one at a time. WP-0 adds: sidebar, sheet, tooltip, dropdown-menu, popover, command, separator, progress, alert, label, checkbox, radio-group, scroll-area, collapsible, breadcrumb, kbd, input-group. `button.tsx` gains `variant="brand"` and `size="xl"`.
 
 **Shared primitives in `web/src/components/shared/`**
 
@@ -331,15 +331,15 @@ The architect says he would refuse to deploy without the first five.
 
 | Screen | Route | Icon | Notes |
 |---|---|---|---|
-| Overview | `/console` | `layout-dashboard` | setup checklist (6 rows), recent sessions (8), live now, quick actions; no hero metrics |
+| Overview | `/console` | `layout-dashboard` | setup checklist (6 rows), recent sessions (8), live now, quick actions, with no hero metrics |
 | Agents | `/console/agents` | `bot` | list |
-| New agent | `/console/agents/new` | | a page, not a modal; pack cards, then name |
+| New agent | `/console/agents/new` | | a page, not a modal. Pack cards, then name |
 | Agent editor | `/console/agents/[id]?section=providers\|instructions\|panel\|tools\|knowledge` | | default section is providers |
 | Credentials | `/console/credentials` | `key-round` | |
 | Knowledge | `/console/knowledge`, `/console/knowledge/[id]` | `book-open` | |
 | Sessions | `/console/sessions`, `/console/sessions/[id]` | `history` | |
 | Settings | `/console/settings` | `settings-2` | |
-| Preview (unlisted) | `/console/preview/panels` | | noindex; scene query params |
+| Preview (unlisted) | `/console/preview/panels` | | noindex, with scene query params |
 | Console not-found | `app/console/not-found.tsx` | | |
 
 **Outside the console**
@@ -366,7 +366,7 @@ The architect says he would refuse to deploy without the first five.
 - A sticky header, then three columns: section nav 200 px · content max 720 px · summary rail 280 px.
 - Header items: name with a pencil to edit, slug with copy, Draft/Live chip, unsaved indicator, Test call split button, Publish/Unpublish popover, Save (⌘S).
 - Validation shows as dots on sections plus an in-section "Issues" list. The old banner is removed.
-- The publish `Switch` is removed everywhere; publishing goes through a popover that runs `/validate`.
+- The publish `Switch` is removed everywhere. Publishing goes through a popover that runs `/validate`.
 
 **Providers section**
 - Mode cards: Cascaded / Realtime.
@@ -378,10 +378,10 @@ The architect says he would refuse to deploy without the first five.
 
 | Viewport | Layout |
 |---|---|
-| Desktop `side` (generic panel) | grid `minmax(0,1fr) 400px`; stage above transcript on the left, panel on the right; control bar under the left column |
-| Desktop `wide` (notebook) | grid `340px minmax(0,1fr)`; compact 200 px stage above transcript in the left rail, panel on the right; control bar under the rail |
-| Tablet 768–1023 | single column (panel first for `wide`); transcript as a bottom sheet |
-| Mobile <768 | `min-h-[100dvh]`, bottom padding `calc(88px + env(safe-area-inset-bottom))`, fixed control bar; `wide` uses a 72 px stage strip, `side` a 45vh stage; transcript as a 60vh bottom sheet |
+| Desktop `side` (generic panel) | grid `minmax(0,1fr) 400px`. Stage above transcript on the left, panel on the right. Control bar under the left column |
+| Desktop `wide` (notebook) | grid `340px minmax(0,1fr)`. Compact 200 px stage above transcript in the left rail, panel on the right. Control bar under the rail |
+| Tablet 768 to 1023 | single column (panel first for `wide`), transcript as a bottom sheet |
+| Mobile <768 | `min-h-[100dvh]`, bottom padding `calc(88px + env(safe-area-inset-bottom))`, fixed control bar. `wide` uses a 72 px stage strip, `side` a 45vh stage. Transcript as a 60vh bottom sheet |
 
 **Session shell elements**
 - Top strip (40 px) with the elapsed timer.
@@ -393,14 +393,14 @@ The architect says he would refuse to deploy without the first five.
 - The panel gets its own column with a header (`PanelDefinition.title`).
 - Proposed optional `PanelDefinition.handleRequest` so panels can receive `open_dialog` / `focus`.
 - The generic panel moves to tokens.
-- The notebook keeps its paper, ink, tape and stamp; its runtime Google Fonts `@import` and `.field` border-left stripe go.
+- The notebook keeps its paper, ink, tape and stamp. Its runtime Google Fonts `@import` and `.field` border-left stripe go.
 
 **Other screens**
 - Pre-call: two-column card, device check through `useMicCheck`, never ask for permission on page load, Start is `brand` `xl`.
 - Audio priming uses an `AudioContext` created in the Start click, falling back to `startAudio()` with a full-well "Tap to hear" overlay.
 - Session detail: tabs Timeline (unified, default) · Transcript · Panel at end of call · Raw events. Never show raw JSON outside "Details".
 
-**Error channels:** field errors inline (never toasts); section errors as an `Alert`; transient action failures as a toast. Pages load with skeletons, not spinners.
+**Error channels:** field errors inline (never toasts). Section errors as an `Alert`. Transient action failures as a toast. Pages load with skeletons, not spinners.
 
 ### Work packages (§7)
 
@@ -409,18 +409,18 @@ All must pass `pnpm lint/typecheck/test/build`. File ownership is exclusive.
 | WP | Title | Owner, wave | Scope |
 |---|---|---|---|
 | WP-0 | Foundation: tokens, theme, shared primitives | Opus, first, blocking | `globals.css` tokens, theme provider, shadcn additions, shared primitives, `format.ts`, api hooks (`useHealth`, `useTestCredential`, `useUpdateCredential`), `PANEL_META`/`CAPABILITY_META`, contrast script, remove phosphor |
-| WP-1 | Console shell, IA, overview, settings | Sonnet, wave A | sidebar, mobile nav, breadcrumbs, theme menu, P1 command palette, route move (`/console` becomes Overview, new `/console/agents`), overview, settings; `nav.tsx` deleted |
-| WP-2 | Agents list and new-agent flow | Sonnet, wave A | `AgentsTable` on `ResponsiveTable` with row menu, search and filters, no switches; `/console/agents/new` pack-card flow; `create-agent-dialog.tsx` deleted |
+| WP-1 | Console shell, IA, overview, settings | Sonnet, wave A | sidebar, mobile nav, breadcrumbs, theme menu, P1 command palette, route move (`/console` becomes Overview, new `/console/agents`), overview, settings. `nav.tsx` deleted |
+| WP-2 | Agents list and new-agent flow | Sonnet, wave A | `AgentsTable` on `ResponsiveTable` with row menu, search and filters, no switches. `/console/agents/new` pack-card flow. `create-agent-dialog.tsx` deleted |
 | WP-3 | Agent editor shell, summary rail, publish, test call | Opus, wave A | `editor-shell`, `section-nav`, `summary-rail`, `publish-popover`, `test-call-menu`, `validation-map.ts` (`useSectionIssues`), `unsaved-guard` |
 | WP-4 | Providers, models, credentials | Opus, wave A | providers flow, slot editor, `model-combobox`, `registry-form`, `credential-sheet`, `/console/credentials` page |
 | WP-5 | Instructions, panel, tools, knowledge sections | Sonnet, wave A | the four tabs, plus tool editors becoming sheets |
 | WP-6 | Knowledge pages | Sonnet, wave A | `kb-list`, `kb-detail` with drop zone, `kb-search-panel`, `create-kb-dialog` |
-| WP-7 | Sessions list and detail | Opus, wave A | filters, duration column, pagination of 25; `session-detail-view`, `session-timeline`, "Panel at end of call" |
+| WP-7 | Sessions list and detail | Opus, wave A | filters, duration column, pagination of 25. `session-detail-view`, `session-timeline`, "Panel at end of call" |
 | WP-8 | Session experience | Opus, wave A | `StageView` seam, `PreCallCard` with injected devices, `useMicCheck`, `EndOfCallCard`, `SessionUnavailable`, `classifyConnectError`, `session-shell` layouts, audio priming, test-mode bar, fonts in `(session)/layout.tsx` |
 | WP-9 | Panels: generic + insurance notebook integration | Opus, wave A | token migration, notebook fonts and fields, `generic_ui_state.json` fixture |
 | WP-10 | Preview route, capture script, visual QA harness | Sonnet, wave A, finishes after WP-8/9 | `/console/preview/panels` scenes, `web/scripts/ui-capture.mjs`, axe pass, optional `e2e/preview.spec.ts` |
 | WP-11 | Home page, console not-found, a11y utilities | Sonnet, wave A | `/`, root and console not-found pages, favicon and og image |
-| WP-12 | Integration, gates, after-screenshots review | Opus, last, sequential | merge order WP-0 → 1..11 → 12; grep checks for banned classes, phosphor and runtime fonts; `after/INDEX.md`; Fable punch list |
+| WP-12 | Integration, gates, after-screenshots review | Opus, last, sequential | merge order WP-0 → 1..11 → 12. Grep checks for banned classes, phosphor and runtime fonts. `after/INDEX.md`. Fable punch list |
 
 **API asks (§7.14, non-blocking)**
 - `ValidationResult.issues[]` with path, message and severity.

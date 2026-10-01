@@ -3,11 +3,11 @@
 This is written for a fresh coordinator session so it can continue the v2 build without the prior chat. **Snapshot taken 2026-09-23.** Before acting on anything here, verify it against `git status`, the gates and `docs/v2/_asks.md`. The code is the source of truth.
 
 ## Status: Phase 1 complete (2026-09-24)
-- **Commits (local only):** 5b715df (waves 1–2), 53f9295 (wave 3), 5367a50 (V2-19 integration), db8326e (V2-20 live verification), 1d660f6 (V2-21 security + V2-20F), and the V2-22 hardening commit on top.
+- **Commits (local only):** 5b715df (waves 1 to 2), 53f9295 (wave 3), 5367a50 (V2-19 integration), db8326e (V2-20 live verification), 1d660f6 (V2-21 security + V2-20F), and the V2-22 hardening commit on top.
 - **Architect verdict** (REVIEW-V2 §8):
   - SHIP-WITH-CONDITIONS for local/MVP use.
   - NO-SHIP for multi-tenant production until the Phase 2 conditions are met: per-connection worker tokens, email verification, digest pins, and Postgres + Redis verified with two api processes.
-- **DB:** at `v2_011_recording_error`; a backup from before the migration is in the scratchpad.
+- **DB:** at `v2_011_recording_error`. A backup from before the migration is in the scratchpad.
 - **Open, owned by the user:**
   - Set the owner password.
   - Move secrets from launch.json into `~/.config/lkap/dev.env` (REVIEW-V2 §7).
@@ -19,8 +19,8 @@ This is written for a fresh coordinator session so it can continue the v2 build 
 - **Phase 2 backlog:** the open MEDIUM/LOW items in REVIEW-V2, the multi-tenant conditions, the text-chat fake worker for e2e (V2-19C-4), server-side sessions paging (V2-19C-8), and the storage-configs API.
 
 ## Status update (2026-09-23, later)
-- **Commit `5b715df`:** waves 1–2 plus V2-15 and V2-17, including partial V2-16/V2-18 files.
-- **Worker `lkap-agent`:** restarted on v2 code; log at scratchpad/worker.log.
+- **Commit `5b715df`:** waves 1 to 2 plus V2-15 and V2-17, including partial V2-16/V2-18 files.
+- **Worker `lkap-agent`:** restarted on v2 code. Log at scratchpad/worker.log.
 - **Done since the snapshot below:** V2-11, V2-13, V2-14, V2-15 (live L12a passed), V2-17 (worker wiring deferred to V2-19 per R-V2-20), the V2-02 #25 pass.
 - **Rulings:** R-V2-8..R-V2-25 are in PLAN-V2 §8.
 - **Running:** V2-16 (told about the R-V2-22 merge amendment) and V2-18.
@@ -36,23 +36,23 @@ LKAP (LiveKit Agent Platform) is a configurable voice and video agent platform.
 - **Stack:** LiveKit Cloud (or a self-hosted server), a Python LiveKit Agents worker, FastAPI, and Next.js.
 - **Reference pack:** the insurance-claim use case (`packs/insurance_claim`), rebuilt from the original Gemini Live demo in `../insurance_claim_live_agent_team/live_demo`.
 - **v2 goal:** a complete platform:
-  - every LiveKit provider and avatar is configurable from the UI;
-  - LiveKit connections (Cloud or self-hosted) are managed from the UI, with a worker supervisor;
-  - a no-code panel/blocks system;
-  - a flow builder;
-  - telephony over LiveKit SIP;
-  - QA, recordings and cost tracking;
-  - auth, tenancy and API keys;
+  - every LiveKit provider and avatar is configurable from the UI.
+  - LiveKit connections (Cloud or self-hosted) are managed from the UI, with a worker supervisor.
+  - a no-code panel/blocks system.
+  - a flow builder.
+  - telephony over LiveKit SIP.
+  - QA, recordings and cost tracking.
+  - auth, tenancy and API keys.
   - Dograh feature parity or better.
 
-## Process rules (the user set these; follow them)
+## Process rules (the user set these, so follow them)
 - **Fable 5.1 decides.** All architecture, system design and important decisions go to a Fable agent (Agent tool, `model: "fable"`). Opus 5.5 and Sonnet 5 implement. Don't decide design questions yourself. Record rulings in `PLAN-V2.md` §8 (R-V2-1…7 so far).
 - **Work packages have exclusive file ownership.** Cross-package needs go into `docs/v2/_asks.md`. The "Coordinator decisions" section there is binding.
 - **Commits:** the user approved one local commit per completed wave, after all gates pass. There is no remote yet and nothing is pushed. End every commit message with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
-- **Concurrency:** run about 6 agents at a time. More than that has repeatedly hit account usage limits. When an agent stops on a limit, resume it with SendMessage; it keeps its context.
+- **Concurrency:** run about 6 agents at a time. More than that has repeatedly hit account usage limits. When an agent stops on a limit, resume it with SendMessage. It keeps its context.
 
 ## Hard safety rules
-1. **Never name a source path segment starting with `credentials`.** The user's deny rule `Read(./**/credentials*)` blocks it. That's why the router is `api/src/lkap_api/routers/provider_keys.py` and the page is `/console/keys`. If a tool hits a deny rule, stop and report. **Never** read the file another way (`git show`, `cat`); a subagent did that once and the harness flagged it.
+1. **Never name a source path segment starting with `credentials`.** The user's deny rule `Read(./**/credentials*)` blocks it. That's why the router is `api/src/lkap_api/routers/provider_keys.py` and the page is `/console/keys`. If a tool hits a deny rule, stop and report. **Never** read the file another way (`git show`, `cat`). A subagent did that once and the harness flagged it.
 2. **Never read or write `.env` or `.env.*`.** They're permission-blocked. Runtime env lives in `~/work/.claude/launch.json`, outside the repo. It holds the LiveKit key and secret, `LKAP_MASTER_KEY`, and the `dev-admin` / `dev-service` tokens.
 3. **LiveKit Cloud project** `wss://your-project.livekit.cloud`:
    - It also hosts an unrelated agent, **`other-project-agent`. Never touch it.**
@@ -75,7 +75,7 @@ LKAP (LiveKit Agent Platform) is a configurable voice and video agent platform.
   - `d7cf92a` wave 0
   - `fdc27fa` and `058116b`: two small fixes from background tasks the user started
 - **Uncommitted:** all of wave 1 and part of wave 2, about 330 changed paths. Commit once the in-flight wave-2 packages land and every gate is green.
-- **Servers** (the Browser `preview_start` names come from launch.json; the desktop app sometimes stops them, so restart with `preview_start` as needed):
+- **Servers** (the Browser `preview_start` names come from launch.json and the desktop app sometimes stops them, so restart with `preview_start` as needed):
   - `lkap-api` on :8080, with `--reload`
   - `lkap-web` on :3000
 - **Worker:** started by the coordinator in the background:
@@ -85,7 +85,7 @@ LKAP (LiveKit Agent Platform) is a configurable voice and video agent platform.
   - Python packages (`contracts`, `api`, `agent`, `packs`, `supervisor`): `uv run ruff check . && uv run ruff format --check . && uv run mypy src/ --strict && uv run pytest -q -m "not live"`
   - `web/`: `pnpm lint`, `pnpm typecheck`, `pnpm test`
 - **UI capture and accessibility check:** from `web/`, run `node scripts/ui-capture.mjs <outDir>`.
-- Docker is installed but not running. Postgres has never been run locally; CI covers it.
+- Docker is installed but not running. Postgres has never been run locally. CI covers it.
 
 ## Status of Phase 1 packages (see `PLAN-V2.md` for the cards)
 **Done:**
@@ -109,14 +109,14 @@ LKAP (LiveKit Agent Platform) is a configurable voice and video agent platform.
 - V2-14 web login, team, keys, webhooks and session tabs
 - V2-02 follow-up: the #25 scoping pass, plus #47 and #58
 - V2-15 flow runtime (stretch)
-- V2-17 telephony core (stretch; mocked, no real SIP resources)
+- V2-17 telephony core (stretch, mocked, no real SIP resources)
 
 **Not started:**
 - V2-16 flow API and builder UI (needs V2-15)
 - V2-18 text test mode with rewind, plus the widget
 - WP-12 UI integration
 - V2-19 integration: also covers ask #54 (half-cascade vision), #56 (krisp pin), the A11Y list and B1
-- V2-20 live verification on LiveKit Cloud (stages L1–L14 in PLAN §6; v1 stages 0–9 regression)
+- V2-20 live verification on LiveKit Cloud (stages L1 to L14 in PLAN §6, v1 stages 0 to 9 regression)
 - V2-21 security review with Fable sign-off: S1 connection-test SSRF, S2 secrets passed as launch argv
 
 ## Open items to route (all in `docs/v2/_asks.md`)

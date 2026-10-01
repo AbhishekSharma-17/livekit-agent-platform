@@ -48,7 +48,7 @@ Root: `~/work/insurance_claim_live_agent_team/livekit_agent_platform/`
 - **`tools.py`:** `HttpToolDefinition`, `McpServerDefinition`, and `ToolDefinition` (a union of the two, keyed on `kind`), plus `TOOL_NAME_PATTERN`.
 - **`packs.py`:** `KbSeed`, `ToolMeta`, `PackManifest`.
 - **`ui_protocol.py`** (the UI channel protocol):
-  - Constants: topics `lkap.ui.state`, `lkap.ui.activity`, `lkap.ui.asset`; RPC names `lkap.ui.request`, `lkap.agent.action`.
+  - Constants: topics `lkap.ui.state`, `lkap.ui.activity`, `lkap.ui.asset`, and RPC names `lkap.ui.request`, `lkap.agent.action`.
   - Models: `StatusStamp`, `Note`, `ChecklistItem`, `AssetRef`, `ActivityEvent`, `UiState`, `UiSnapshot`, `UiPatchOp`, `UiPatch`, `UiRequest`, `UiRequestResult`, `AgentAction`, `AgentActionResult`.
 - **`dispatch.py`:** `DispatchMetadata` (ids only: session_id, agent_id, config_version, participant_identity).
 - **`api_models.py`:**
@@ -88,7 +88,7 @@ Root: `~/work/insurance_claim_live_agent_team/livekit_agent_platform/`
   - Web and logging: `LKAP_CORS_ORIGINS`, `LKAP_PUBLIC_BASE_URL`, `LKAP_LOG_LEVEL`, `LKAP_LOG_JSON`.
   - Other: `LKAP_EMBEDDER`, `LKAP_BOOTSTRAP_CREDENTIALS_JSON`.
   - Session sweep: `LKAP_SESSION_SWEEP_INTERVAL_S`, `LKAP_SESSION_STALE_CREATED_S`, `LKAP_SESSION_STALE_ACTIVE_S`.
-- **Other modules:** `auth.py`, `config_service.py`, `deps.py`, `errors.py`, `keys.py`, `livekit_tokens.py`, `sessions_sweep.py`, and `kb/` (`embed`, `ingest`, `search`, `seed`, `store`; uses lancedb and fastembed).
+- **Other modules:** `auth.py`, `config_service.py`, `deps.py`, `errors.py`, `keys.py`, `livekit_tokens.py`, `sessions_sweep.py`, and `kb/` (`embed`, `ingest`, `search`, `seed`, `store`, using lancedb and fastembed).
 
 ## 4. agent (`agent/src/lkap_agent/`)
 - **Entrypoint:** `main.py`.
@@ -99,7 +99,7 @@ Root: `~/work/insurance_claim_live_agent_team/livekit_agent_platform/`
   - `only_lkap_jobs` rejects jobs whose `agent_name` is not `lkap-agent`.
   - `main.py` also defines `Deps`, `NoopUiChannel`, `NoopFrameBuffer`, `NoopBackgroundRunner` and `_IdleHangup`.
 - **Provider factory:** `providers/factory.py` has `ProviderFactory`, `BuiltProviders`, `ProviderBuildError`, `CONSTRUCTIBLE_KINDS` (realtime, stt, llm, tts, avatar, image_gen) and `SLOT_KINDS`.
-  - It is registry-driven: plugin classes are imported lazily from each registry entry's `python_class`, so there is no hardcoded plugin list.
+  - It is registry-driven. Plugin classes are imported lazily from each registry entry's `python_class`, so there is no hardcoded plugin list.
   - Special cases: `google-realtime` (builds `google.genai` types), `livekit-inference-llm` (temperature handling), and every `livekit-inference-*` provider (no api_key/api_secret passed).
   - Plugins it can build today (the MVP registry classes):
     - `livekit.agents.inference` STT, LLM and TTS
@@ -125,7 +125,7 @@ Root: `~/work/insurance_claim_live_agent_team/livekit_agent_platform/`
   - Dev dependencies include `respx`.
 
 ## 5. web (`web/`)
-Next.js 15.5.18, React 19.1.1, Tailwind 4, `@livekit/components-react` 2.9.24, `livekit-client` 2.22.3, react-query, zod 4; tests use vitest and Playwright.
+Next.js 15.5.18, React 19.1.1, Tailwind 4, `@livekit/components-react` 2.9.24, `livekit-client` 2.22.3, react-query, zod 4. Tests use vitest and Playwright.
 
 - **Routes (`src/app/`):**
   - `/` (`page.tsx`)
@@ -165,6 +165,6 @@ Counts come from `test_*.py` files, `def test_` functions, and the node ids in e
 | api | 20 | 207 | 233 |
 | agent | 18 | 280 | 348 |
 | packs | 10 | 148 | 194 |
-| web | 19 vitest files (about 145 `it`/`test` cases) | — | — |
+| web | 19 vitest files (about 145 `it`/`test` cases) | n/a | n/a |
 
 `web/e2e/` holds one Playwright entry.

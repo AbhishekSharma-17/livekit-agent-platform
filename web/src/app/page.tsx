@@ -9,11 +9,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Icon } from "@/components/shared/icon";
-import { StateMeter } from "@/components/shared/state-meter";
+import { LkapLogo } from "@/components/shared/lkap-logo";
 
 /**
- * Home page (docs/UI_UX_SPEC.md §3.4, §7.12). Not a marketing site: a
- * wordmark, one sentence, two actions, an inline disclosure, a
+ * Home page (docs/UI_UX_SPEC.md §3.4, §7.12). Not a marketing site: the
+ * LKAP logo as the `h1` (40 px mark and wordmark), one sentence, two actions, an inline disclosure, a
  * server-rendered environment line from the public `GET /v1/health`
  * endpoint (no admin token — see `src/app/api/console/[...path]/route.ts`
  * for the *authenticated* console proxy this page deliberately does not
@@ -88,12 +88,9 @@ export default async function Home() {
   return (
     <main className="flex min-h-dvh flex-col bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center gap-8 px-4 py-16 text-center">
-        <div className="flex items-center gap-2.5">
-          <span aria-hidden="true" className="inline-flex">
-            <StateMeter state="idle" size="md" />
-          </span>
-          <h1 className="text-page font-semibold tracking-[-0.018em]">LKAP</h1>
-        </div>
+        <h1 className="flex">
+          <LkapLogo size="lg" />
+        </h1>
 
         <p className="max-w-[42ch] text-body text-text-secondary">
           Configure real-time voice and video agents on LiveKit Cloud, then

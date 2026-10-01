@@ -66,8 +66,8 @@ const REGISTRY: Expected[] = [
   ["D-ID", "did", "official"],
   // Simple Icons' "Rime" is an input method, never borrowed. This is rime.ai's own wordmark.
   ["Rime", "rime", "official"],
-  // Logo use needs a licence or written permission (docs/ui/VENDOR-MARKS.md), so the monogram
-  ["Twilio", null],
+  // Logo use needs a licence, and the workspace owner approved it (docs/ui/VENDOR-MARKS.md)
+  ["Twilio", "twilio", "official"],
   // No usable official mark (wordmark only, or the symbol only as a raster), so the monogram
   ["Telnyx", null],
   ["Simli", null],
@@ -107,11 +107,12 @@ const SERVICES: Expected[] = [
   ["Stripe", "stripe", "simple-icons"],
   ["Atlassian (Jira, Confluence, Bitbucket, Loom)", "atlassian", "simple-icons"],
   ["Google Workspace", "google", "simple-icons"],
-  // Logo use needs a licence or written permission, and Outlook never borrows the Microsoft mark
-  ["Outlook", null],
-  ["Microsoft Outlook", null],
-  ["Slack", null],
-  ["Salesforce", null],
+  // Logo use needs a licence, and the workspace owner approved it. Outlook has its own icon, never the Microsoft mark
+  ["Outlook", "outlook", "official"],
+  ["Microsoft Outlook", "outlook", "official"],
+  ["Slack", "slack", "official"],
+  ["Salesforce", "salesforce", "official"],
+  ["Microsoft", "microsoft", "lobehub"],
 ];
 
 /** Provider ids, which some rows hold instead of a label. */
@@ -137,11 +138,14 @@ const PROVIDER_IDS: Expected[] = [
   ["bey-avatar", "beyondpresence", "official"],
   ["tavus-avatar", "tavus", "official"],
   ["did-avatar", "did", "official"],
-  ["twilio-sms", null],
+  ["twilio-sms", "twilio", "official"],
   ["telnyx-sms", null],
   ["simli-avatar", null],
   ["anam-avatar", null],
-  ["microsoft-outlook", null],
+  ["microsoft-outlook", "outlook", "official"],
+  ["microsoft-outlook-calendar", "outlook", "official"],
+  ["slack-bot", "slack", "official"],
+  ["salesforce-crm", "salesforce", "official"],
 ];
 
 describe("vendorMarkFor", () => {
@@ -174,13 +178,22 @@ describe("vendorMarkFor", () => {
 });
 
 describe("monogram-only brands", () => {
-  it.each([...MONOGRAM_ONLY])("%s never resolves to a mark, as a label or an id prefix", (key) => {
-    expect(vendorMarkFor(key)).toBeNull();
-    expect(vendorMarkFor(`${key}-integration`)).toBeNull();
+  it("pins no brand today, and any key added later never resolves to a mark, as a label or an id prefix", () => {
+    // Slack, Twilio, Salesforce and Microsoft Outlook left the list once the workspace owner approved their marks.
+    for (const key of ["slack", "twilio", "salesforce", "outlook", "microsoftoutlook"]) expect(MONOGRAM_ONLY.has(key), key).toBe(false);
+    for (const key of MONOGRAM_ONLY) {
+      expect(vendorMarkFor(key)).toBeNull();
+      expect(vendorMarkFor(`${key}-integration`)).toBeNull();
+    }
   });
 });
 
-type Manifest = { marks: Record<string, { file: string; title: string; source: string; foundOn: string; guidelines: string; form: string; fetched: string; sha256: string }> };
+type Manifest = {
+  marks: Record<
+    string,
+    { file: string; title: string; source: string; foundOn: string; guidelines: string; form: string; ink?: string; fetched: string; sha256: string }
+  >;
+};
 
 describe("official marks", () => {
   const dir = path.resolve(__dirname, "../scripts/vendor-marks-official");
@@ -198,6 +211,7 @@ describe("official marks", () => {
     expect(entry.form.length).toBeGreaterThan(10);
     expect(entry.fetched).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(entry.ink === undefined || entry.ink === "colour", entry.file).toBe(true);
     expect(officialInTable.has(entry.file.replace(/\.svg$/, "")), entry.file).toBe(true);
   });
 
@@ -234,6 +248,36 @@ describe("parseOfficialIcon", () => {
   ])("rejects %s", async (_label, svg) => {
     const { parseOfficialIcon } = await load();
     expect(() => parseOfficialIcon(svg, "t.svg")).toThrow();
+  });
+
+  const colourFile = (body: string) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>T</title>\n${body}\n</svg>\n`;
+  const loadColour = async () =>
+    (await import("../scripts/gen-vendor-marks.mjs")) as {
+      parseOfficialIcon: (svg: string, file: string, options?: { colour?: boolean }) => unknown[];
+    };
+
+  it("reads a colour mark's hex fills and opacities only when the manifest says ink colour", async () => {
+    const { parseOfficialIcon } = await loadColour();
+    const svg = colourFile('<path fill="#0078d4" d="M0 0h24v24h-24z"/>\n<path fill="#000000" opacity="0.5" d="M1 1h2v2h-2z"/>');
+    expect(parseOfficialIcon(svg, "t.svg", { colour: true })).toEqual([
+      { d: "M0 0h24v24h-24z", fill: "#0078d4" },
+      { d: "M1 1h2v2h-2z", fill: "#000000", opacity: 0.5 },
+    ]);
+    expect(() => parseOfficialIcon(svg, "t.svg")).toThrow();
+  });
+
+  it.each([
+    ["a missing fill", colourFile('<path d="M0 0h24v24z"/>')],
+    ["a named colour", colourFile('<path fill="red" d="M0 0h24v24z"/>')],
+    ["a gradient paint", colourFile('<path fill="url(#g)" d="M0 0h24v24z"/>')],
+    ["a gradient definition", colourFile('<linearGradient id="g"/><path fill="#000000" d="M0 0h24v24z"/>')],
+    ["an opacity above 1", colourFile('<path fill="#000000" opacity="2" d="M0 0h24v24z"/>')],
+    ["a transform", colourFile('<path fill="#000000" transform="scale(2)" d="M0 0h24v24z"/>')],
+    ["a currentColor root", colourFile('<path fill="#000000" d="M0 0h24v24z"/>').replace("<svg ", '<svg fill="currentColor" ')],
+  ])("rejects %s in a colour mark", async (_label, svg) => {
+    const { parseOfficialIcon } = await loadColour();
+    expect(() => parseOfficialIcon(svg, "t.svg", { colour: true })).toThrow();
   });
 });
 
@@ -296,6 +340,37 @@ describe("VendorMark", () => {
     expect(mark.getAttribute("data-source")).toBe("official");
     expect(mark.querySelector("svg")!.getAttribute("fill")).toBe("currentColor");
     expect(mark.querySelectorAll("svg path").length).toBe(VENDOR_MARKS.did.paths.length);
+  });
+
+  it.each([
+    ["Slack", "slack"],
+    ["Twilio", "twilio"],
+    ["Salesforce", "salesforce"],
+  ])("draws %s's official mark in one ink", (vendor, slug) => {
+    const { container } = render(<VendorMark vendor={vendor} />);
+    const mark = container.querySelector('[data-slot="vendor-mark"]')!;
+    expect(mark.getAttribute("data-mark")).toBe(slug);
+    expect(mark.getAttribute("data-source")).toBe("official");
+    expect(mark.hasAttribute("data-ink")).toBe(false);
+    expect(mark.querySelector("svg")!.getAttribute("fill")).toBe("currentColor");
+    for (const path of mark.querySelectorAll("svg path")) expect(path.hasAttribute("fill")).toBe(false);
+  });
+
+  it("draws Microsoft Outlook in its own colours, the one colour-only icon, on the same tile", () => {
+    const { container } = render(<VendorMark vendor="Microsoft Outlook" />);
+    const mark = container.querySelector('[data-slot="vendor-mark"]')!;
+    expect(mark.getAttribute("data-mark")).toBe("outlook");
+    expect(mark.getAttribute("data-ink")).toBe("colour");
+    expect(mark.className).toContain("bg-muted-strong");
+    const svg = mark.querySelector("svg")!;
+    expect(svg.hasAttribute("fill")).toBe(false);
+    const paths = [...svg.querySelectorAll("path")];
+    expect(paths).toHaveLength(VENDOR_MARKS.outlook.paths.length);
+    for (const path of paths) expect(path.getAttribute("fill")).toMatch(/^#[0-9a-f]{6}$/);
+    expect(paths.some((path) => path.getAttribute("opacity") === "0.5")).toBe(true);
+    // Only Outlook keeps its colours: every other mark in the table is one ink.
+    const colourMarks = new Set(Object.values(VENDOR_MARKS).filter((icon) => icon.ink === "colour").map((icon) => icon.slug));
+    expect([...colourMarks]).toEqual(["outlook"]);
   });
 
   it("falls back to the monogram for a vendor with no mark", () => {

@@ -14,6 +14,7 @@ exempt * src/panels/                     caller-facing panel content (panels own
 exempt * src/components/agents-ui/       vendored LiveKit Agents UI
 exempt * src/contracts/                  generated contract types
 exempt colour-literal src/lib/browser-colors.ts   theme-color / manifest literals, test-pinned to the tokens
+exempt colour-literal src/components/shared/vendor-mark-data.ts   generated vendor marks, the published fills of a colour-only brand icon (docs/ui/VENDOR-MARKS.md)
 exempt legacy-token src/components/ui/        vendored shadcn primitives still read the legacy aliases (decision O2)
 
 # Deliberate exceptions

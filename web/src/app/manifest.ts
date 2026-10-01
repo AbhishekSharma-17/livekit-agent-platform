@@ -5,7 +5,9 @@ import { BROWSER_COLORS } from "@/lib/browser-colors";
 /**
  * Web manifest (docs/ui/DESIGN-SYSTEM.md section 2.4). A manifest cannot read
  * CSS variables, so it mirrors the light `--background` and `--brand` tokens
- * as literals from `lib/browser-colors.ts`.
+ * as literals from `lib/browser-colors.ts`. The icons are the LKAP mark,
+ * written by `scripts/gen-app-icons.mjs` (rounded tile with transparent
+ * corners, so not declared `maskable`).
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -16,6 +18,9 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone",
     background_color: BROWSER_COLORS.light.background,
     theme_color: BROWSER_COLORS.light.brand,
-    icons: [{ src: "/icon.png", sizes: "512x512", type: "image/png" }],
+    icons: [
+      { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { src: "/icon.png", sizes: "512x512", type: "image/png" },
+    ],
   };
 }

@@ -294,8 +294,16 @@ All values are `oklch(...)`.
   | Settings / admin | `Cpu`, `ChartNoAxesCombined` or the nearest literal |
 - **Third-party logos:** use the real mark, in monochrome `currentColor` if its brand colour fails contrast. Always
   pair it with the name, and fall back to a neutral generic icon. In this console that is `VendorMark`: official marks
-  from Simple Icons (CC0), then Lobe Icons (MIT), in one table (`components/shared/vendor-marks.ts`), drawn in
-  `currentColor`, with the tinted monogram as the fallback.
+  from Simple Icons (CC0), then Lobe Icons (MIT), then the companies' own files, in one table
+  (`components/shared/vendor-marks.ts`), drawn in `currentColor`, with the tinted monogram as the fallback. A brand
+  that offers no one-colour version keeps its own fills (only Microsoft Outlook). docs/ui/VENDOR-MARKS.md has the
+  sources and the policy.
+- **Our logo.** `LkapLogo` (`components/shared/lkap-logo.tsx`) is a rounded `--brand` tile with a
+  `--brand-foreground` live dot and two rising bars, drawn inline from the tokens. The full logo adds "LKAP" in Inter
+  600 and an optional product name in secondary text. It leads the sidebar (28 px mark, 15 px wordmark, a link to
+  Overview), stands alone in the collapsed rail, the phone top bar and the sign-in card, and the app icons
+  (`app/icon.svg`, `favicon.ico`, `apple-icon.png`, the manifest icons) are drawn from the same geometry by
+  `scripts/gen-app-icons.mjs`. It never stands in for a vendor, and vendor marks never stand in for it.
 
 ### Motion
 

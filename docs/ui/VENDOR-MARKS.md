@@ -13,18 +13,25 @@ docs/ui/DESIGN-SYSTEM.md section 5 ("Third-party logos") sets the visual rule.
   only where no name is printed, so assistive tech still hears the vendor.
 - **One ink, both themes.** Every mark is drawn in `currentColor`, which is the foreground token on a muted tile
   (near black in the light theme, near white in the dark theme). For brands that forbid recolouring, this is their
-  approved black or white version, so no colour is changed. Brand colours are never shown, which keeps every mark
-  legible on both themes without a per-brand contrast check.
+  approved black or white version, so no colour is changed. Brand colours are not shown (with the one exception
+  below), which keeps every mark legible on both themes without a per-brand contrast check.
+- **One colour exception.** A brand that offers no one-colour version keeps its own published fills
+  (`"ink": "colour"` in the manifest), on the same muted tile. Today that is only Microsoft Outlook, whose icon is a
+  self-contained blue tile with a white O, so it reads on both themes as it is. The generator accepts a hex fill and
+  an optional opacity per path for such a file, and nothing else (no gradients, no styles).
 - **Unmodified shapes.** Marks are copied, never drawn. Normalising means applying transforms, scaling uniformly to a
-  24 x 24 box, centring, outlining a stroke to the same filled geometry, and isolating a symbol from its lockup only
+  24 x 24 box, centring, outlining a stroke to the same filled geometry, writing a rect or polygon as the same path,
+  removing an artboard clip path (Slack's trims under 0.1% of an edge), and isolating a symbol from its lockup only
   where the brand itself uses the symbol alone (its favicon or app icon). Nothing is redrawn or approximated, and no
   third-party re-creation is used.
 - **The real company only.** A mark is never borrowed from a different company that shares the name (Simple Icons'
   "Rime" is an input method, so Rime's mark comes from rime.ai), and a product never borrows its parent's mark
   ("Microsoft Outlook" does not show the Microsoft logo).
 - **Licence first.** Where a brand's guidelines require a licence or written permission to show its logo, the vendor
-  keeps the monogram (see the table below). `MONOGRAM_ONLY` in `vendor-marks.ts` pins those keys so no prefix match can
-  reach another mark.
+  keeps the monogram unless the workspace owner approves the mark. On 2026-10-01 the workspace owner approved the
+  official marks of Slack, Twilio, Salesforce and Microsoft Outlook, for identifying the service beside its name
+  only. `MONOGRAM_ONLY` in `vendor-marks.ts` pins any key that must keep the monogram, so no prefix match can reach
+  another mark. It is empty today.
 - **No runtime fetch.** The generator copies each mark's path data into `vendor-mark-data.ts`. Only console screens
   import it, and `tests/flow-bundle-split.test.ts` keeps it out of the `/s/[slug]` session bundle.
 
@@ -37,7 +44,8 @@ docs/ui/DESIGN-SYSTEM.md section 5 ("Third-party logos") sets the visual rule.
    (standalone symbol, isolated symbol or full logo), the original colours, the fetch date and the sha256 of the file
    as downloaded. The generator accepts only a root with `xmlns`, `viewBox="0 0 24 24"` and `fill="currentColor"`,
    one `<title>`, and `<path>` elements with `d` and `fill-rule`. Scripts, links, images, styles, paints and
-   transforms are rejected.
+   transforms are rejected. A colour mark (`"ink": "colour"`) drops the root fill and gives every path a
+   `fill="#rrggbb"` and an optional `opacity`, nothing more.
 4. **Monogram** otherwise, a two-letter tile tinted with a stable per-vendor hue.
 
 To add an official mark, save the company's own SVG, normalise it to the format above, add the file and a manifest
@@ -59,12 +67,16 @@ so `bey-avatar` resolves through `bey` and `did-avatar` through `did`.
 | D-ID | `did` | https://www.d-id.com/wp-content/uploads/2023/11/d-id-logo.svg (header of d-id.com) | Full logo, also D-ID's favicon | None public |
 | Hume | `hume`, `humeai` | Inline header logo on https://www.hume.ai/ | Symbol (seven dots) isolated, used alone as the favicon | None public |
 | Inworld | `inworld`, `inworldai` | Inline header logo on https://inworld.ai/ | Symbol isolated, used alone as the favicon | None public |
+| Microsoft Outlook | `outlook`, `microsoftoutlook` | https://res.cdn.office.net/files/fabric-cdn-prod_20230815.002/assets/brand-icons/product/svg/outlook_24x1.svg (Fluent UI's Office brand icons) | Flat 24 px product icon, rects and polygons written as paths, in its own colours | https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks needs an express licence for product icons and forbids altering them. The workspace owner approved it. Colour only, so it keeps its fills, and it never falls back to the Microsoft logo |
 | Pinecone | `pinecone` | Inline header logo on https://www.pinecone.io/ | Symbol isolated, used alone as the favicon | None public |
 | Ragie | `ragie`, `ragieai` | https://cdn.prod.website-files.com/66834c6ee9ee484e8e47a9af/68658d24b3e078f3510ea992_ragie-logo-h-tm.svg (header of ragie.ai) | Symbol isolated, strokes outlined, used alone as the app icon | None public |
 | Rime | `rime`, `rimeai`, `rimelabs` | Inline header logo on https://www.rime.ai/ | Full wordmark, also Rime's favicon (no separate symbol) | None public |
+| Salesforce | `salesforce` | https://a.sfdcstatic.com/shared/images/c360-nav/salesforce-no-type-logo.svg (header of salesforce.com) | The cloud without type, as the site header serves it | https://www.salesforce.com/company/legal/tmcusageguidelines/ needs written permission and forbids altering the marks. The workspace owner approved it. The public file is blue only (fails 3:1 on the light tile), so one ink |
+| Slack | `slack` | https://a.slack-edge.com/9cc0056/marketing/img/nav/logo.svg (header of slack.com/media-kit) | The Slack mark alone, clip path removed | https://slack.com/terms-of-service/slack-brand needs a written licence for most uses and allows black, white or colour. The workspace owner approved it. Rendered as the approved one-colour version |
 | Speechify | `speechify` | https://preview.website.cdn.speechify.com/Speechify-Logo.zip (`Logomark_black.svg`), from https://speechify.com/brand-kit/ | Standalone logomark | Black or white versions recommended for most uses |
 | Speechmatics | `speechmatics` | https://www.speechmatics.com/_next/static/media/SM-Logo-main.b945b6cd.svg, from https://www.speechmatics.com/brand | Symbol isolated, used alone as the favicon | No colour changes. Approved black and white versions, rendered as such (the offered black and white SVGs embed a raster, so the geometry comes from the vector main logo) |
 | Tavus | `tavus` | https://cdn.prod.website-files.com/68c8e57d6e512b9573db146f/68defe67290d1a25593c5525_Tavus%20Brand%20Lite.zip (`Logos/Tavus Symbol/TAVUS-SYMBOL4.svg`), linked from https://www.tavus.io/ | Standalone symbol | None in the kit, which ships dark and white versions |
+| Twilio | `twilio` | Inline header logo on https://www.twilio.com/en-us | Symbol (the bug) isolated, used alone as the favicon | https://www.twilio.com/en-us/legal/logo-use needs express written permission. The workspace owner approved it |
 | Weaviate | `weaviate`, `weaviatecloud` | https://weaviate.io/img/site/2026/weaviate-logo-2-colours-dark-green.svg (header of weaviate.io) | Symbol isolated, used alone as the favicon | None public |
 | Zilliz | `zilliz`, `zillizcloud` | Inline header logo on https://zilliz.com/ | Symbol isolated, used alone as the favicon | Kits on https://zilliz.com/brand-assets bind the downloader to its terms, so the public header logo was used instead |
 
@@ -72,10 +84,6 @@ so `bey-avatar` resolves through `bey` and `did-avatar` through `did`.
 
 | Vendor | Keys | Why |
 | --- | --- | --- |
-| Slack | `slack` (in `MONOGRAM_ONLY`) | https://slack.com/terms-of-service/slack-brand says most uses need a written licence, and forbids cropping, recolouring and redistributing the logo |
-| Twilio | `twilio` (in `MONOGRAM_ONLY`) | https://www.twilio.com/en-us/legal/logo-use allows the corporate logo only with express written permission. Customers get only the "Powered by Twilio" badge |
-| Salesforce | `salesforce` (in `MONOGRAM_ONLY`) | https://www.salesforce.com/company/legal/tmcusageguidelines/ needs written permission for most uses and allows product logos only inside integration diagrams |
-| Microsoft Outlook | `outlook`, `microsoftoutlook` (in `MONOGRAM_ONLY`) | https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks says app and product icons are never used without an express licence. Outlook also does not fall back to the Microsoft logo |
 | Telnyx | `telnyx` | https://telnyx.com/media-kit names the horizontal wordmark as the logo and forbids cropping it. The wordmark is unreadable at 12 to 18 px, and the symbol exists only as a raster favicon and raster kit files |
 | Simli | `simli` | simli.com offers only a wordmark SVG, unreadable at 12 to 18 px. Its "S" symbol exists only as a raster favicon |
 | Anam | `anam` | anam.ai draws only a wordmark (as a CSS mask), unreadable at 12 to 18 px. Its "A" symbol exists only as a raster favicon |
@@ -193,6 +201,7 @@ so `bey-avatar` resolves through `bey` and `did-avatar` through `did`.
 
 ## Bundle cost
 
-The official marks add 16.3 kB raw and 6.3 kB gzipped to `vendor-mark-data.ts` (103.6 kB to 119.8 kB raw, 41.8 kB to
-48.1 kB gzipped, measured on the file itself with `gzip -9`). The file reaches console routes only. `/s/[slug]` is
-unchanged, which `tests/flow-bundle-split.test.ts` checks on the static import graph.
+The official marks add 22.3 kB raw and 8.4 kB gzipped to `vendor-mark-data.ts` (103.6 kB to 125.8 kB raw, 41.8 kB to
+50.2 kB gzipped, measured on the file itself with `gzip -9`). Of that, Slack, Twilio, Salesforce and Outlook add
+6.0 kB raw and 2.1 kB gzipped (119.8 kB to 125.8 kB, 48.1 kB to 50.2 kB). The file reaches console routes only.
+`/s/[slug]` is unchanged, which `tests/flow-bundle-split.test.ts` checks on the static import graph.

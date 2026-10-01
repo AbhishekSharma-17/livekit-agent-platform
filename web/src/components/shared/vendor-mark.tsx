@@ -58,7 +58,9 @@ const SIZE_CLASSES = {
  *   `currentColor` (foreground ink on a muted tile), so it reads in both
  *   themes whatever the brand colour is. For brands that forbid recolouring,
  *   this ink is their approved black (light theme) or white (dark theme)
- *   version (docs/ui/VENDOR-MARKS.md).
+ *   version (docs/ui/VENDOR-MARKS.md). The one exception is a brand that
+ *   offers no one-colour version (Microsoft Outlook, `ink: "colour"`), whose
+ *   self-contained icon keeps its own fills on the same tile.
  * - **Otherwise a monogram** in a square faintly tinted with a per-vendor
  *   hue, mixed into theme tokens so it reads in both themes.
  *
@@ -75,15 +77,16 @@ export function VendorMark({ vendor, size = "md", labelled = false, className }:
         data-slot="vendor-mark"
         data-mark={icon.slug}
         data-source={icon.source}
+        data-ink={icon.ink}
         className={cn(
           "inline-flex shrink-0 items-center justify-center rounded-sm bg-muted-strong text-foreground select-none",
           SIZE_CLASSES[size],
           className,
         )}
       >
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+        <svg viewBox="0 0 24 24" fill={icon.ink === "colour" ? undefined : "currentColor"} aria-hidden="true" focusable="false">
           {icon.paths.map((path, index) => (
-            <path key={index} d={path.d} fillRule={path.fillRule} />
+            <path key={index} d={path.d} fillRule={path.fillRule} fill={path.fill} opacity={path.opacity} />
           ))}
         </svg>
       </span>

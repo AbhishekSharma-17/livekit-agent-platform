@@ -26,6 +26,7 @@ import { EmptyState, NoMatches } from "@/components/shared/empty-state";
 import { Field, FieldRow, FormError } from "@/components/shared/field";
 import { FileInput } from "@/components/shared/file-input";
 import { Kbd } from "@/components/shared/kbd";
+import { LkapLogo } from "@/components/shared/lkap-logo";
 import { ListCard, ListCardRow } from "@/components/shared/list-card";
 import { LoadingRegion, LoadingRow } from "@/components/shared/loading-state";
 import { Page, PageHeader } from "@/components/shared/page-header";
@@ -66,6 +67,7 @@ import { Tabs, TabsContent, TabsCount, TabsList, TabsTrigger } from "@/component
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ThemePreference } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 
 /**
  * The styleguide (docs/ui/DESIGN-SYSTEM.md section 11): every primitive, in
@@ -112,6 +114,33 @@ function Row({ label, children }: { label?: string; children: React.ReactNode })
     <div className="flex flex-col gap-2">
       {label ? <div className="text-caption text-text-tertiary">{label}</div> : null}
       <div className="flex flex-wrap items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * The LKAP logo at every size, on the sidebar colour where it lives. Rendered
+ * twice: once in the preview theme, once inside a `.dark` subtree so both
+ * themes sit side by side whatever the toggle says.
+ */
+function LogoBoard({ dark = false }: { dark?: boolean }) {
+  return (
+    <div
+      data-slot="logo-specimen"
+      data-theme-pane={dark ? "dark" : "current"}
+      className={cn("flex flex-col gap-4 rounded-lg border border-border bg-sidebar p-4 text-foreground", dark && "dark")}
+    >
+      <div className="text-caption text-text-tertiary">{dark ? "Dark theme" : "Preview theme"}</div>
+      <div className="flex flex-wrap items-end gap-4">
+        <LkapLogo variant="mark" size="sm" />
+        <LkapLogo variant="mark" size="md" />
+        <LkapLogo variant="mark" size="lg" />
+      </div>
+      <div className="flex flex-col items-start gap-3">
+        <LkapLogo size="sm" />
+        <LkapLogo size="md" product="Console" />
+        <LkapLogo size="lg" />
+      </div>
     </div>
   );
 }
@@ -223,6 +252,17 @@ export function Styleguide() {
           />
 
           <div className="flex flex-col gap-8">
+            <Specimen
+              id="logo"
+              title="LKAP logo"
+              description="Our mark is a brand tile with a live dot and two rising bars. Use the full logo where there is room (sidebar, home) and the mark alone in tight spots (collapsed rail, phone top bar, sign-in card, app icons). It never stands in for a vendor."
+            >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <LogoBoard />
+                <LogoBoard dark />
+              </div>
+            </Specimen>
+
             <Specimen id="tokens" title="Colour tokens" description="Components read colours only through these tokens. Status colours are a separate system from the accent.">
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="flex flex-col gap-2.5">

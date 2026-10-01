@@ -17,6 +17,7 @@ export * from "./file-input";
 export * from "./icon";
 export * from "./kbd";
 export * from "./list-card";
+export * from "./lkap-logo";
 export * from "./loading-state";
 export * from "./new-resource-button";
 export * from "./page-header";

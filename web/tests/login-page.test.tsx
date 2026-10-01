@@ -1,10 +1,11 @@
 import * as React from "react";
 
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LoginForm } from "@/app/login/login-form";
 import LoginPage from "@/app/login/page";
+import { SignInCard, SignInCardSkeleton } from "@/app/login/sign-in-card";
 
 /**
  * `/login` and `/login?invite=` (V2-14, ask #37): `POST auth/login` / `POST
@@ -227,6 +228,22 @@ describe("LoginPage", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Sign in" })).toBeTruthy();
     const showcase = document.querySelector('[data-slot="sign-in-showcase"]');
     expect(showcase?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("puts the LKAP mark above the title as the way home, in the card and its skeleton", () => {
+    render(
+      <SignInCard title="Sign in" description="Use your workspace email.">
+        <p>form</p>
+      </SignInCard>,
+    );
+    const home = screen.getByRole("link", { name: "LKAP home" });
+    expect(home.getAttribute("href")).toBe("/");
+    expect(home.querySelector('[data-slot="lkap-mark"]')?.getAttribute("class")).toContain("size-10");
+    const heading = screen.getByRole("heading", { level: 1, name: "Sign in" });
+    expect(home.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    cleanup();
+    render(<SignInCardSkeleton />);
+    expect(screen.getByRole("link", { name: "LKAP home" }).querySelector('[data-slot="lkap-mark"]')).not.toBeNull();
   });
 });
 

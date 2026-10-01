@@ -25,6 +25,8 @@ describe("browser-chrome colour literals", () => {
     ["light", "brand", "--brand"],
     ["dark", "background", "--background"],
     ["dark", "brand", "--brand"],
+    ["light", "brandForeground", "--brand-foreground"],
+    ["dark", "brandForeground", "--brand-foreground"],
   ] as const)("%s %s mirrors %s", (theme, key, token) => {
     expect(BROWSER_COLORS[theme][key]).toBe(hexOf(theme === "light" ? light : dark, token));
   });

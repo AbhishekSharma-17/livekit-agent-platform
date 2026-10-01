@@ -1,5 +1,5 @@
 {
-  "$comment": "Official vendor marks, the third source of scripts/gen-vendor-marks.mjs. Each SVG here was taken from the company's own site, brand page or brand kit on the date shown, then normalised to a 24 x 24 currentColor file (transforms applied, uniform scale, centred, strokes outlined, symbol isolated from a lockup where the brand itself uses the symbol alone). Shapes are never redrawn. sha256 is of the file as downloaded (for an inline header logo, of the <svg> element as cut from the page, with xmlns added where the element lacked it). docs/ui/VENDOR-MARKS.md holds the coverage table and the usage policy.",
+  "$comment": "Official vendor marks, the third source of scripts/gen-vendor-marks.mjs. Each SVG here was taken from the company's own site, brand page or brand kit on the date shown, then normalised to a 24 x 24 currentColor file (transforms applied, uniform scale, centred, strokes outlined, symbol isolated from a lockup where the brand itself uses the symbol alone, rects and polygons written as the same path). Shapes are never redrawn. An entry with ink colour keeps the brand's own fills (only for a brand that offers no one-colour version), and its file then carries a hex fill and optional opacity per path instead of a currentColor root. sha256 is of the file as downloaded (for an inline header logo, of the <svg> element as cut from the page, with xmlns added where the element lacked it). docs/ui/VENDOR-MARKS.md holds the coverage table and the usage policy.",
   "marks": {
     "ofBeyondPresence": {
       "file": "beyondpresence.svg",
@@ -67,6 +67,18 @@
       "fetched": "2026-10-01",
       "sha256": "025e8b6f02579a170f52df6e91d06db6e2e7bab09e9e73c53428cbd6d562526a"
     },
+    "ofOutlook": {
+      "file": "outlook.svg",
+      "title": "Microsoft Outlook",
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20230815.002/assets/brand-icons/product/svg/outlook_24x1.svg",
+      "foundOn": "https://developer.microsoft.com/en-us/fluentui#/styles/web/office-brand-icons (Fluent UI's Office brand icons page, which serves the icons from Microsoft's CDN)",
+      "guidelines": "https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks says app and product icons are never used without an express licence and forbids altering them. The workspace owner approved showing the icon to identify the service. Microsoft offers the icon only in colour, so it is drawn in its own colours (the one exception to one ink), and Outlook never falls back to the Microsoft logo.",
+      "form": "Microsoft's flat 24 px product icon. Rects and polygons converted to the same path geometry, scaled uniformly to fill the box.",
+      "colours": "Microsoft's blues (#0078d4, #0364b8, #28a8ea, #50d9ff and others) with a white O, kept as published.",
+      "ink": "colour",
+      "fetched": "2026-10-01",
+      "sha256": "770dcb4101f5907399b90f45bf9a473ddb4758f8e9cda864dda55efa771f06a6"
+    },
     "ofPinecone": {
       "file": "pinecone.svg",
       "title": "Pinecone",
@@ -100,6 +112,28 @@
       "fetched": "2026-10-01",
       "sha256": "bb1db4e7b66c9279db72fe5434a162588215d7414b087e1addbea2b88ef31f38"
     },
+    "ofSalesforce": {
+      "file": "salesforce.svg",
+      "title": "Salesforce",
+      "source": "https://a.sfdcstatic.com/shared/images/c360-nav/salesforce-no-type-logo.svg",
+      "foundOn": "https://www.salesforce.com/ (header logo, the cloud without type)",
+      "guidelines": "https://www.salesforce.com/company/legal/tmcusageguidelines/ needs written permission for most uses and forbids altering the marks. The workspace owner approved showing the cloud to identify the service. The public file ships only in blue, which fails 3:1 on the light tile, so it is drawn in one ink like the other marks.",
+      "form": "Salesforce's own cloud symbol without the wordmark, as its site header serves it.",
+      "colours": "Blue (#0d9dda) in the original, drawn in one ink here.",
+      "fetched": "2026-10-01",
+      "sha256": "91870f450409973913e557b6b67ded58963a1980abcec935271582eaf15aa627"
+    },
+    "ofSlack": {
+      "file": "slack.svg",
+      "title": "Slack",
+      "source": "https://a.slack-edge.com/9cc0056/marketing/img/nav/logo.svg",
+      "foundOn": "https://slack.com/media-kit (header logo, the Slack mark alone)",
+      "guidelines": "https://slack.com/terms-of-service/slack-brand says most uses need a written licence and allows the logo in black or white or in colour. The workspace owner approved showing the mark to identify the service. One ink renders the approved black or white version.",
+      "form": "The Slack mark (the octothorpe) as slack.com's header serves it, without its clip path.",
+      "colours": "Pink, blue, green and yellow in the original, drawn as the approved one-colour version here.",
+      "fetched": "2026-10-01",
+      "sha256": "1f40066b694020057218c46eb2a11982b278d89b2dc8f96a21e4ea04e2b9db3b"
+    },
     "ofSpeechify": {
       "file": "speechify.svg",
       "title": "Speechify",
@@ -132,6 +166,17 @@
       "colours": "Near-black (#140206) version used.",
       "fetched": "2026-10-01",
       "sha256": "fd2c66c3cb512264df13fc66c1dcf47fb9406c728fd6883e54a5446007d3bb37"
+    },
+    "ofTwilio": {
+      "file": "twilio.svg",
+      "title": "Twilio",
+      "source": "https://www.twilio.com/en-us (inline header logo SVG)",
+      "foundOn": "https://www.twilio.com/en-us",
+      "guidelines": "https://www.twilio.com/en-us/legal/logo-use allows the logo only with express written permission. The workspace owner approved showing the mark to identify the service.",
+      "form": "Symbol (the bug, a ring with four dots) isolated from the header lockup. Twilio uses the bug alone as its favicon.",
+      "colours": "Red (#F22F46) in the original, drawn in one ink here.",
+      "fetched": "2026-10-01",
+      "sha256": "d0970365fc2007c01c2408f0b7b3aa9c1d0066379b84af0423ab96386f3e7f00"
     },
     "ofWeaviate": {
       "file": "weaviate.svg",

@@ -192,7 +192,7 @@ export function blockToolStatus(
       available
         ? null
         : name === "set_steps" && hasFlowSteps
-          ? 'This steps block follows the flow; set "Driven by" to "The agent" first'
+          ? 'This steps block follows the flow. Set "Driven by" to "The agent" first'
           : TOOL_NEEDS[name];
     return { name, available, enabled: !builtinDisabled.includes(name), reason };
   });

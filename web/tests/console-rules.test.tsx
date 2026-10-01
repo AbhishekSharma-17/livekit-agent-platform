@@ -100,7 +100,7 @@ describe("RulesTab", () => {
     render(<Harness agent={agent()} />);
     fireEvent.click(screen.getByRole("button", { name: "Add a rule" }));
     await waitFor(() => expect(latest?.config.rules).toHaveLength(1));
-    expect(screen.getByText("No conditions yet — this rule never fires.")).toBeTruthy();
+    expect(screen.getByText("No conditions yet. This rule never fires.")).toBeTruthy();
     expect(latest?.config.rules?.[0]?.then).toEqual([{ do: "instruct", text: "" }]);
   });
 
@@ -132,7 +132,7 @@ describe("RulesTab", () => {
     fireEvent.change(textarea, { target: { value: "banana is set" } });
 
     await screen.findByText(
-      "the condition does not read: 'banana' is not something a condition understands; name a variable as var.<name> and put text in quotes (at character 1)",
+      "the condition does not read: 'banana' is not something a condition understands. Name a variable as var.<name> and put text in quotes (at character 1)",
     );
 
     await waitFor(() => expect(formState?.formState.isValid).toBe(false));
@@ -174,6 +174,6 @@ describe("RulesTab", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Remove this condition" }));
     await waitFor(() => expect(latest?.config.rules?.[0]?.when).toBe(""));
-    expect(screen.getByText("No conditions yet — this rule never fires.")).toBeTruthy();
+    expect(screen.getByText("No conditions yet. This rule never fires.")).toBeTruthy();
   });
 });

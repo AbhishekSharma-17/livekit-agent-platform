@@ -324,7 +324,7 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
         <ConnectionNotes connection={boundConnection} />
       </div>
 
-      <Group title="How it talks" description="Pick how speech flows through the agent. You can switch later; the other mode's choices are kept until you save.">
+      <Group title="How it talks" description="Pick how speech flows through the agent. You can switch later. The other mode's choices are kept until you save.">
         <Controller
           control={control}
           name="config.pipeline.mode"
@@ -335,7 +335,7 @@ export function ProvidersSection({ agent: _agent }: EditorSectionProps) {
               halfCascadeDisabledReason={
                 hasTextModalityRealtime
                   ? null
-                  : "No realtime model on this connection supports text output yet — half-cascade needs one (the same model thinks, a separate voice speaks)."
+                  : "No realtime model on this connection supports text output yet. Half-cascade needs one (the same model thinks, a separate voice speaks)."
               }
             />
           )}
@@ -422,19 +422,19 @@ const MODES: { value: Exclude<PipelineMode, never>; title: string; description: 
   {
     value: "cascaded",
     title: "Cascaded",
-    description: "Separate speech-to-text, language model and text-to-speech. Most flexible; works with LiveKit Inference without keys.",
+    description: "Separate speech-to-text, language model and text-to-speech. Most flexible, and works with LiveKit Inference without keys.",
     icon: WaypointsIcon,
   },
   {
     value: "realtime",
     title: "Realtime",
-    description: "One speech-to-speech model (Gemini Live, GPT Realtime). Lowest latency; can watch the camera live.",
+    description: "One speech-to-speech model (Gemini Live, GPT Realtime). Lowest latency, and can watch the camera live.",
     icon: AudioWaveformIcon,
   },
   {
     value: "half_cascade",
     title: "Half-cascade",
-    description: "A realtime model thinks, a separate voice speaks — pick the TTS voice yourself while keeping realtime's understanding.",
+    description: "A realtime model thinks, a separate voice speaks. Pick the TTS voice yourself while keeping realtime's understanding.",
     icon: MessagesSquareIcon,
   },
 ];
@@ -501,7 +501,7 @@ function VisionNote({ onShowVisionModels }: { onShowVisionModels: () => void }) 
     <div className="flex items-start gap-2 rounded bg-warning-subtle px-3 py-2 text-label leading-[1.125rem] text-warning-text">
       <Icon as={EyeOffIcon} size="sm" className="mt-0.5" />
       <p className="text-pretty">
-        This model can&apos;t see images; pick one marked Vision to use the camera.{" "}
+        This model can&apos;t see images. Pick one marked Vision to use the camera.{" "}
         <button
           type="button"
           onClick={onShowVisionModels}
@@ -640,7 +640,7 @@ function AvatarOptionsFields({
               hint={
                 declaredNote
                   ? declaredNote
-                  : "How the avatar's own shape is sized — matches it automatically by default."
+                  : "How the avatar's own shape is sized. Matches it automatically by default."
               }
             >
               <Select value={field.value ?? "auto"} onValueChange={field.onChange}>
@@ -703,7 +703,7 @@ function AvatarOptionsFields({
             <p className="flex items-start gap-1.5 text-warning-text">
               <Icon as={TriangleAlertIcon} size="sm" className="mt-0.5 shrink-0" />
               <span>
-                This provider&rsquo;s avatar usually streams {FRAMING_LABEL[declaredAspect as AvatarFraming]} video —
+                This provider&rsquo;s avatar usually streams {FRAMING_LABEL[declaredAspect as AvatarFraming]} video, so
                 picking {FRAMING_LABEL[framing as AvatarFraming]} may letterbox it. Auto matches it automatically.
               </span>
             </p>

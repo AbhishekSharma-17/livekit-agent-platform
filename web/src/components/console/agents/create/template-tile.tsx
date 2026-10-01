@@ -178,7 +178,7 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
             {inference ? (
               <span className="inline-flex items-center gap-1 text-caption leading-4 text-text-secondary">
                 <Icon as={ZapIcon} size="sm" className="size-3" />
-                Runs on LiveKit Inference — no vendor key
+                Runs on LiveKit Inference, no vendor key
               </span>
             ) : null}
           </span>

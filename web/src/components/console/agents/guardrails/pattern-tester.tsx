@@ -91,7 +91,7 @@ export function PatternTester({ pattern, ignoreCase }: { pattern: string; ignore
         label="Test this pattern"
         htmlFor="guardrail-pattern-sample"
         optional
-        hint="Type something the caller might say, in this browser only — nothing is sent anywhere."
+        hint="Type something the caller might say, in this browser only. Nothing is sent anywhere."
       >
         <div className="flex gap-2">
           <Input
@@ -111,19 +111,19 @@ export function PatternTester({ pattern, ignoreCase }: { pattern: string; ignore
       </Field>
       {slow ? (
         <p className="text-label text-warning-text">
-          This pattern repeats a group that already repeats, which can take very long on long text; the
+          This pattern repeats a group that already repeats, which can take very long on long text. The
           server will refuse it on save until it&apos;s simplified.
         </p>
       ) : null}
       {result?.kind === "matched" ? (
-        <p className="text-label font-medium text-destructive-text">Matches — this would trip the rule.</p>
+        <p className="text-label font-medium text-destructive-text">Matches. This would trip the rule.</p>
       ) : null}
       {result?.kind === "no-match" ? (
         <p className="text-label text-text-secondary">Doesn&apos;t match this sample.</p>
       ) : null}
       {result?.kind === "cant-check" ? (
         <p className="text-label text-text-secondary">
-          Can&apos;t check this pattern in the browser — it&apos;s still checked when you save.
+          Can&apos;t check this pattern in the browser. It&apos;s still checked when you save.
         </p>
       ) : null}
     </div>

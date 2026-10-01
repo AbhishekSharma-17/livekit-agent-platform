@@ -75,7 +75,7 @@ export function VerdictDialog({ open, onOpenChange, verdict }: VerdictDialogProp
           </DialogTitle>
           <DialogDescription>
             {verdict.turns} {verdict.turns === 1 ? "turn" : "turns"}
-            {verdict.stopped_by ? ` — stopped: ${STOPPED_BY_LABEL[verdict.stopped_by]}` : ""}
+            {verdict.stopped_by ? ` · stopped: ${STOPPED_BY_LABEL[verdict.stopped_by]}` : ""}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">

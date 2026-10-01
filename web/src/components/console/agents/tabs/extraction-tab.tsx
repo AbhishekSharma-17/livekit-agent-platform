@@ -85,11 +85,11 @@ function showInOptions(blocks: readonly PanelBlockLite[]): { value: string; labe
   for (const block of blocks) {
     const name = block.title || block.id;
     if (block.type === "details") {
-      options.push({ value: `details:${block.id}`, label: `Details — ${name}` });
+      options.push({ value: `details:${block.id}`, label: `Details · ${name}` });
     } else if (block.type === "notebook") {
       for (const section of notebookSections(block.config)) {
         if (section.kind !== "details" && section.kind !== "text") continue;
-        options.push({ value: `notebook:${block.id}.${section.id}`, label: `${name} — ${section.title || section.id}` });
+        options.push({ value: `notebook:${block.id}.${section.id}`, label: `${name} · ${section.title || section.id}` });
       }
     }
   }
@@ -152,7 +152,7 @@ export function ExtractionTab({ agent }: { agent: AgentOut }) {
             <Section
               id="extraction-capture"
               title="Capture details"
-              description="Facts the agent quietly pulls out of the conversation as it talks — a policy number, an estimate, whether something is urgent — without asking for them directly."
+              description="Facts the agent quietly pulls out of the conversation as it talks (a policy number, an estimate, whether something is urgent) without asking for them directly."
               aside={
                 <label className="flex items-center gap-2 text-sm font-medium">
                   <Switch
@@ -434,7 +434,7 @@ export function ExtractionTab({ agent }: { agent: AgentOut }) {
             </Section>
 
             <p className="px-1 text-label text-text-secondary">
-              Captured values are kept the same way the rest of this call is —{" "}
+              Captured values are kept the same way the rest of this call is,{" "}
               {storageTier === "full"
                 ? "in full, since this agent keeps whole conversations."
                 : storageTier === "basic"

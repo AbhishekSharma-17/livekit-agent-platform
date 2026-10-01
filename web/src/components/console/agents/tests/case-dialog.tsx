@@ -162,7 +162,7 @@ export function CaseDialog({ open, onOpenChange, initial, otherIds, onSave }: Ca
         <DialogHeader>
           <DialogTitle>{initial ? "Edit test case" : "Add a test case"}</DialogTitle>
           <DialogDescription>
-            A simulated caller with a persona and a goal. The agent plays the real conversation against it; five
+            A simulated caller with a persona and a goal. The agent plays the real conversation against it. Five
             judges score the transcript.
           </DialogDescription>
         </DialogHeader>
@@ -176,7 +176,7 @@ export function CaseDialog({ open, onOpenChange, initial, otherIds, onSave }: Ca
                 maxLength={120}
               />
             </Field>
-            <Field label="Case id" htmlFor="case-id" hint="Used by the run history; letters, numbers, - or _." error={idError}>
+            <Field label="Case id" htmlFor="case-id" hint="Used by the run history. Letters, numbers, - or _." error={idError}>
               <Input
                 id="case-id"
                 className="font-mono text-sm"
@@ -215,7 +215,7 @@ export function CaseDialog({ open, onOpenChange, initial, otherIds, onSave }: Ca
           <fieldset className="flex flex-col gap-2">
             <legend className="text-sm font-medium">Expectations</legend>
             <p className="text-label text-text-secondary">
-              What must be true of the agent&apos;s side of the call — the judges check each one.
+              What must be true of the agent&apos;s side of the call. The judges check each one.
             </p>
             {draft.expectations.map((expectation, index) => (
               <div key={index} className="flex items-center gap-2">
@@ -241,7 +241,7 @@ export function CaseDialog({ open, onOpenChange, initial, otherIds, onSave }: Ca
             <legend className="text-sm font-medium">Tool mocks</legend>
             <p className="text-label text-text-secondary">
               Optional: make a tool return a fixed result in this case instead of calling out. A plain value is kept
-              as text; JSON (e.g. <span className="font-mono">{"{\"ok\": true}"}</span>) is parsed.
+              as text, and JSON (e.g. <span className="font-mono">{"{\"ok\": true}"}</span>) is parsed.
             </p>
             {mockRows.map((row, index) => (
               <div key={row.key} className="flex items-start gap-2">

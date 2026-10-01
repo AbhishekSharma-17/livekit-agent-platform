@@ -308,7 +308,7 @@ describe("ConversationSection", () => {
 
     fireEvent.click(screen.getByLabelText("Read tools run"));
     const listbox = await screen.findByRole("listbox");
-    fireEvent.click(within(listbox).getByText("Automatic — background only if slow"));
+    fireEvent.click(within(listbox).getByText("Automatic (background only if slow)"));
 
     await waitFor(() => expect(latest?.config.tools.execution_default).toBe("auto"));
   });

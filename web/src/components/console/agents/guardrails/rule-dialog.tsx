@@ -166,7 +166,7 @@ export function RuleDialog({ open, onOpenChange, initial, otherNames, stageLabel
               <Field
                 label="Pattern"
                 htmlFor="guardrail-rule-pattern"
-                hint="A regular expression, e.g. a run of 13–19 digits for a card number."
+                hint="A regular expression, e.g. a run of 13 to 19 digits for a card number."
                 error={patternError ?? serverError}
               >
                 <Textarea

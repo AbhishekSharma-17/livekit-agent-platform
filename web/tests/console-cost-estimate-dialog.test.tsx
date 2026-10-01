@@ -233,7 +233,7 @@ describe("CostEstimateDialog", () => {
     withClient(<DialogHarness />);
     const dialog = await screen.findByRole("dialog", { name: "Cost estimate" });
     await waitFor(() => expect(within(dialog).getByText(/≈ \$0\.0400\/min · estimate/)).toBeTruthy());
-    expect(within(dialog).getByText(/typically \$0\.0300–\$0\.0500/)).toBeTruthy();
+    expect(within(dialog).getByText(/typically \$0\.0300 to \$0\.0500/)).toBeTruthy();
     expect(within(dialog).getByText("Agent's voice")).toBeTruthy();
     expect(within(dialog).getByText(/\$0\.0203\/min/)).toBeTruthy();
   });
@@ -283,7 +283,7 @@ describe("CostEstimateDialog", () => {
     withClient(<DialogHarness />);
     const dialog = await screen.findByRole("dialog", { name: "Cost estimate" });
     const toggle = await within(dialog).findByRole("switch", { name: /Use my workspace's averages/ });
-    await waitFor(() => expect(screen.getByText(/this workspace has 3/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/This workspace has 3/)).toBeTruthy());
     expect((toggle as HTMLButtonElement).disabled).toBe(true);
   });
 

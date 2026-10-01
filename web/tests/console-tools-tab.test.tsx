@@ -284,10 +284,10 @@ describe("ToolsTab", () => {
 
       // Knowledge group renders first among the chip-bearing rows.
       fireEvent.click(screen.getAllByText("Execution")[0]);
-      expect(await screen.findByText("Execution — Search knowledge")).toBeTruthy();
+      expect(await screen.findByText("Execution: Search knowledge")).toBeTruthy();
 
       fireEvent.click(screen.getByLabelText("Runs"));
-      await pickOption("Automatic — background only if slow");
+      await pickOption("Automatic (background only if slow)");
 
       fireEvent.click(screen.getByText("Save"));
 

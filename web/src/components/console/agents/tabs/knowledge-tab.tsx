@@ -326,10 +326,10 @@ export function KnowledgeTab() {
             htmlFor="knowledge-rerank"
             hint={
               selectedConnectionId
-                ? "Calls a hosted service over the network to rescore results — usually adds 100–300 ms to the search tool's reply."
+                ? "Calls a hosted service over the network to rescore results. Usually adds 100 to 300 ms to the search tool's reply."
                 : prefetch ?? true
                   ? "Double-checks the closest matches more carefully before answering."
-                  : "Double-checks the closest matches more carefully — adds a short delay to every reply unless Prepare answers early is on."
+                  : "Double-checks the closest matches more carefully. Adds a short delay to every reply unless Prepare answers early is on."
             }
           >
             <Select
@@ -366,7 +366,7 @@ export function KnowledgeTab() {
           </Field>
           {hostedUnavailable && (selectedConnectionId || rerankerConnections.length > 0) ? (
             <p className="text-label text-text-secondary">
-              A hosted re-ranker works only with the search tool — turn off &quot;Add the best matches to every
+              A hosted re-ranker works only with the search tool. Turn off &quot;Add the best matches to every
               turn&quot; above to use one.
             </p>
           ) : null}
@@ -434,7 +434,7 @@ export function KnowledgeTab() {
           <Field
             label="Most text to include"
             htmlFor={maxTokensId}
-            hint="Upper limit on how much retrieved text is added to one reply (in tokens); higher can find more but costs more."
+            hint="Upper limit on how much retrieved text is added to one reply (in tokens). Higher can find more but costs more."
           >
             <Controller
               control={control}
@@ -462,7 +462,7 @@ export function KnowledgeTab() {
               Hybrid mode fuses a keyword search with an embedding (meaning) search and ranks the
               combined list. Turning on re-ranking rescores the closest matches with a second, more
               careful model before the minimum-match floor is applied. The floor compares each
-              match&rsquo;s final score (0–1) after whichever of those stages ran.
+              match&rsquo;s final score (0 to 1) after whichever of those stages ran.
             </p>
           </DetailsDisclosure>
         </SectionRow>

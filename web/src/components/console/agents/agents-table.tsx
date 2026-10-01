@@ -595,7 +595,7 @@ function AgentRowMenu({
         open={confirmAction === "delete"}
         onOpenChange={closeConfirm}
         title={`Delete "${agent.name}"?`}
-        description="Agents that have sessions can't be deleted — sessions are kept for the audit trail. Unpublish it instead."
+        description="Agents that have sessions can't be deleted. Sessions are kept for the audit trail. Unpublish it instead."
         confirmLabel="Delete"
         busyLabel="Deleting…"
         onConfirm={async () => {

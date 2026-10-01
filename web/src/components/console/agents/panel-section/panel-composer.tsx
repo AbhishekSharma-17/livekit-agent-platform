@@ -267,7 +267,7 @@ function LayoutChoice({ value, onChange }: { value: "side" | "wide"; onChange: (
   const name = React.useId();
   const options = [
     { value: "side" as const, label: "Beside the call", hint: "A 400 px column next to the agent." },
-    { value: "wide" as const, label: "Main column", hint: "The panel takes the page; the call becomes a rail." },
+    { value: "wide" as const, label: "Main column", hint: "The panel takes the page, and the call becomes a rail." },
   ];
   return (
     <div role="radiogroup" aria-label="Layout" className="grid gap-2 sm:grid-cols-2">
@@ -421,7 +421,7 @@ function BlockList({
         {announcement}
       </p>
       {panel.blocks.length === 0 ? (
-        <p className="text-sm text-text-secondary">No blocks yet. Add one below; the panel shows them top to bottom.</p>
+        <p className="text-sm text-text-secondary">No blocks yet. Add one below, and the panel shows them top to bottom.</p>
       ) : (
         <ol aria-label="Blocks" data-slot="block-list" className="flex flex-col gap-2">
           {panel.blocks.map((block, index) => {
@@ -582,10 +582,10 @@ function CustomPanelSummary({ agent, panelId }: { agent: AgentOut; panelId: stri
   const exposed = manifest && manifest.ui_panel_id === panelId ? (manifest.blocks ?? []) : [];
   return (
     <p className="text-label text-text-secondary" data-slot="custom-panel-summary">
-      Custom panel: <span className="font-mono text-foreground">{panelId}</span> —{" "}
+      Custom panel: <span className="font-mono text-foreground">{panelId}</span>.{" "}
       {exposed.length > 0
-        ? `blocks the panel exposes: ${exposed.map((block) => (block as { title?: string | null }).title || block.id).join(", ")}.`
-        : "it draws its own layout, so there are no blocks to arrange here."}
+        ? `Blocks the panel exposes: ${exposed.map((block) => (block as { title?: string | null }).title || block.id).join(", ")}.`
+        : "It draws its own layout, so there are no blocks to arrange here."}
     </p>
   );
 }
@@ -627,7 +627,7 @@ export function PanelComposer({ agent }: { agent: AgentOut }) {
           {isLegacy ? (
             <Alert variant="info">
               <AlertDescription>
-                This agent still uses the classic session panel. Switch to the block panel to arrange it; it starts with
+                This agent still uses the classic session panel. Switch to the block panel to arrange it. It starts with
                 the same status, notes, checklist and activity.
               </AlertDescription>
             </Alert>

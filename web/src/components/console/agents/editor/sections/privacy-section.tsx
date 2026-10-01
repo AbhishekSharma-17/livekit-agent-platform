@@ -90,7 +90,7 @@ export function PrivacySection() {
       <Section
         id="privacy-transcripts"
         title="What to hide in transcripts"
-        description="Masked by the speech-to-text provider as it transcribes; only providers that support it apply it, and this agent's config is warned about the rest."
+        description="Masked by the speech-to-text provider as it transcribes. Only providers that support it apply it, and this agent's config is warned about the rest."
       >
         <SectionRow>
           <fieldset className="flex flex-col gap-2.5">
@@ -193,7 +193,7 @@ export function PrivacySection() {
               render={({ field }) => (
                 <ProviderSlotCard
                   title="Cleanup model"
-                  description="An LLM that also masks names, addresses and other personal details after the call. Only OpenAI or OpenRouter can run this from the server today — others are skipped with a warning."
+                  description="An LLM that also masks names, addresses and other personal details after the call. Only OpenAI or OpenRouter can run this from the server today. Others are skipped with a warning."
                   kind="llm"
                   constraints={{ inference: "off" }}
                   value={field.value ?? null}
@@ -221,7 +221,7 @@ export function PrivacySection() {
             inline
             label="Send full detail to analytics"
             htmlFor="privacy-telemetry"
-            hint="This doesn't change what LiveKit Cloud's own dashboard shows — that's set in the LiveKit Cloud project, separately."
+            hint="This doesn't change what LiveKit Cloud's own dashboard shows. That's set in the LiveKit Cloud project, separately."
           >
             <Controller
               control={control}

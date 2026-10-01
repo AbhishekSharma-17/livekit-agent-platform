@@ -63,7 +63,7 @@ export function GuardrailsSection() {
       <RuleListCard
         stage="input"
         title="What the caller says"
-        description="Checked once the caller finishes speaking, before the agent answers. A trip drops that turn — the caller's words never reach the transcript."
+        description="Checked once the caller finishes speaking, before the agent answers. A trip drops that turn, so the caller's words never reach the transcript."
         checksLabel="what the caller says"
       />
       <RuleListCard
@@ -75,7 +75,7 @@ export function GuardrailsSection() {
       <RuleListCard
         stage="tool_output"
         title="What tools return"
-        description="Checked before a tool's result reaches the agent. A trip always replaces the result with the safe reply below — the agent never sees it."
+        description="Checked before a tool's result reaches the agent. A trip always replaces the result with the safe reply below. The agent never sees it."
         checksLabel="what a tool returns"
       />
 
@@ -114,7 +114,7 @@ export function GuardrailsSection() {
               What happens next, for what the caller or the agent says
             </legend>
             <p className="text-label text-text-secondary">
-              A tool result that trips is always replaced by the safe reply above — this choice doesn&apos;t
+              A tool result that trips is always replaced by the safe reply above. This choice doesn&apos;t
               change that.
             </p>
             <Controller
@@ -157,7 +157,7 @@ export function GuardrailsSection() {
       <Section
         id="guardrails-checking"
         title="How it checks"
-        description="The Instruction and Moderation service kinds ask a model or a hosted service, which takes a moment; a Pattern is instant and never affected by this."
+        description="The Instruction and Moderation service kinds ask a model or a hosted service, which takes a moment. A Pattern is instant and never affected by this."
       >
         <SectionRow>
           <Controller
@@ -182,7 +182,7 @@ export function GuardrailsSection() {
           <Field
             label="Time budget"
             htmlFor="guardrails-budget"
-            hint="If an Instruction or Moderation service check takes longer than this, the text goes through unchecked rather than making the caller wait — a slow check never blocks the call."
+            hint="If an Instruction or Moderation service check takes longer than this, the text goes through unchecked rather than making the caller wait. A slow check never blocks the call."
           >
             <Controller
               control={control}

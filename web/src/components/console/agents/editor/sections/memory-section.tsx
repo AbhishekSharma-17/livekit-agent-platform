@@ -57,8 +57,8 @@ export function MemorySection() {
     >
       <SectionRow>
         <p className="max-w-[70ch] text-label text-pretty text-text-secondary">
-          Callers are identified by a pseudonymous id — a scrambled code, never their name or phone
-          number. An anonymous web visitor (someone the platform can&apos;t recognize on a later visit) is
+          Callers are identified by a pseudonymous id (a scrambled code, never their name or phone
+          number). An anonymous web visitor (someone the platform can&apos;t recognize on a later visit) is
           never remembered. A builder can forget one caller, or every caller&apos;s memories at once, at any
           time (the caller&apos;s own session page, or Settings → Danger zone).
         </p>

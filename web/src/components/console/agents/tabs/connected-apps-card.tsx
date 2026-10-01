@@ -273,7 +273,7 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
     <Section
       id="tools-apps"
       title="Connected apps"
-      description="Let this agent use apps connected in Tools → Apps — Gmail, Slack, calendars and more."
+      description="Let this agent use apps connected in Tools → Apps (Gmail, Slack, calendars and more)."
     >
       {statusQuery.isError ? (
         <SectionRow>
@@ -297,7 +297,7 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
           {!enabled ? (
             <SectionRow className="bg-warning-subtle">
               <p className="text-label text-warning-text">
-                Apps are turned off for this workspace — this agent can&rsquo;t use them until they&rsquo;re back on.{" "}
+                Apps are turned off for this workspace. This agent can&rsquo;t use them until they&rsquo;re back on.{" "}
                 <Link href="/console/tools?tab=apps" className="underline underline-offset-2">
                   Go to Apps
                 </Link>{" "}
@@ -331,7 +331,7 @@ export function ConnectedAppsCard({ agentId }: { agentId: string }) {
             <p className="text-label text-text-secondary">{activeOption.helper}</p>
             {activeOption.latency ? (
               <p className="text-label text-warning-text">
-                The agent looks tools up during the call; expect slower replies.
+                The agent looks tools up during the call, so expect slower replies.
               </p>
             ) : null}
           </SectionRow>

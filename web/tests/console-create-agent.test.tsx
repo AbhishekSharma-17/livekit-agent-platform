@@ -273,9 +273,9 @@ describe("CreateAgentDialog — step 1, the gallery", () => {
     }
 
     for (const id of GENERIC_IDS) {
-      expect(within(tile(id)).getByText("Runs on LiveKit Inference — no vendor key")).toBeTruthy();
+      expect(within(tile(id)).getByText("Runs on LiveKit Inference, no vendor key")).toBeTruthy();
     }
-    expect(within(tile("insurance_claim")).queryByText("Runs on LiveKit Inference — no vendor key")).toBeNull();
+    expect(within(tile("insurance_claim")).queryByText("Runs on LiveKit Inference, no vendor key")).toBeNull();
   });
 
   it("shows Keys present on the insurance tile when the workspace holds the Google image key", async () => {
@@ -523,7 +523,7 @@ describe("template-meta helpers", () => {
       ["google-image-gen", { vendor: "Google", label: "Google image generation", credential_provider: "google-llm" }],
     ]);
     const withoutImages = gatedDifferences(insurance, { instructions: "", pipeline: { mode: "cascaded" } }, providers);
-    expect(withoutImages).toEqual(["Running on LiveKit Inference — add a Google key for incident sketches."]);
+    expect(withoutImages).toEqual(["Running on LiveKit Inference. Add a Google key for incident sketches."]);
 
     // A realtime starter created as cascaded.
     const realtime = {
@@ -536,7 +536,7 @@ describe("template-meta helpers", () => {
       pack: { ...phone.pack, capabilities: { ...phone.pack.capabilities, dtmf: false } },
     };
     expect(gatedDifferences(realtime, { instructions: "", pipeline: { mode: "cascaded" } })[0]).toMatch(
-      /^Running on LiveKit Inference — add a google-realtime key for realtime voice\.$/,
+      /^Running on LiveKit Inference\. Add a google-realtime key for realtime voice\.$/,
     );
   });
 

@@ -406,7 +406,7 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
                 ≈ {formatUsd(costEstimate.estimate.per_minute_usd.mid) ?? EMPTY_VALUE}/min · estimate
               </span>
               <span className="text-caption text-text-secondary">
-                typically {formatUsd(costEstimate.estimate.per_minute_usd.low) ?? EMPTY_VALUE}–
+                typically {formatUsd(costEstimate.estimate.per_minute_usd.low) ?? EMPTY_VALUE} to{" "}
                 {formatUsd(costEstimate.estimate.per_minute_usd.high) ?? EMPTY_VALUE}
               </span>
             </span>

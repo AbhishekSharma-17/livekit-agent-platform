@@ -598,7 +598,7 @@ def normalize_host(value: str) -> str:
     """
     host = value.strip().lower().rstrip(".")
     if not _HOST_RE.match(host) or _is_numeric_host(host):
-        raise ValueError(f"{value!r} is not a site name; write it like example.com or *.example.com")
+        raise ValueError(f"{value!r} is not a site name. Write it like example.com or *.example.com")
     return host
 
 

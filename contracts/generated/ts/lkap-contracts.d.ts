@@ -805,8 +805,8 @@ export interface QaNode {
 /**
  * Call one of the agent's attached tools with no model turn, then branch on the outcome (D-V6-28).
  *
- * The worker runs the tool the moment the step is entered — through the same execution path
- * as a call the model makes (blocking, the same guardrails and fences) — applies
+ * The worker runs the tool the moment the step is entered (through the same execution path
+ * as a call the model makes: blocking, the same guardrails and fences), applies
  * :attr:`bindings` to the result, and takes the edge :attr:`on` names for the outcome. The
  * result text itself never reaches the model: what the next steps need goes into variables
  * (``var:<name>`` bindings), which a later step's instructions show fenced, or onto the panel.
@@ -4703,7 +4703,7 @@ export interface DatasetPreviewOut {
  * exists and did not fail to import; otherwise it reads the file like an upload (the same
  * parser and key normalisation) and stores the rows in the create's own transaction, so the
  * table is ready before the agent is validated. Rows are demo data: ``name`` starts with
- * ``Demo — `` for the shipped starters.
+ * ``Demo · `` for the shipped starters.
  *
  * This interface was referenced by `LkapContracts`'s JSON-Schema
  * via the `definition` "DatasetSeed".

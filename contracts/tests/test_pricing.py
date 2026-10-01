@@ -89,7 +89,7 @@ def test_no_row_is_listed_twice() -> None:
 def test_only_known_zeros_are_zero() -> None:
     zeros = [r for r in ALL_ROWS if r.usd_per_unit == 0]
     assert [(r.provider_id, r.unit) for r in zeros] == [("fastembed-embedding", "tokens_in")]
-    assert zeros[0].tier_note == "runs on the worker; no vendor charge"
+    assert zeros[0].tier_note == "runs on the worker, with no vendor charge"
 
 
 @pytest.mark.parametrize(

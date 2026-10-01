@@ -146,7 +146,7 @@ SECRET_LOOKING_REASON = "looks like an API key, not a model id"
 
 
 #: The warning an id-like field gets for a bare token (R-V4-31). It never contains the value.
-BARE_TOKEN_ID_REASON = "looks like an API key; if it is the vendor's id, ignore this"
+BARE_TOKEN_ID_REASON = "looks like an API key. If it is the vendor's id, ignore this"
 
 
 def _has_secret_prefix(value: str) -> bool:
@@ -851,7 +851,7 @@ def _reasoning_effort_field() -> FieldSpec:
         label="Reasoning effort",
         type="enum",
         options=list(REASONING_EFFORTS),
-        help="How long a reasoning model thinks before it answers. Lower is faster: on a live call, "
+        help="How long a reasoning model thinks before it answers. Lower is faster. On a live call, "
         "medium or higher adds several seconds to every reply. Left empty, the agent uses the lowest "
         "level the model supports. Models that do not reason ignore it.",
     )
@@ -879,7 +879,7 @@ def _vad_fields(*, silence_default: str) -> list[FieldSpec]:
             type="number",
             placeholder=silence_default,
             help="How long the caller must be quiet before their speech counts as ended. Lower lets the "
-            "agent reply sooner; with the turn detector it must be at least 0.25. Default "
+            "agent reply sooner. With the turn detector it must be at least 0.25. Default "
             f"{silence_default}.",
         ),
         FieldSpec(
@@ -1161,7 +1161,7 @@ _AVAILABLE: list[ProviderSpec] = [
             ModelSpec(
                 id="google/gemma-4-31b-it",
                 label="Gemma 4 31B Instruct",
-                note="text-only on LiveKit Inference: ignores image parts silently",
+                note="text-only on LiveKit Inference, and ignores image parts silently",
             ),
             ModelSpec(id="google/gemini-3.5-flash", label="Gemini 3.5 Flash", supports_video=True),
             # V6-02 (D-V6-8): a curated pick of the current ids on docs.livekit.io/agents/models/inference
@@ -1229,7 +1229,7 @@ _AVAILABLE: list[ProviderSpec] = [
             ModelSpec(
                 id="inworld/inworld-tts-2-flash",
                 label="Inworld TTS 2 Flash",
-                note="fastest to start speaking; slightly lower quality than Inworld TTS 2",
+                note="fastest to start speaking. Slightly lower quality than Inworld TTS 2",
             ),
             ModelSpec(id="cartesia/sonic-3.6", label="Cartesia Sonic 3.6"),
             ModelSpec(id="cartesia/sonic-3", label="Cartesia Sonic 3"),
@@ -1347,7 +1347,7 @@ _AVAILABLE: list[ProviderSpec] = [
         default_model="gpt-realtime",
         catalog=_openai_catalog(_OPENAI_REALTIME_FILTER),
         test="openai_models",
-        notes="Its base_url override is for OpenAI-compatible realtime endpoints; OpenRouter has none.",
+        notes="Its base_url override is for OpenAI-compatible realtime endpoints, and OpenRouter has none.",
         capabilities=ProviderCapabilities(
             video_input=False,
             tool_calling=True,
@@ -1580,7 +1580,7 @@ _AVAILABLE: list[ProviderSpec] = [
                 type="secret",
                 required=True,
                 nested_model="SimliConfig",
-                help="Nested under simli_config: this avatar has no top-level api_key kwarg.",
+                help="Nested under simli_config, because this avatar has no top-level api_key kwarg.",
             ),
         ],
         fields=[
@@ -1598,7 +1598,7 @@ _AVAILABLE: list[ProviderSpec] = [
         catalog=CatalogSpec(adapter="simli_faces", kinds=["avatars"]),
         test="simli_faces",
         capabilities=ProviderCapabilities(tool_calling=False),
-        notes="No top-level api_key or conn_options; credential and face_id both live in the "
+        notes="No top-level api_key or conn_options. Credential and face_id both live in the "
         "nested SimliConfig dataclass.",
         docs_url="https://docs.livekit.io/agents/integrations/avatar/simli/",
         get_key_url="https://www.simli.com/",
@@ -1721,9 +1721,9 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_CREDENTIAL_HOME = "openrouter-llm"
 
 _OPENROUTER_SPEECH_UNLISTED = (
-    "Not offered for new agents: OpenRouter's speech-to-text and text-to-speech wait for a whole "
+    "Not offered for new agents. OpenRouter's speech-to-text and text-to-speech wait for a whole "
     "turn or sentence instead of streaming, which adds seconds to every reply on a live call. Use "
-    "the OpenRouter key for language models, image generation and embeddings; agents that already "
+    "the OpenRouter key for language models, image generation and embeddings. Agents that already "
     "use this entry keep working."
 )
 
@@ -1738,7 +1738,7 @@ def _openrouter_base_url() -> FieldSpec:
         label="Base URL",
         type="string",
         default=OPENROUTER_BASE_URL,
-        help="OpenRouter's OpenAI-compatible API root; change it only for a proxy in front of OpenRouter.",
+        help="OpenRouter's OpenAI-compatible API root. Change it only for a proxy in front of OpenRouter.",
     )
 
 
@@ -1771,7 +1771,7 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
                 label="Fallback models",
                 type="json",
                 placeholder='["openai/gpt-4o-mini"]',
-                help="Model ids tried in order when the primary is unavailable; sent as OpenRouter's "
+                help="Model ids tried in order when the primary is unavailable. Sent as OpenRouter's "
                 "`models` array.",
             ),
             FieldSpec(
@@ -1781,9 +1781,10 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
                 placeholder='{"sort": "latency"}',
                 help="OpenRouter provider preferences: `order`, `only`, `ignore`, `sort` "
                 "(price/throughput/latency), `allow_fallbacks`, `require_parameters`, "
-                "`data_collection`, `preferred_max_latency`…; `require_parameters` defaults to true so "
+                "`data_collection`, `preferred_max_latency` and more. `require_parameters` defaults to "
+                "true so "
                 "a request with tools never lands on an endpoint that cannot call them. By default "
-                "OpenRouter favours cheaper hosts; for a live call on a model several hosts serve, "
+                "OpenRouter favours cheaper hosts. For a live call on a model several hosts serve, "
                 '`{"sort": "latency"}` tries the fastest host first, or `{"order": ["groq", "cerebras"]}` '
                 "pins the hosts you want in order.",
             ),
@@ -1797,14 +1798,14 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
                 default=False,
                 recommended=True,
                 help="Sends the agent's id with each request so OpenRouter keeps routing it to the same "
-                "host, whose cache of the conversation is already warm; later replies start sooner. "
+                "host, whose cache of the conversation is already warm. Later replies start sooner. "
                 "Nothing about the caller is sent.",
             ),
             FieldSpec(
                 name="site_url",
                 label="Site URL",
                 type="string",
-                help="Sent as `HTTP-Referer` for OpenRouter's app rankings; the app name below only "
+                help="Sent as `HTTP-Referer` for OpenRouter's app rankings. The app name below only "
                 "counts when this is set.",
             ),
             FieldSpec(
@@ -1827,8 +1828,8 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         default_model="openai/gpt-4.1-mini",
         catalog=CatalogSpec(adapter="openrouter_llm_models", kinds=["models"], ttl_s=TTL_OPENROUTER_S),
         test="openrouter_llm_models",
-        notes="Routes to hundreds of models on one key; `openrouter/auto` is not tool-safe and is "
-        "deliberately not the default. Tool schemas go out with OpenAI's `strict` flag; if a routed "
+        notes="Routes to hundreds of models on one key. `openrouter/auto` is not tool-safe and is "
+        "deliberately not the default. Tool schemas go out with OpenAI's `strict` flag. If a routed "
         "non-OpenAI model rejects a tool call, pick an OpenAI model or an `order` of providers known "
         "to support strict tools.",
         docs_url="https://docs.livekit.io/agents/models/llm/openrouter/",
@@ -1860,7 +1861,7 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         default_model="openai/gpt-4o-mini-transcribe",
         catalog=CatalogSpec(adapter="openrouter_stt_models", kinds=["models"], ttl_s=TTL_OPENROUTER_S),
         test="openrouter_stt_models",
-        notes="Batch transcription over HTTP: no interim results; each turn is transcribed after "
+        notes="Batch transcription over HTTP: no interim results. Each turn is transcribed after "
         "end-of-speech, so expect roughly half a second to two seconds more per turn than a streaming "
         "STT. For low latency prefer LiveKit Inference STT or Deepgram.",
         docs_url="https://docs.livekit.io/agents/models/stt/openai/",
@@ -1886,7 +1887,7 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
                 type="catalog",
                 catalog_kind="voices",
                 default="Kore",
-                help="Voices are per model: pick the model first, then a voice it lists.",
+                help="Voices are per model. Pick the model first, then a voice it lists.",
             ),
             FieldSpec(name="speed", label="Speed", type="number", default=1.0),
         ],
@@ -1903,7 +1904,7 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
             adapter="openrouter_tts_models", kinds=["models", "voices"], ttl_s=TTL_OPENROUTER_S
         ),
         test="openrouter_tts_models",
-        notes="Voices are per model — pick the model first, then a voice it lists. Non-streaming, like "
+        notes="Voices are per model. Pick the model first, then a voice it lists. Non-streaming, like "
         "OpenAI TTS: one request per sentence, so the first audio of every reply waits for a whole "
         "sentence to be synthesised. PCM for every model except Voxtral (MP3 only), at the sample "
         "rate OpenRouter declares. For low latency prefer LiveKit Inference TTS or Cartesia.",
@@ -1926,8 +1927,8 @@ _OPENROUTER_AVAILABLE: list[ProviderSpec] = [
         capabilities=ProviderCapabilities(tool_calling=False),
         catalog=CatalogSpec(adapter="openrouter_embedding_models", kinds=["models"], ttl_s=TTL_OPENROUTER_S),
         test="openrouter_embedding_models",
-        notes="Platform-level: select it with LKAP_EMBEDDER=openrouter-embedding:<credential_id>. Only "
-        "the 1536-dimension model is offered; another model would mean re-embedding every knowledge "
+        notes="Platform-level. Select it with LKAP_EMBEDDER=openrouter-embedding:<credential_id>. Only "
+        "the 1536-dimension model is offered. Another model would mean re-embedding every knowledge "
         "base.",
         get_key_url=_OPENROUTER_KEY_URL,
         probe="openai_embeddings",
@@ -2027,7 +2028,7 @@ _FULL: list[ProviderSpec] = [
         ],
         default_model="grok-voice-latest",
         capabilities=ProviderCapabilities(video_input=False, tool_calling=True, voices=XAI_VOICES),
-        notes="Subclasses openai.realtime.RealtimeModel; audio-native only, no modalities/text-only mode.",
+        notes="Subclasses openai.realtime.RealtimeModel. Audio-native only, no modalities/text-only mode.",
         docs_url="https://docs.livekit.io/agents/models/realtime/",
         probe="xai_realtime_ws",
     ),
@@ -2062,7 +2063,7 @@ _FULL: list[ProviderSpec] = [
                 type="file",
                 accept="application/json",
                 required=True,
-                help="No api_key kwarg exists on this class; Google auth is ADC only.",
+                help="No api_key kwarg exists on this class. Google auth is ADC only.",
             ),
             FieldSpec(name="languages", label="Language", type="string", default="en-US"),
             FieldSpec(name="model", label="Model", type="model", default="latest_long"),
@@ -2085,7 +2086,7 @@ _FULL: list[ProviderSpec] = [
                 label="Streams while the caller speaks",
                 type="boolean",
                 recommended=True,
-                help="Streams while the caller speaks; needed for live calls. Off sends one request "
+                help="Streams while the caller speaks. Needed for live calls. Off sends one request "
                 "after each utterance.",
             ),
         ],
@@ -2247,7 +2248,7 @@ _FULL: list[ProviderSpec] = [
         default_model="gpt-oss-120b",
         catalog=CatalogSpec(adapter="cerebras_models", kinds=["models"]),
         test="cerebras_models",
-        notes="v1's stub pointed at a nonexistent openai.LLM.with_cerebras; corrected to the real package.",
+        notes="v1's stub pointed at a nonexistent openai.LLM.with_cerebras. Corrected to the real package.",
         docs_url="https://docs.livekit.io/agents/models/llm/",
         probe="openai_chat",
     ),
@@ -2287,7 +2288,7 @@ _FULL: list[ProviderSpec] = [
         fields=[FieldSpec(name="region", label="Region", type="string", default="us-east-1")],
         models=[ModelSpec(id="amazon.nova-2-lite-v1:0", label="Nova 2 Lite")],
         default_model="amazon.nova-2-lite-v1:0",
-        notes="Flat api_key/api_secret only this plugin family (+ aws.TTS) accepts; falls back to "
+        notes="Flat api_key/api_secret only this plugin family (+ aws.TTS) accepts. Falls back to "
         "the standard AWS chain when omitted.",
         docs_url="https://docs.livekit.io/agents/models/llm/aws/",
     ),
@@ -2306,7 +2307,7 @@ _FULL: list[ProviderSpec] = [
                 type="file",
                 accept="application/json",
                 required=True,
-                help="No api_key kwarg exists on this class; Google auth is ADC only.",
+                help="No api_key kwarg exists on this class. Google auth is ADC only.",
             ),
             FieldSpec(name="voice_name", label="Voice", type="string"),
             FieldSpec(name="language", label="Language", type="string", default="en-US"),
@@ -2345,7 +2346,7 @@ _FULL: list[ProviderSpec] = [
                 label="Streams while it speaks",
                 type="boolean",
                 recommended=True,
-                help="Starts speaking before the whole sentence is ready; needed for live calls. Off "
+                help="Starts speaking before the whole sentence is ready. Needed for live calls. Off "
                 "sends one request per sentence.",
             ),
         ],
@@ -2447,10 +2448,10 @@ _FULL: list[ProviderSpec] = [
             tool_calling=False,
             avatar_aspect="landscape",
             avatar_aspect_note=(
-                "Output dimensions are optional and per-persona-model; left unset, Anam's default "
+                "Output dimensions are optional and per-persona-model. Left unset, Anam's default "
                 "is landscape (Cara 3: 720x480, Cara 4: 1152x768) per "
                 "anam.ai/docs/personas/session/video. Overridable per session (Cara 4 also offers "
-                "a 768x1152 portrait size) — a persona configured for portrait output is not "
+                "a 768x1152 portrait size). A persona configured for portrait output is not "
                 "reflected by this registry entry."
             ),
         ),
@@ -2483,7 +2484,7 @@ _FULL: list[ProviderSpec] = [
         capabilities=ProviderCapabilities(
             tool_calling=False, platforms=["macos-arm64", "linux-aarch64", "linux-x86_64"]
         ),
-        notes="No Windows wheel; manylinux_2_28 or macOS arm64 only. Also has a genuine "
+        notes="No Windows wheel, only manylinux_2_28 or macOS arm64. Also has a genuine "
         "offline/local mode outside the worker image.",
         docs_url="https://docs.livekit.io/agents/integrations/avatar/bithuman/",
         get_key_url="https://www.bithuman.ai/",
@@ -2520,7 +2521,7 @@ _FULL: list[ProviderSpec] = [
 #: The per-minute price line of LiveKit Cloud's noise cancellation (research-v4
 #: panels-and-capabilities C5, the LiveKit pricing page at planning time).
 _CLOUD_NC_PRICE_NOTE = (
-    "Billed by LiveKit Cloud: the first 1,000 minutes a month are included, then about $0.0012 a minute."
+    "Billed by LiveKit Cloud. The first 1,000 minutes a month are included, then about $0.0012 a minute."
 )
 
 
@@ -2613,7 +2614,8 @@ _NEW: list[ProviderSpec] = [
                 type="json",
                 required=True,
                 help="A KrispLicenseAuthProvider (self-hosted license key) or LiveKitCloudAuthProvider "
-                "(routes billing through the bound LiveKit Cloud project, no separate vendor key) — not a "
+                "(routes billing through the bound LiveKit Cloud project, no separate vendor key). "
+                "It is not a "
                 "single secret string, so it is modelled as a structured field rather than secret_fields.",
             ),
             FieldSpec(
@@ -2695,11 +2697,11 @@ _NEW: list[ProviderSpec] = [
                 type="string",
                 required=True,
                 positional=False,
-                help="No default — D-ID has no stock avatar.",
+                help="No default. D-ID has no stock avatar.",
             )
         ],
         capabilities=ProviderCapabilities(tool_calling=False),
-        notes="agent_id has no NotGivenOr wrapper, unlike every other avatar's id field: a "
+        notes="agent_id has no NotGivenOr wrapper, unlike every other avatar's id field. It is a "
         "true required kwarg.",
         docs_url="https://docs.livekit.io/agents/integrations/avatar/",
     ),
@@ -2741,12 +2743,12 @@ _NEW: list[ProviderSpec] = [
             tool_calling=False,
             avatar_aspect="portrait",
             avatar_aspect_note=(
-                "LemonSlice avatars render as 368x560 pixel videos (~9:16 portrait); the vendor "
+                "LemonSlice avatars render as 368x560 pixel videos (~9:16 portrait). The vendor "
                 "center-crops the source image to that aspect if it doesn't already match "
                 "(docs.livekit.io/agents/integrations/avatar/lemonslice/)."
             ),
         ),
-        notes="Exactly one of agent_id/agent_image_url/agent_image is required; ctor also "
+        notes="Exactly one of agent_id/agent_image_url/agent_image is required. The ctor also "
         "accepts **kwargs passthrough.",
         docs_url="https://docs.livekit.io/agents/integrations/avatar/",
     ),
@@ -2816,12 +2818,12 @@ _NEW: list[ProviderSpec] = [
                 required=True,
                 positional=True,
                 nested_model="AvatarConfig",
-                help='Up to 5 gallery avatar ids ({"avatar_ids": [...]}); the first is active, the rest '
+                help='Up to 5 gallery avatar ids ({"avatar_ids": [...]}). The first is active, the rest '
                 "swappable in-session via swap_avatar().",
             )
         ],
         capabilities=ProviderCapabilities(tool_calling=False),
-        notes="avatar_config is positional, not keyword-only — the only avatar ctor shaped "
+        notes="avatar_config is positional, not keyword-only. It is the only avatar ctor shaped "
         "this way besides D-ID's required agent_id.",
         docs_url="https://docs.livekit.io/agents/integrations/avatar/",
     ),
@@ -2867,9 +2869,10 @@ _NEW: list[ProviderSpec] = [
         default_model="amazon.nova-2-sonic-v1:0",
         capabilities=ProviderCapabilities(video_input=False, tool_calling=True, voices=NOVA_SONIC_VOICES),
         notes="__init__ takes no api_key/api_secret/credentials kwarg at all (verified: AST snapshot has no "
-        "auth param on this constructor) — resolved purely through the standard boto3/AWS credential chain, "
-        "unlike the catalog draft's claim of a flat api_key/api_secret pair. modalities is audio|mixed only: "
-        "no half-cascade path.",
+        "auth param on this constructor). It is resolved purely through the standard boto3/AWS "
+        "credential chain, "
+        "unlike the catalog draft's claim of a flat api_key/api_secret pair. modalities is audio|mixed only, "
+        "with no half-cascade path.",
         docs_url="https://docs.livekit.io/agents/models/realtime/",
     ),
     _full(
@@ -2892,7 +2895,7 @@ _NEW: list[ProviderSpec] = [
         ],
         capabilities=ProviderCapabilities(video_input=False, tool_calling=True),
         notes="A fully hosted conversational-agent platform (40+ ctor kwargs) more than a plain "
-        "realtime model; most behavior lives in Phonic's own dashboard against phonic_agent, "
+        "realtime model. Most behavior lives in Phonic's own dashboard against phonic_agent, "
         "not in these fields.",
         docs_url="https://docs.livekit.io/agents/models/realtime/",
     ),
@@ -3023,7 +3026,7 @@ _NEW: list[ProviderSpec] = [
         catalog=_openai_catalog(_OPENAI_LLM_FILTER),
         test="openai_models",
         price_ref="openai-llm",
-        notes="Distinct class from openai.LLM (chat completions); uses the Responses API over "
+        notes="Distinct class from openai.LLM (chat completions). Uses the Responses API over "
         "a websocket by default.",
         docs_url="https://docs.livekit.io/agents/models/llm/openai/",
         probe="openai_chat",
@@ -3094,7 +3097,7 @@ _NEW: list[ProviderSpec] = [
         availability="removed",
         secret_fields=[_api_key("Fireworks API key", env="FIREWORKS_API_KEY")],
         fields=[FieldSpec(name="language", label="Language", type="string")],
-        notes="Fireworks stopped its speech service on 2026-06-10; pick another transcriber.",
+        notes="Fireworks stopped its speech service on 2026-06-10. Pick another transcriber.",
         docs_url="https://docs.livekit.io/agents/models/stt/",
     ),
     _full(
@@ -3226,7 +3229,10 @@ _NEW: list[ProviderSpec] = [
         "livekit.plugins.slng.STT",
         secret_fields=[_api_key("Slng API key", env="SLNG_API_KEY")],
         fields=[FieldSpec(name="slng_base_url", label="Base URL", type="string", default="api.slng.ai")],
-        notes="Router/gateway product: routes to a configured upstream STT model, not a fixed vendor model.",
+        notes=(
+            "A router/gateway product that routes to a configured upstream STT model, "
+            "not a fixed vendor model."
+        ),
         docs_url="https://docs.livekit.io/agents/models/stt/",
     ),
     _full(
@@ -3251,7 +3257,7 @@ _NEW: list[ProviderSpec] = [
         fields=[
             FieldSpec(name="model", label="Model", type="model", default="openai/whisper-large-v3-turbo")
         ],
-        notes="Self-deployed inference; api_key authenticates the tenant's Simplismart deployment.",
+        notes="Self-deployed inference. The api_key authenticates the tenant's Simplismart deployment.",
         docs_url="https://docs.livekit.io/agents/models/stt/",
     ),
     _full(
@@ -3290,7 +3296,7 @@ _NEW: list[ProviderSpec] = [
                 name="credentials",
                 label="AWS credentials",
                 type="json",
-                help="boto-style Credentials object; omit to use the standard AWS credential chain "
+                help="boto-style Credentials object. Omit to use the standard AWS credential chain "
                 "(this class, unlike aws.LLM/aws.TTS, has no flat api_key/api_secret kwarg).",
             ),
             FieldSpec(name="region", label="Region", type="string", env_fallback="AWS_REGION"),
@@ -3437,7 +3443,7 @@ _NEW: list[ProviderSpec] = [
             FieldSpec(name="voice", label="Voice", type="string", default="autumn"),
         ],
         notes="Groq speech takes at most 200 characters per request, so a long sentence from the "
-        "model can fail to speak; it also waits for the whole sentence before playing.",
+        "model can fail to speak. It also waits for the whole sentence before playing.",
         docs_url="https://docs.livekit.io/agents/models/tts/",
     ),
     _full(
@@ -3722,7 +3728,7 @@ _NEW: list[ProviderSpec] = [
             )
         ],
         capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
-        notes="Connected apps (Tools -> Apps). Free tier: 100,000 tool calls a month; apps that use "
+        notes="Connected apps (Tools -> Apps). Free tier: 100,000 tool calls a month. Apps that use "
         "Composio's shared sign-in include 20,000 of those, then a small per-call fee.",
         docs_url="https://docs.composio.dev/docs/authenticating-tools",
         get_key_url="https://platform.composio.dev",
@@ -3744,7 +3750,7 @@ _NEW: list[ProviderSpec] = [
         requires_credential=False,
         secret_fields=[],
         capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
-        notes="Created by signing in to an MCP server from its tool page; not added by hand.",
+        notes="Created by signing in to an MCP server from its tool page. Not added by hand.",
     ),
     # ------------------------------------------------ built-in tool vendors (V5-25, D-V5-7)
     # Keys for the `web_search` and `send_sms` built-ins. The worker speaks each vendor's API
@@ -3769,7 +3775,7 @@ _NEW: list[ProviderSpec] = [
             )
         ],
         capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
-        notes="The suggested web search service: a free tier with no card.",
+        notes="The suggested web search service, with a free tier that needs no card.",
         price_note="1,000 free searches a month, then about $0.008 a search (Tavily's pricing page).",
         docs_url="https://docs.tavily.com/documentation/api-reference/endpoint/search",
         get_key_url="https://app.tavily.com",
@@ -3790,7 +3796,7 @@ _NEW: list[ProviderSpec] = [
                 label="Country",
                 type="string",
                 placeholder="us",
-                help="Two-letter country code the results favour; empty lets Brave decide.",
+                help="Two-letter country code the results favour. Empty lets Brave decide.",
             )
         ],
         capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
@@ -3878,7 +3884,7 @@ _NEW: list[ProviderSpec] = [
         "",
         secret_fields=[
             _api_key(
-                "Qdrant API key", help_text="A database API key of the cluster; none for a local cluster."
+                "Qdrant API key", help_text="A database API key of the cluster. None for a local cluster."
             )
         ],
         fields=[
@@ -3888,14 +3894,14 @@ _NEW: list[ProviderSpec] = [
                 type="string",
                 required=True,
                 placeholder="https://your-cluster.cloud.qdrant.io:6333",
-                help="The cluster's REST address (https; a local cluster may use http://localhost:6333).",
+                help="The cluster's REST address (https, or http://localhost:6333 for a local cluster).",
             ),
             FieldSpec(
                 name="collection",
                 label="Collection",
                 type="string",
                 default="lkap_knowledge",
-                help="Created on first use; every knowledge base of this connection shares it.",
+                help="Created on first use. Every knowledge base of this connection shares it.",
             ),
             FieldSpec(
                 name="native_hybrid",
@@ -3907,8 +3913,8 @@ _NEW: list[ProviderSpec] = [
             ),
         ],
         capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
-        notes="Keeps a knowledge base's vectors in your own Qdrant cluster; the text stays on the platform.",
-        price_note="Qdrant Cloud has a free cluster (1 GB memory, 4 GB disk); larger clusters are billed "
+        notes="Keeps a knowledge base's vectors in your own Qdrant cluster. The text stays on the platform.",
+        price_note="Qdrant Cloud has a free cluster (1 GB memory, 4 GB disk). Larger clusters are billed "
         "by Qdrant.",
         docs_url="https://qdrant.tech/documentation/concepts/collections/",
         get_key_url="https://cloud.qdrant.io",
@@ -3929,7 +3935,7 @@ _NEW: list[ProviderSpec] = [
                 required=True,
                 placeholder="lkap-knowledge",
                 help="Lower-case letters, digits and hyphens. Created on first use (cosine, serverless) if "
-                "it does not exist; each knowledge base is its own namespace in it.",
+                "it does not exist. Each knowledge base is its own namespace in it.",
             ),
             FieldSpec(
                 name="cloud",
@@ -3948,8 +3954,8 @@ _NEW: list[ProviderSpec] = [
             ),
         ],
         capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
-        notes="Keeps a knowledge base's vectors in your own Pinecone index; the text stays on the platform.",
-        price_note="The free Starter plan has 5 indexes, 100 namespaces per index and 2 GB; paid plans bill "
+        notes="Keeps a knowledge base's vectors in your own Pinecone index. The text stays on the platform.",
+        price_note="The free Starter plan has 5 indexes, 100 namespaces per index and 2 GB. Paid plans bill "
         "storage, reads and writes.",
         docs_url="https://docs.pinecone.io/guides/index-data/indexing-overview",
         get_key_url="https://app.pinecone.io",
@@ -3971,7 +3977,7 @@ _NEW: list[ProviderSpec] = [
                 type="string",
                 required=True,
                 placeholder="https://your-cluster.weaviate.cloud",
-                help="The cluster's REST address (https; a local cluster may use http://localhost:8080).",
+                help="The cluster's REST address (https, or http://localhost:8080 for a local cluster).",
             ),
             FieldSpec(
                 name="collection",
@@ -3990,9 +3996,9 @@ _NEW: list[ProviderSpec] = [
             ),
         ],
         capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
-        notes="Keeps a knowledge base's vectors in your own Weaviate cluster; the text stays on the "
+        notes="Keeps a knowledge base's vectors in your own Weaviate cluster. The text stays on the "
         "platform.",
-        price_note="Weaviate Cloud has a free sandbox; serverless clusters are billed by Weaviate.",
+        price_note="Weaviate Cloud has a free sandbox. Serverless clusters are billed by Weaviate.",
         docs_url="https://docs.weaviate.io/weaviate/manage-collections/multi-tenancy",
         get_key_url="https://console.weaviate.cloud",
     ),
@@ -4010,13 +4016,13 @@ _NEW: list[ProviderSpec] = [
                 label="Model",
                 type="model",
                 default="rerank-v4.0-fast",
-                help="`rerank-v4.0-fast` answers fastest; `rerank-v4.0-pro` ranks best; `rerank-v3.5` "
+                help="`rerank-v4.0-fast` answers fastest, `rerank-v4.0-pro` ranks best and `rerank-v3.5` "
                 "is the previous generation.",
             )
         ],
         capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
-        notes="Re-orders the search tool's results with Cohere; automatic knowledge never uses it.",
-        price_note="Billed per search (one question with up to 100 passages); see Cohere's pricing page.",
+        notes="Re-orders the search tool's results with Cohere. Automatic knowledge never uses it.",
+        price_note="Billed per search (one question with up to 100 passages). See Cohere's pricing page.",
         docs_url="https://docs.cohere.com/reference/rerank",
         get_key_url="https://dashboard.cohere.com/api-keys",
     ),
@@ -4034,13 +4040,13 @@ _NEW: list[ProviderSpec] = [
                 label="Model",
                 type="model",
                 default="rerank-2.5-lite",
-                help="`rerank-2.5-lite` answers fastest; `rerank-2.5` ranks best; `rerank-3-lite` and "
+                help="`rerank-2.5-lite` answers fastest, `rerank-2.5` ranks best, and `rerank-3-lite` and "
                 "`rerank-3` are previews.",
             )
         ],
         capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
-        notes="Re-orders the search tool's results with Voyage AI; automatic knowledge never uses it.",
-        price_note="Billed per token: $0.02 per million (lite models), $0.05 (the others); the preview "
+        notes="Re-orders the search tool's results with Voyage AI. Automatic knowledge never uses it.",
+        price_note="Billed per token: $0.02 per million (lite models), $0.05 (the others). The preview "
         "rerank-3 models include 200 million free tokens (Voyage AI's pricing page).",
         docs_url="https://docs.voyageai.com/docs/reranker",
         get_key_url="https://dashboard.voyageai.com",
@@ -4063,7 +4069,7 @@ _NEW: list[ProviderSpec] = [
                 type="boolean",
                 default=False,
                 help="Ragie keeps only the passages it judges relevant. More accurate, but slower on "
-                "every search; off answers fastest.",
+                "every search. Off answers fastest.",
             ),
             FieldSpec(
                 name="recency_bias",
@@ -4074,9 +4080,9 @@ _NEW: list[ProviderSpec] = [
             ),
         ],
         capabilities=ProviderCapabilities(tool_calling=False, audio_input=False),
-        notes="Searches documents you keep in Ragie (uploaded there or synced from your apps); the "
+        notes="Searches documents you keep in Ragie (uploaded there or synced from your apps). The "
         "platform stores none of them. Each knowledge base reads one Ragie partition.",
-        price_note="Ragie's free Developer plan includes a monthly allowance of pages and searches; every "
+        price_note="Ragie's free Developer plan includes a monthly allowance of pages and searches. Every "
         "search an agent makes counts against it. Paid plans are billed by Ragie.",
         docs_url="https://docs.ragie.ai/docs/retrievals-guide",
         get_key_url="https://secure.ragie.ai",
@@ -4119,7 +4125,7 @@ _DEFERRED: list[ProviderSpec] = [
             )
         ],
         notes="Not in the livekit/agents 1.8.2 monorepo tree (absent from this pass's clone, confirming the "
-        "catalog's finding); last released 2025-10-15 against a much older core. Compatibility with "
+        "catalog's finding). Last released 2025-10-15 against a much older core. Compatibility with "
         "livekit-agents>=1.8.2 is unverified, not disproven.",
         docs_url="https://docs.livekit.io/agents/models/tts/",
     ),
@@ -4135,7 +4141,7 @@ _DEFERRED: list[ProviderSpec] = [
         fields=[FieldSpec(name="voice", label="Voice", type="string", default="NATF2")],
         notes="Explicit PLAN-V2 correction. Constructor takes no api_key kwarg (confirmed: base_url, "
         "http_session, seed, silence_threshold_ms, text_prompt, voice only) and no conn_options/tool_choice "
-        "either — the least mature realtime integration of the set.",
+        "either. It is the least mature realtime integration of the set.",
     ),
     _full(
         "legacy-noise-cancellation",
@@ -4173,7 +4179,7 @@ _DEFERRED: list[ProviderSpec] = [
                 help="Vendor credential shape not confirmed.",
             )
         ],
-        notes="Out-of-tree (not in the 1.8.2 monorepo clone); only requires_dist (livekit-agents>=1.4.2) is "
+        notes="Out-of-tree (not in the 1.8.2 monorepo clone). Only requires_dist (livekit-agents>=1.4.2) is "
         "known from PyPI metadata. Left deferred rather than guessing a class path.",
     ),
     _full(
@@ -4189,7 +4195,7 @@ _DEFERRED: list[ProviderSpec] = [
             FieldSpec(name="model", label="Model", type="model", default="sommers_ko"),
             FieldSpec(name="language", label="Language", type="string", default="ko"),
         ],
-        notes="__init__ has no api_key/credential kwarg at all (confirmed by AST snapshot) — auth "
+        notes="__init__ has no api_key/credential kwarg at all (confirmed by AST snapshot). Auth "
         "is resolved internally by an rtzrapi.py helper the factory cannot reach with per-tenant "
         "credentials, so a shared worker process could not keep two tenants' RTZR keys separate. "
         "Deferred until that's resolved upstream.",
@@ -4204,7 +4210,7 @@ _DEFERRED: list[ProviderSpec] = [
         availability="deferred",
         requires_credential=False,
         fields=[FieldSpec(name="language", label="Language", type="string", default="en")],
-        notes="Same gap as rtzr-stt: __init__ takes no credential kwarg (confirmed by AST snapshot) — the "
+        notes="Same gap as rtzr-stt: __init__ takes no credential kwarg (confirmed by AST snapshot). The "
         "AsyncSpitch() client resolves its own env var internally, which the factory cannot pass per-tenant.",
     ),
     _full(
@@ -4417,7 +4423,7 @@ _STREAMING: dict[str, tuple[bool | None, str | None, str | None]] = {
     "elevenlabs-tts": (True, None, None),
     "openai-tts": (False, None, None),
     "openrouter-tts": (False, None, "One request per sentence."),
-    "google-tts": (True, None, "Streams with Chirp 3 HD voices; pick one of those for live calls."),
+    "google-tts": (True, None, "Streams with Chirp 3 HD voices. Pick one of those for live calls."),
     "deepgram-tts": (True, None, None),
     "rime-tts": (False, "use_websocket", None),
     "inworld-tts": (True, None, None),

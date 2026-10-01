@@ -2730,7 +2730,7 @@
       "type": "object"
     },
     "ToolNode": {
-      "description": "Call one of the agent's attached tools with no model turn, then branch on the outcome (D-V6-28).\n\nThe worker runs the tool the moment the step is entered — through the same execution path\nas a call the model makes (blocking, the same guardrails and fences) — applies\n:attr:`bindings` to the result, and takes the edge :attr:`on` names for the outcome. The\nresult text itself never reaches the model: what the next steps need goes into variables\n(``var:<name>`` bindings), which a later step's instructions show fenced, or onto the panel.",
+      "description": "Call one of the agent's attached tools with no model turn, then branch on the outcome (D-V6-28).\n\nThe worker runs the tool the moment the step is entered (through the same execution path\nas a call the model makes: blocking, the same guardrails and fences), applies\n:attr:`bindings` to the result, and takes the edge :attr:`on` names for the outcome. The\nresult text itself never reaches the model: what the next steps need goes into variables\n(``var:<name>`` bindings), which a later step's instructions show fenced, or onto the panel.",
       "properties": {
         "arguments": {
           "additionalProperties": {

@@ -447,8 +447,8 @@ class HttpToolDefinition(BaseModel):
     def _silent_reply_blocks(self) -> Self:
         if self.silent_reply and self.execution.mode in NON_BLOCKING_MODES:
             raise ValueError(
-                "silent_reply cannot be combined with a background or automatic execution mode: "
-                "the silenced reply would swallow the tool's announcement"
+                "silent_reply cannot be combined with a background or automatic execution mode, "
+                "because the silenced reply would swallow the tool's announcement"
             )
         return self
 
@@ -607,7 +607,7 @@ class McpServerDefinition(BaseModel):
             if legacy_set and (self.headers != auth.headers or self.credential_id != auth.credential_id):
                 raise ValueError(
                     "headers/credential_id are deprecated mirrors of auth and disagree with "
-                    "auth.headers/auth.credential_id: set auth only"
+                    "auth.headers/auth.credential_id. Set auth only"
                 )
             self.headers = dict(auth.headers)
             self.credential_id = auth.credential_id
@@ -615,7 +615,7 @@ class McpServerDefinition(BaseModel):
         if self.headers:
             raise ValueError("an oauth MCP server takes no static headers")
         if self.credential_id is not None and self.credential_id != auth.credential_id:
-            raise ValueError("credential_id disagrees with auth.credential_id: set auth only")
+            raise ValueError("credential_id disagrees with auth.credential_id. Set auth only")
         self.credential_id = auth.credential_id
         return self
 
@@ -695,8 +695,8 @@ class ProviderToolDefinition(BaseModel):
     def _silent_reply_blocks(self) -> Self:
         if self.silent_reply and self.execution.mode in NON_BLOCKING_MODES:
             raise ValueError(
-                "silent_reply cannot be combined with a background or automatic execution mode: "
-                "the silenced reply would swallow the tool's announcement"
+                "silent_reply cannot be combined with a background or automatic execution mode, "
+                "because the silenced reply would swallow the tool's announcement"
             )
         if self.risk == "destructive" and self.execution.mode in NON_BLOCKING_MODES:
             raise ValueError("a destructive action always runs blocking")

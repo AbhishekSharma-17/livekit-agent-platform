@@ -359,8 +359,8 @@ def _names_issues(field: str, text: str | None) -> list[PlaceholderIssue]:
             issues.append(
                 PlaceholderIssue(
                     field,
-                    f"'{{{{ ctx.{name} }}}}' is not a session value; "
-                    f"use one of: {', '.join(CTX_PLACEHOLDERS)}",
+                    f"'{{{{ ctx.{name} }}}}' is not a session value. "
+                    f"Use one of: {', '.join(CTX_PLACEHOLDERS)}",
                 )
             )
         elif namespace == "var" and _VARIABLE_NAME_RE.match(name) is None:
@@ -422,7 +422,7 @@ def _readback_issues(
         issues.append(
             PlaceholderIssue(
                 field,
-                f"the tool already has an argument named '{CONFIRMED_PARAMETER}'; read-back needs that name",
+                f"the tool already has an argument named '{CONFIRMED_PARAMETER}'. Read-back needs that name",
             )
         )
     return issues
@@ -512,8 +512,8 @@ def placeholder_issues(definition: Any) -> list[PlaceholderIssue]:
             issues.append(
                 PlaceholderIssue(
                     "url",
-                    "session values and variables may not be placed in the url's scheme, host or port; "
-                    "use the path or the query",
+                    "session values and variables may not be placed in the url's scheme, host or port. "
+                    "Use the path or the query",
                 )
             )
         issues.extend(_names_issues("url", url))

@@ -29,7 +29,7 @@
   },
   "$id": "lkap-contracts/DatasetSeed.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "A lookup table the starter creates from ``seeds/<file>`` (V6-22, ask #105).\n\nAt create time the api reuses a table of this ``name`` in the agent's workspace when one\nexists and did not fail to import; otherwise it reads the file like an upload (the same\nparser and key normalisation) and stores the rows in the create's own transaction, so the\ntable is ready before the agent is validated. Rows are demo data: ``name`` starts with\n``Demo — `` for the shipped starters.",
+  "description": "A lookup table the starter creates from ``seeds/<file>`` (V6-22, ask #105).\n\nAt create time the api reuses a table of this ``name`` in the agent's workspace when one\nexists and did not fail to import; otherwise it reads the file like an upload (the same\nparser and key normalisation) and stores the rows in the create's own transaction, so the\ntable is ready before the agent is validated. Rows are demo data: ``name`` starts with\n``Demo · `` for the shipped starters.",
   "properties": {
     "file": {
       "description": "A `.csv` or `.json` file under `seeds/`",

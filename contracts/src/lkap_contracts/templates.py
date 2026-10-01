@@ -133,7 +133,7 @@ class DatasetSeed(BaseModel):
     exists and did not fail to import; otherwise it reads the file like an upload (the same
     parser and key normalisation) and stores the rows in the create's own transaction, so the
     table is ready before the agent is validated. Rows are demo data: ``name`` starts with
-    ``Demo — `` for the shipped starters.
+    ``Demo · `` for the shipped starters.
     """
 
     name: str = Field(min_length=1, max_length=120)
@@ -254,9 +254,9 @@ class StarterTemplate(BaseModel):
             ValueError: ``voice`` sets ``greeting`` or ``knowledge`` sets ``kb_ids``.
         """
         if self.voice is not None and "greeting" in self.voice.model_fields_set:
-            raise ValueError("voice.greeting is not allowed on a template; set the greeting overlay instead")
+            raise ValueError("voice.greeting is not allowed on a template. Set the greeting overlay instead")
         if self.knowledge is not None and "kb_ids" in self.knowledge.model_fields_set:
-            raise ValueError("knowledge.kb_ids is not allowed on a template; use kb_seeds instead")
+            raise ValueError("knowledge.kb_ids is not allowed on a template. Use kb_seeds instead")
         if len(self.dataset_seeds) > MAX_TEMPLATE_DATASET_SEEDS:
             raise ValueError(f"a template seeds at most {MAX_TEMPLATE_DATASET_SEEDS} lookup tables")
         if len(self.kits) > MAX_TEMPLATE_KITS:

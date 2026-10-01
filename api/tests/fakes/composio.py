@@ -85,8 +85,6 @@ class ComposioWorld:
     #: V6-36: Composio stops returning ``user_id`` on account reads (it stays stored, so the
     #: ``user_ids`` list filter and the alias rule still see it).
     hide_user_id: bool = False
-    #: V6-36: the ``user_ids`` filter of ``list_connections`` is ignored (a vendor regression).
-    list_ignores_user_filter: bool = False
     #: V6-36: how a key-based create answers (``status`` is deprecated there): ``"status"``
     #: (today), ``"connection_data"`` (only ``connectionData.val.status``) or ``"bare"`` (id only).
     key_answer: str = "status"
@@ -403,7 +401,7 @@ class FakeComposio:
         items = [
             account
             for account in self.world.accounts.values()
-            if (self.world.list_ignores_user_filter or not user_ids or account.get("user_id") in user_ids)
+            if (not user_ids or account.get("user_id") in user_ids)
             and (not connected_account_ids or account["id"] in connected_account_ids)
             and (not auth_config_ids or account.get("auth_config", {}).get("id") in auth_config_ids)
         ]

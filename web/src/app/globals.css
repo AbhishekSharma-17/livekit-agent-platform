@@ -234,7 +234,7 @@
   --destructive-hover: oklch(47% 0.18 27);
 
   /* charts: slate, blue, amber, teal, violet, green, orange, grey */
-  --chart-1: oklch(55% 0.03 255);
+  --chart-1: oklch(52% 0.15 280); /* indigo, the brand hue: single-series charts read as the accent */
   --chart-2: oklch(55% 0.15 255);
   --chart-3: oklch(64% 0.14 70);
   --chart-4: oklch(56% 0.09 190);
@@ -309,7 +309,7 @@
   --destructive-hover: oklch(65% 0.18 27); /* spec 59% -> 65%: near-black text on the hover fill needs it */
 
   /* charts: lightened for dark surfaces */
-  --chart-1: oklch(72% 0.03 255);
+  --chart-1: oklch(72% 0.12 280); /* indigo, the brand hue */
   --chart-2: oklch(70% 0.13 255);
   --chart-3: oklch(80% 0.14 75);
   --chart-4: oklch(76% 0.1 188);

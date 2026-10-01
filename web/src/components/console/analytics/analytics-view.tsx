@@ -422,7 +422,7 @@ function formatDay(key: string): string {
 
 /**
  * Two series, actual vs. estimated cost per day (docs/v4/COSTS.md §5 item 6):
- * a solid `--chart-2` bar for actual and an outlined one for estimated — a
+ * a solid `--chart-1` bar for actual and an outlined one for estimated — a
  * texture encoding (not colour alone) so the pair stays distinguishable
  * without relying on hue — with a legend, hairline gridlines at 0, half and
  * the maximum with tabular labels, and a visually hidden table carrying the
@@ -435,11 +435,11 @@ function ByDayChart({ buckets }: { buckets: AnalyticsBucket[] }) {
     <div>
       <div className="mb-3 flex items-center gap-4 text-caption text-text-secondary">
         <span className="flex items-center gap-1.5">
-          <span aria-hidden="true" className="size-2.5 rounded-sm bg-chart-2" />
+          <span aria-hidden="true" className="size-2.5 rounded-sm bg-chart-1" />
           Actual
         </span>
         <span className="flex items-center gap-1.5">
-          <span aria-hidden="true" className="size-2.5 rounded-sm border-2 border-chart-2" />
+          <span aria-hidden="true" className="size-2.5 rounded-sm border-2 border-chart-1" />
           Estimated
         </span>
       </div>
@@ -473,11 +473,11 @@ function ByDayChart({ buckets }: { buckets: AnalyticsBucket[] }) {
                     title={`${formatDay(bucket.key)}: ${formatUsd(bucket.cost_usd) ?? "no price"} actual, ${formatUsd(bucket.estimated_usd) ?? "no estimate"} estimated`}
                   >
                     <div
-                      className="w-full rounded-t-sm bg-chart-2 transition-opacity duration-(--duration-fast) group-hover:opacity-80"
+                      className="w-full rounded-t-sm bg-chart-1 transition-opacity duration-(--duration-fast) group-hover:opacity-80"
                       style={{ height: `${actualPct}%` }}
                     />
                     <div
-                      className="w-full rounded-t-sm border-2 border-b-0 border-chart-2 bg-card transition-opacity duration-(--duration-fast) group-hover:opacity-80"
+                      className="w-full rounded-t-sm border-2 border-b-0 border-chart-1 bg-card transition-opacity duration-(--duration-fast) group-hover:opacity-80"
                       style={{ height: `${estimatedPct}%` }}
                     />
                   </div>

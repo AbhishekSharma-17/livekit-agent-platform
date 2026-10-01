@@ -30,7 +30,7 @@
       "config": {"allowed_hosts": ["{{ kit.link_host }}"], "open_in": "new_tab", "show_qr": true}
     }
   ],
-  "instructions_snippet": "When the caller is ready to pay or sign, create their link with {{ kit.tool.create_link }}, then show it with send_link and tell them it is on their screen. Stay with them while they finish: the panel shows when it is done. Never take card numbers or other payment details by voice or in the chat.",
+  "instructions_snippet": "When the caller is ready to pay or sign, create their link with {{ kit.tool.create_link }}, then show it with send_link and tell them it is on their screen. Stay with them while they finish. The panel shows when it is done. Never take card numbers or other payment details by voice or in the chat.",
   "rules": [
     {
       "id": "{{ kit.prefix }}_sent",
@@ -63,7 +63,7 @@
           "definition": {
             "kind": "http",
             "name": "{{ kit.prefix }}_create_link",
-            "description": "Create the caller's payment or signing link. Say what it is for; add the amount only when the caller agreed to one.",
+            "description": "Create the caller's payment or signing link. Say what it is for and add the amount only when the caller agreed to one.",
             "parameters": {
               "type": "object",
               "properties": {

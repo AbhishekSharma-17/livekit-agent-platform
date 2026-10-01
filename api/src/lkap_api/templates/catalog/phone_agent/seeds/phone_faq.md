@@ -4,7 +4,7 @@ Acme is a fictional small business used by the Phone agent starter. Replace this
 
 ## Opening hours
 
-All times below are in the business's own timezone (the agent's business timezone); convert them to the caller's time when you answer.
+All times below are in the business's own timezone (the agent's business timezone). Convert them to the caller's time when you answer.
 
 - Monday to Friday: 9 am to 6 pm.
 - Saturday: 10 am to 2 pm.
@@ -17,7 +17,7 @@ All times below are in the business's own timezone (the agent's business timezon
 ## Common questions
 
 Q: Can I place an order by phone?
-A: Not yet. Orders are placed on the website; the agent can take a message for the sales team.
+A: Not yet. Orders are placed on the website, and the agent can take a message for the sales team.
 
 Q: How do I return an item?
 A: Items can be returned within 30 days with the receipt. Bring them to the shop or use the return form on the website.

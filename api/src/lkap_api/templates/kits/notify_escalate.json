@@ -23,7 +23,7 @@
       "name": "needs_person",
       "type": "boolean",
       "label": "Wants a person",
-      "hint": "true when the caller asks for a person, is upset or distressed, or the matter is urgent or about safety; otherwise leave it empty"
+      "hint": "true when the caller asks for a person, is upset or distressed, or the matter is urgent or about safety, and otherwise leave it empty"
     }
   ],
   "extraction": {"enabled": true},

@@ -4,7 +4,7 @@ Acme Dental is a fictional practice used by the Receptionist starter. Replace th
 
 ## Opening hours
 
-All times below are in the business's own timezone (the agent's business timezone); convert them to the caller's time when you answer.
+All times below are in the business's own timezone (the agent's business timezone). Convert them to the caller's time when you answer.
 
 - Monday to Thursday: 8:00 am to 6:00 pm
 - Friday: 8:00 am to 3:00 pm
@@ -14,7 +14,7 @@ All times below are in the business's own timezone (the agent's business timezon
 ## Address and parking
 
 - 12 Example Street, Suite 3, Exampletown.
-- Free parking behind the building; the entrance is on the car park side.
+- Free parking behind the building, with the entrance on the car park side.
 - Step-free access and a lift to the second floor.
 
 ## Services

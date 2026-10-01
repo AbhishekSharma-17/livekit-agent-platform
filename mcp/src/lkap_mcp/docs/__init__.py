@@ -9,8 +9,8 @@ written to the design's interface rather than against real code, and the one
 line V3-01 must add is logged in ``docs/v3/_asks.md``.
 
 Deliberately dependency-free: stdlib only (no FastMCP, no httpx, no pydantic),
-so it can be imported and unit-tested — including by
-``mcp/tests/test_docs_lint.py`` — before the rest of ``lkap_mcp`` exists, and
+so it can be imported and unit-tested, including by
+``mcp/tests/test_docs_lint.py``, before the rest of ``lkap_mcp`` exists, and
 so importing it can never fail for a reason unrelated to a missing doc file.
 
 Layout it reads:
@@ -128,7 +128,7 @@ class Prompt:
     ``concepts``/``recipes`` name the docs :meth:`render` appends verbatim, so
     the prompt's result is "the relevant recipe and concept doc inline plus
     the exact next tool calls" (AGENT-ACCESS.md §3.2) without V3-01's
-    ``prompts.py`` needing to know which doc goes with which prompt — that
+    ``prompts.py`` needing to know which doc goes with which prompt. That
     mapping lives here, in the frontmatter, next to the prose that uses it.
     V3-01 registers one FastMCP ``@mcp.prompt()`` per entry, calling
     :meth:`render` with the caller's arguments.

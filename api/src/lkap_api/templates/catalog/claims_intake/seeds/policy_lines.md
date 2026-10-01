@@ -27,8 +27,8 @@ review before any loss after the lapse date can be intake-processed normally.
 
 ## Renters (HO-4)
 
-Covers personal property and personal liability for a tenant; it does not
-cover the building itself. Theft away from the premises is usually capped at
+Covers personal property and personal liability for a tenant, but not
+the building itself. Theft away from the premises is usually capped at
 a percentage of the total personal property limit. Most carriers require a
 police report number before a theft claim can move to adjuster assignment.
 
@@ -37,7 +37,7 @@ police report number before a theft claim can move to adjuster assignment.
 Covers trip cancellation and trip delay up to their own limits, plus a
 smaller baggage delay benefit. A claim usually needs the carrier's own
 cancellation or delay notice, the original itinerary, and receipts for
-prepaid, nonrefundable expenses; any refund, voucher, or credit already
+prepaid, nonrefundable expenses. Any refund, voucher, or credit already
 received must be disclosed so the claim does not duplicate that recovery.
 
 ## Supplemental medical reimbursement

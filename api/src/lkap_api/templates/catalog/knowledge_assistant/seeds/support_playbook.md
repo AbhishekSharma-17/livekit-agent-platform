@@ -1,6 +1,6 @@
 # Support playbook for Acme Meter
 
-Sample content for the Knowledge assistant starter; replace it with your own playbook.
+Sample content for the Knowledge assistant starter. Replace it with your own playbook.
 
 ## Tone
 

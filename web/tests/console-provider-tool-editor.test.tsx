@@ -133,7 +133,11 @@ describe("ProviderToolEditorDialog", () => {
     fireEvent.click(screen.getByText("Edit"));
 
     expect(await screen.findByText("Edit App action")).toBeTruthy();
-    expect(await screen.findByRole("img", { name: "Google Calendar" })).toBeTruthy();
+    // The app's name is printed beside its (decorative) real mark.
+    const appName = await screen.findByText("Google Calendar", { selector: "p" });
+    const header = appName.closest("div.flex")!.parentElement!;
+    expect(header.querySelector('[data-slot="vendor-mark"]')?.getAttribute("data-mark")).toBe("googlecalendar");
+    expect(header.querySelector('[data-slot="vendor-mark"]')?.getAttribute("aria-hidden")).toBe("true");
     expect(screen.getByText("Find Free Slots")).toBeTruthy();
     expect(await screen.findByText("Connected")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Tools → Apps" })).toHaveProperty("href", expect.stringContaining("/console/tools?tab=apps"));

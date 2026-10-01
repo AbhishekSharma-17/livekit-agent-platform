@@ -220,7 +220,7 @@ export function ToolsList() {
   const kindCell = (tool: ToolOut) =>
     isProviderTool(tool) ? (
       <Tag>
-        <VendorMark vendor={appNameFor(tool, connectionsById) ?? "App"} size="sm" />
+        <VendorMark vendor={appNameFor(tool, connectionsById) ?? "App"} size="sm" labelled />
         App
       </Tag>
     ) : (

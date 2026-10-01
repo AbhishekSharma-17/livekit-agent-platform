@@ -117,7 +117,7 @@ export function TemplatePreview({ item, providers, variant = "pane", className }
               {vendors.length > 0 ? (
                 <span className="flex items-center gap-1">
                   {vendors.map((vendor) => (
-                    <VendorMark key={vendor} vendor={vendor} size="sm" />
+                    <VendorMark key={vendor} vendor={vendor} size="sm" labelled />
                   ))}
                 </span>
               ) : null}

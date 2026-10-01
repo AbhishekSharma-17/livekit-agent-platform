@@ -75,6 +75,16 @@ describe("flow builder code splitting", () => {
     for (const heavy of HEAVY) expect(packages.has(heavy), heavy).toBe(false);
   });
 
+  it("keeps vendor marks (simple-icons) out of the /s/[slug] session bundle", () => {
+    const { files, packages } = staticGraph(["app/layout.tsx", "app/(session)/layout.tsx", "app/(session)/s/[slug]/page.tsx"]);
+    expect(packages.has("simple-icons")).toBe(false);
+    const reached = [...files].map(rel);
+    expect(reached).not.toContain("components/shared/vendor-mark.tsx");
+    expect(reached).not.toContain("components/shared/vendor-marks.ts");
+    // A real boundary: the console's mark table does pull the package.
+    expect(staticGraph(["components/shared/vendor-mark.tsx"]).packages.has("simple-icons")).toBe(true);
+  });
+
   it("loads the canvas and its libraries lazily from the agent editor", () => {
     const { files, packages } = staticGraph(["app/console/agents/[id]/page.tsx"]);
     const reached = [...files].map(rel);

@@ -593,7 +593,24 @@ function PrimitivesScene() {
             items={[
               { term: "Started", detail: <RelativeTime iso="2026-09-23T12:00:00Z" withExact /> },
               { term: "Room", detail: "lkap-2e788a2a", mono: true },
-              { term: "Provider", detail: <VendorMark vendor="deepgram" size="sm" /> },
+              {
+                term: "Provider",
+                detail: (
+                  <span className="inline-flex items-center gap-2">
+                    <VendorMark vendor="Deepgram" size="sm" />
+                    Deepgram
+                  </span>
+                ),
+              },
+              {
+                term: "No mark yet",
+                detail: (
+                  <span className="inline-flex items-center gap-2">
+                    <VendorMark vendor="Cartesia" size="sm" />
+                    Cartesia
+                  </span>
+                ),
+              },
               { term: "Copy", detail: <CopyButton value="lkap-2e788a2a" label="room id" /> },
             ]}
           />

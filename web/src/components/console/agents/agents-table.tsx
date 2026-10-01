@@ -330,7 +330,7 @@ export function AgentsTable() {
         return (
           <div className="flex items-center gap-1">
             {ids.map((id) => (
-              <VendorMark key={id} vendor={vendors.get(id) ?? id} size="sm" />
+              <VendorMark key={id} vendor={vendors.get(id) ?? id} size="sm" labelled />
             ))}
           </div>
         );
@@ -466,7 +466,7 @@ function AgentCard({
         {ids.length > 0 ? (
           <div className="flex items-center gap-1">
             {ids.map((id) => (
-              <VendorMark key={id} vendor={vendors.get(id) ?? id} size="sm" />
+              <VendorMark key={id} vendor={vendors.get(id) ?? id} size="sm" labelled />
             ))}
           </div>
         ) : null}

@@ -403,13 +403,17 @@ describe("Section, DescriptionList, VendorMark, CapabilityBadge, Kbd, RelativeTi
     expect(vendorMonogram(vendor)).toBe(expected);
   });
 
-  it("VendorMark is a named image with a stable tint", () => {
-    const { container } = render(<VendorMark vendor="Deepgram" />);
-    const mark = screen.getByRole("img", { name: "Deepgram" });
-    expect(mark.textContent).toBe("De");
+  it("VendorMark falls back to a monogram with a stable tint, named only when labelled", () => {
+    const { container } = render(<VendorMark vendor="Cartesia" labelled />);
+    const mark = screen.getByRole("img", { name: "Cartesia" });
+    expect(mark.textContent).toBe("Ca");
+    expect(mark.getAttribute("data-mark")).toBe("monogram");
     const first = mark.getAttribute("style");
-    const { container: second } = render(<VendorMark vendor="Deepgram" size="lg" />);
-    expect(second.querySelector('[data-slot="vendor-mark"]')?.getAttribute("style")).toBe(first);
+    const { container: second } = render(<VendorMark vendor="Cartesia" size="lg" />);
+    const decorative = second.querySelector('[data-slot="vendor-mark"]');
+    expect(decorative?.getAttribute("style")).toBe(first);
+    expect(decorative?.getAttribute("aria-hidden")).toBe("true");
+    expect(decorative?.getAttribute("role")).toBeNull();
     expect(container.innerHTML).not.toContain("<img");
   });
 

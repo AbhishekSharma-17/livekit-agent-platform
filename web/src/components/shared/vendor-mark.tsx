@@ -1,12 +1,20 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { vendorMarkFor } from "./vendor-marks";
 
 export interface VendorMarkProps {
-  /** Vendor label or id ("Deepgram", "OpenAI", "livekit-inference"). */
+  /** Vendor label, slug or provider id ("Deepgram", "OpenAI", "livekit-inference", "gmail"). */
   vendor: string;
   /** `sm` 20 px, `md` 24 px (default), `lg` 32 px. */
   size?: "sm" | "md" | "lg";
+  /**
+   * Give the mark the vendor's name for assistive tech (and a hover title).
+   * Leave it off when the name is printed beside the mark (the usual case),
+   * so a screen reader hears the name once; turn it on where marks stand
+   * alone, such as a row's stack of provider marks.
+   */
+  labelled?: boolean;
   className?: string;
 }
 
@@ -37,24 +45,50 @@ export function vendorHue(vendor: string): number {
 }
 
 const SIZE_CLASSES = {
-  sm: "size-5 text-[0.625rem]",
-  md: "size-6 text-[0.6875rem]",
-  lg: "size-8 text-xs",
+  sm: "size-5 text-[0.625rem] [&>svg]:size-3",
+  md: "size-6 text-[0.6875rem] [&>svg]:size-3.5",
+  lg: "size-8 text-xs [&>svg]:size-[1.125rem]",
 } as const;
 
 /**
- * Vendor identity without logos (docs/UI_UX_SPEC.md §2.7, §8): a monogram in
- * a square faintly tinted with a per-vendor hue, mixed into theme tokens so it
- * reads in both themes.
+ * A third-party service's identity (docs/ui/DESIGN-SYSTEM.md section 5).
+ *
+ * - **A real mark** when `vendor-marks.ts` knows the vendor: the Simple Icons
+ *   path in monochrome `currentColor` (foreground ink on a muted tile), so it
+ *   reads in both themes whatever the brand colour is.
+ * - **Otherwise a monogram** in a square faintly tinted with a per-vendor
+ *   hue, mixed into theme tokens so it reads in both themes.
+ *
+ * Always shown with the vendor's name. The mark is decorative by default
+ * (`aria-hidden`); pass `labelled` where no visible name sits beside it.
  */
-export function VendorMark({ vendor, size = "md", className }: VendorMarkProps) {
+export function VendorMark({ vendor, size = "md", labelled = false, className }: VendorMarkProps) {
+  const icon = vendorMarkFor(vendor);
+  const a11y = labelled ? { role: "img", "aria-label": vendor, title: vendor } : { "aria-hidden": true as const };
+  if (icon) {
+    return (
+      <span
+        {...a11y}
+        data-slot="vendor-mark"
+        data-mark={icon.slug}
+        className={cn(
+          "inline-flex shrink-0 items-center justify-center rounded-sm bg-muted-strong text-foreground select-none",
+          SIZE_CLASSES[size],
+          className,
+        )}
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+          <path d={icon.path} />
+        </svg>
+      </span>
+    );
+  }
   const style = { "--vendor-tint": `oklch(0.62 0.1 ${vendorHue(vendor)})` } as React.CSSProperties;
   return (
     <span
-      role="img"
-      aria-label={vendor}
-      title={vendor}
+      {...a11y}
       data-slot="vendor-mark"
+      data-mark="monogram"
       style={style}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-sm font-semibold tracking-tight select-none",

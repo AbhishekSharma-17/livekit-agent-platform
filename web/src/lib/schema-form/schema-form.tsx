@@ -312,7 +312,7 @@ function JsonInput({
         {...aria}
         aria-invalid={invalid || undefined}
       />
-      {invalid ? <p className="text-[0.8125rem] text-danger-text">Not valid JSON — the change was not applied.</p> : null}
+      {invalid ? <p className="text-[0.8125rem] text-destructive-text">Not valid JSON — the change was not applied.</p> : null}
     </div>
   );
 }

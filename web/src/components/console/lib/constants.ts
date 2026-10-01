@@ -99,11 +99,11 @@ export const PROVIDER_KIND_LABELS: Record<string, string> = {
  * `StatusChip` from `@/components/shared/status-chip` for status display.
  */
 export const TONE_BADGE_CLASSES: Record<string, string> = {
-  neutral: "bg-muted text-muted-foreground",
-  info: "bg-info-soft text-info-text",
-  success: "bg-success-soft text-success-text",
-  warning: "bg-warning-soft text-warning-text",
-  danger: "bg-danger-soft text-danger-text",
+  neutral: "bg-muted text-text-secondary",
+  info: "bg-info-subtle text-info-text",
+  success: "bg-success-subtle text-success-text",
+  warning: "bg-warning-subtle text-warning-text",
+  danger: "bg-destructive-subtle text-destructive-text",
 };
 
 /**

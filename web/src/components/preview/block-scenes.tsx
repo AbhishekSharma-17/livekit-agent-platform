@@ -109,7 +109,7 @@ export function BlockScene({ type, state }: { type: BlockType; state: BlockScene
       <div
         data-testid="preview-block"
         data-block-type={type}
-        className="border-border bg-card w-full max-w-md self-start overflow-hidden rounded-xl border"
+        className="border-border bg-card w-full max-w-md self-start overflow-hidden rounded-dialog border"
       >
         <Block
           spec={spec}

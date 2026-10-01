@@ -56,7 +56,7 @@ function TabIcon({ icon, active, badge }: { icon: React.ComponentProps<typeof Ic
     <span
       className={cn(
         "relative flex h-[26px] w-12 items-center justify-center rounded-pill transition-colors duration-(--duration-fast)",
-        active && "bg-brand-subtle text-brand-text",
+        active && "bg-brand-subtle text-brand",
       )}
     >
       <Icon as={icon} size="lg" />

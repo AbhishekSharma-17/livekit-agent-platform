@@ -137,14 +137,22 @@ rendering. The full mapping is in `docs/ui/AUDIT.md` section 4. The notable chan
 - `--radius-xs` is 6 px and `--radius-xl` is 14 px.
 - `--dur-*` are the spec durations.
 
-Screen packages rename utilities in the files they own. The verification package deletes the aliases.
+**Decision O2 (UI-R1).** Every file outside `components/ui/`, `components/agents-ui/` and `panels/` now uses the
+spec names; the last 47 uses in 22 files moved over with identical values (for example `text-muted-foreground` to
+`text-text-secondary`, `bg-danger-soft` to `bg-destructive-subtle`, `text-brand-text` to `text-brand`, `ease-out`
+to `ease-entrance`, `rounded-xl` to `rounded-dialog`, `shadow-md` to `shadow-overlay`, `var(--danger)` to
+`var(--destructive-solid)`). The design lint's `legacy-token` rule now forbids the alias utilities and `var()`
+reads everywhere else. The vendored `components/ui/**` primitives are exempt by an allowlist line, and
+`panels/**` and `agents-ui/**` stay exempt as leave-alone code, so the aliases stay defined for them. The
+session-only survivors (`--stage`, `--radius-2xl`, `--ease-in-out`, `--ease-drawer`) are not aliases and are not
+part of the rule.
 
 ## Guard rails
 
 - **`pnpm lint:design`** (`web/scripts/design-lint.mjs`, also in `pnpm lint` and the vitest suite)
   forbids colour literals and raw shadows outside `globals.css`. It also forbids native selects,
-  browser dialogs, per-icon stroke widths, sparkle icons, palette utilities, opacity-modified colours
-  and CSS comment hazards.
+  browser dialogs, per-icon stroke widths, sparkle icons, palette utilities, opacity-modified colours,
+  legacy token aliases outside the vendored trees, and CSS comment hazards.
 - **Allowlist.** Today's violations are listed per file in `web/scripts/design-lint-allowlist.txt`.
   The list only shrinks.
 - **Browser colours.** `web/src/lib/browser-colors.ts` holds the only other colour literals: the

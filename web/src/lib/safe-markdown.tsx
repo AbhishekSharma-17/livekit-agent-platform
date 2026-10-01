@@ -100,7 +100,7 @@ function assetImage(assets: Map<string, string>) {
     const url = typeof src === "string" ? assets.get(src) : undefined;
     if (!url) return null;
     // eslint-disable-next-line @next/next/no-img-element -- a resolved session-asset blob URL
-    return <img src={url} alt={alt ?? ""} className="max-w-full rounded-md" />;
+    return <img src={url} alt={alt ?? ""} className="max-w-full rounded" />;
   };
 }
 

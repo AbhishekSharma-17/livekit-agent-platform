@@ -31,25 +31,25 @@ export function ControlBarPlaceholder({
       data-testid="control-bar-placeholder"
       aria-hidden="true"
       className={cn(
-        "border-border bg-card flex w-full items-center justify-center gap-2 rounded-xl border",
-        compact ? "h-[3.25rem] p-1.5" : "h-16 p-2 shadow-md",
+        "border-border bg-card flex w-full items-center justify-center gap-2 rounded-dialog border",
+        compact ? "h-[3.25rem] p-1.5" : "h-16 p-2 shadow-overlay",
         className,
       )}
     >
-      <span className="bg-accent text-muted-foreground inline-flex size-10 items-center justify-center rounded-full">
+      <span className="bg-muted text-text-secondary inline-flex size-10 items-center justify-center rounded-full">
         <Icon as={MicIcon} size="md" />
       </span>
       {camera && (
-        <span className="bg-accent text-muted-foreground inline-flex size-10 items-center justify-center rounded-full">
+        <span className="bg-muted text-text-secondary inline-flex size-10 items-center justify-center rounded-full">
           <Icon as={VideoIcon} size="md" />
         </span>
       )}
       {chat && (
-        <span className="bg-accent text-muted-foreground inline-flex size-10 items-center justify-center rounded-full">
+        <span className="bg-muted text-text-secondary inline-flex size-10 items-center justify-center rounded-full">
           <Icon as={MessageSquareTextIcon} size="md" />
         </span>
       )}
-      <span className="bg-destructive text-destructive-foreground ml-2 inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-sm font-medium">
+      <span className="bg-destructive-solid text-destructive-foreground ml-2 inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-sm font-medium">
         <Icon as={PhoneOffIcon} size="md" />
         End call
       </span>

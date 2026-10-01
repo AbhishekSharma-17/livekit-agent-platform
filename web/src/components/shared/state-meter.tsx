@@ -87,7 +87,7 @@ export function StateMeter({ state, size = "sm", bars, label = false, level, cla
         className={cn(
           "font-medium",
           size === "lg" ? "text-sm" : "text-xs",
-          state === "failed" ? "text-danger-text" : "text-muted-foreground",
+          state === "failed" ? "text-destructive-text" : "text-text-secondary",
         )}
       >
         {text}

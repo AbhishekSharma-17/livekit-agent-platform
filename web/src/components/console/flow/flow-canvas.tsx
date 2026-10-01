@@ -322,7 +322,7 @@ function FlowCanvasInner({ agent }: FlowCanvasProps) {
     () =>
       draft.edges.map((edge) => {
         const edgeIssues = grouped.edges.get(edge.id);
-        const tone = edgeIssues?.errors.length ? "var(--danger)" : edgeIssues?.warnings.length ? "var(--warning)" : undefined;
+        const tone = edgeIssues?.errors.length ? "var(--destructive-solid)" : edgeIssues?.warnings.length ? "var(--warning-solid)" : undefined;
         // D-V6-28: a tool step's own edges are labelled by outcome ("Found" / "Nothing
         // found" / "Failed"), not the free-text condition every other edge shows.
         const sourceNode = draft.nodes.find((node) => node.id === edge.source);

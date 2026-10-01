@@ -113,13 +113,13 @@ export default async function Home() {
           <CollapsibleTrigger asChild>
             <button
               type="button"
-              className="group mx-auto flex items-center gap-1.5 rounded-sm text-control font-medium text-text-secondary underline decoration-dotted underline-offset-4 transition-colors duration-(--duration-fast) ease-out hover:text-foreground aria-expanded:text-foreground"
+              className="group mx-auto flex items-center gap-1.5 rounded-sm text-control font-medium text-text-secondary underline decoration-dotted underline-offset-4 transition-colors duration-(--duration-fast) ease-entrance hover:text-foreground aria-expanded:text-foreground"
             >
               How session pages work
               <Icon
                 as={ChevronDownIcon}
                 size="sm"
-                className="transition-transform duration-(--duration-base) ease-out group-aria-expanded:rotate-180"
+                className="transition-transform duration-(--duration-base) ease-entrance group-aria-expanded:rotate-180"
               />
             </button>
           </CollapsibleTrigger>

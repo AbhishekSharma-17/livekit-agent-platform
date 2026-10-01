@@ -38,7 +38,7 @@ export interface ResponsiveTableProps<T> {
 
 const LIFTED = "relative z-10";
 const ROW_LINK =
-  "outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset";
+  "outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:rounded focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset";
 
 /**
  * Table ≥ 768 px, card list below (docs/UI_UX_SPEC.md §2.7). Both renderings

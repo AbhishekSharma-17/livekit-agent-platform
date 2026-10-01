@@ -182,10 +182,10 @@ function SessionScene({ params }: { params: Record<string, string> }) {
       }
       transcript={
         <ul data-testid="preview-transcript" className="flex flex-col gap-3 overflow-y-auto p-4 text-sm">
-          <li className="text-muted-foreground">
+          <li className="text-text-secondary">
             <span className="text-foreground font-medium">{agent.name}</span> — Hi, thanks for calling. Can you tell me what happened?
           </li>
-          <li className="text-muted-foreground">
+          <li className="text-text-secondary">
             <span className="text-foreground font-medium">You</span> — There was a small kitchen fire this morning.
           </li>
         </ul>
@@ -343,7 +343,7 @@ function CompositeScene({ params }: { params: Record<string, string> }) {
         <StageView agentState="listening" agentName="Maya" compact={layout === "wide"} elapsedMs={125_000} />
       }
       transcript={
-        <p className="text-muted-foreground p-4 text-sm">The transcript block in the panel shows the turns.</p>
+        <p className="text-text-secondary p-4 text-sm">The transcript block in the panel shows the turns.</p>
       }
       transcriptCount={3}
       panel={<CompositePreview layout={panelLayout} className="h-full min-h-0" />}
@@ -507,7 +507,7 @@ function PrimitivesScene() {
           {METER_STATES.map((state: MeterState) => (
             <div key={state} className="flex flex-col items-center gap-1.5">
               <StateMeter state={state} size="md" bars={5} label />
-              <span className="text-muted-foreground text-xs">{state}</span>
+              <span className="text-text-secondary text-xs">{state}</span>
             </div>
           ))}
         </SectionRow>

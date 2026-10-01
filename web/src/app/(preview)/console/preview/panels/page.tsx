@@ -50,7 +50,7 @@ export default async function PreviewPanelsPage({
     return (
       <PreviewShell sceneId={sceneId} params={{}} surface={surface}>
         <div className="p-6 text-sm">
-          <p className="text-danger-text">
+          <p className="text-destructive-text">
             No scene named &ldquo;{sceneId}&rdquo;. Known scenes:{" "}
             {Object.keys(SCENES).join(", ")}, or <code>list</code>.
           </p>

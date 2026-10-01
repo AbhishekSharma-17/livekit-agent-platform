@@ -76,6 +76,16 @@ describe("design-lint rules", () => {
     ["opacity-colour", 'className="bg-muted/50"'],
     ["opacity-colour", 'className="dark:ring-destructive/40"'],
     ["opacity-colour", 'className="bg-muted-foreground/[0.2]"'],
+    ["legacy-token", 'className="text-muted-foreground"'],
+    ["legacy-token", 'className="data-[state=open]:bg-accent"'],
+    ["legacy-token", 'className="bg-brand-soft border-brand-line text-brand-text"'],
+    ["legacy-token", 'className="text-danger-text bg-danger-soft"'],
+    ["legacy-token", 'className="accent-primary"'],
+    ["legacy-token", 'className="shadow-md rounded-xl"'],
+    ["legacy-token", 'className="focus-visible:after:rounded-md"'],
+    ["legacy-token", 'className="transition-colors ease-out"'],
+    ["legacy-token", 'const tone = "var(--danger)";'],
+    ["legacy-token", ".x { box-shadow: var(--shadow-sm); }"],
   ])("flags %s in `%s`", (rule, source) => {
     expect(rules("src/components/x.tsx", source)).toContain(rule);
   });
@@ -84,7 +94,13 @@ describe("design-lint rules", () => {
     'href="#main-content"',
     "// see issue #215 and #add",
     "/* #fff in a comment */",
-    'className="text-sm/6 bg-muted text-muted-foreground w-1/2"',
+    'className="text-sm/6 bg-muted text-text-secondary w-1/2"',
+    // spec names that share a stem with a legacy alias
+    'className="text-destructive-text bg-destructive-subtle bg-info-subtle text-success-text bg-warning-solid"',
+    'className="text-brand bg-brand-subtle border-brand-border accent-brand shadow-overlay rounded-dialog"',
+    'className="rounded ease-entrance bg-sidebar-hover"',
+    // session-only survivors (docs/ui/AUDIT.md section 4)
+    'className="bg-stage text-stage-foreground rounded-2xl ease-in-out"',
     "toast.alert(message)",
     "function alert(x) {}",
     "const selected = items.filter(Boolean);",
@@ -158,6 +174,17 @@ describe("allowlist ratchet", () => {
     expect(errors).toEqual([
       expect.stringContaining("src/components/a.tsx now has 2 opacity-colour violation(s); lower the allowance to 2"),
     ]);
+  });
+
+  it("exempts the vendored ui primitives from legacy-token only", () => {
+    const { exempt } = parseAllowlist(allowlistText) as { exempt: { rule: string; prefix: string }[] };
+    expect(exempt).toContainEqual(expect.objectContaining({ rule: "legacy-token", prefix: "src/components/ui/" }));
+    const screen = { "src/components/console/x.tsx": 'className="text-muted-foreground"' };
+    const vendored = { "src/components/ui/x.tsx": 'className="text-muted-foreground"' };
+    const errorsFor = (files: Record<string, string>) =>
+      (runDesignLint({ files, tokenCss, allowlistText }) as { errors: string[] }).errors.filter((e) => e.includes("/x.tsx"));
+    expect(errorsFor(screen)).toEqual([expect.stringContaining("1 legacy-token violation(s), 0 allowed")]);
+    expect(errorsFor(vendored)).toEqual([]);
   });
 
   it("honours exempt prefixes per rule", () => {

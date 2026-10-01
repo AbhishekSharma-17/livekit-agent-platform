@@ -105,7 +105,7 @@ function RailRow({ label, section, onClick, actionLabel, children }: RailRowProp
         type="button"
         onClick={onClick}
         aria-label={actionLabel ?? label}
-        className="group/rail-row relative flex w-full flex-col gap-1 px-4 py-3 pr-9 text-left outline-none transition-colors duration-(--duration-base) ease-out hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        className="group/rail-row relative flex w-full flex-col gap-1 px-4 py-3 pr-9 text-left outline-none transition-colors duration-(--duration-base) ease-entrance hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       >
         {body}
         <Icon
@@ -127,7 +127,7 @@ function RailRow({ label, section, onClick, actionLabel, children }: RailRowProp
         onNavigate?.();
       }}
       aria-label={`${label}: open the ${ctx.sections.find((s) => s.id === section)?.label ?? section} section`}
-      className="group/rail-row relative flex w-full flex-col gap-1 px-4 py-3 pr-9 text-left outline-none transition-colors duration-(--duration-base) ease-out hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      className="group/rail-row relative flex w-full flex-col gap-1 px-4 py-3 pr-9 text-left outline-none transition-colors duration-(--duration-base) ease-entrance hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
     >
       {body}
       <Icon
@@ -193,7 +193,7 @@ export function NextStepsCard({ className }: { className?: string }) {
   }
 
   const itemClass =
-    "group/step flex w-full items-start gap-2.5 rounded-sm px-4 py-2 text-left text-label leading-[1.125rem] outline-none transition-colors duration-(--duration-base) ease-out hover:bg-card focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
+    "group/step flex w-full items-start gap-2.5 rounded-sm px-4 py-2 text-left text-label leading-[1.125rem] outline-none transition-colors duration-(--duration-base) ease-entrance hover:bg-card focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
   return (
     <section

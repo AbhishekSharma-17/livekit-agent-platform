@@ -117,7 +117,7 @@ export function TemplateTile({ item, selected, keyProviderIds, providers, childr
       data-template={template.id}
       data-selected={selected ? "" : undefined}
       className={cn(
-        "group/tile relative flex flex-col rounded-lg border bg-card text-foreground transition-[border-color,background-color,box-shadow] duration-(--duration-base) ease-out",
+        "group/tile relative flex flex-col rounded-lg border bg-card text-foreground transition-[border-color,background-color,box-shadow] duration-(--duration-base) ease-entrance",
         "has-focus-visible:ring-2 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-background",
         selected
           ? "border-brand-border bg-brand-subtle ring-1 ring-brand-border"

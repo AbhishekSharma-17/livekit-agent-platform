@@ -24,7 +24,7 @@ export function DetailsDisclosure({
         <Icon
           as={ChevronRightIcon}
           size="sm"
-          className="transition-transform duration-(--duration-fast) ease-out group-open/details:rotate-90 motion-reduce:transition-none"
+          className="transition-transform duration-(--duration-fast) ease-entrance group-open/details:rotate-90 motion-reduce:transition-none"
         />
         {label}
       </summary>

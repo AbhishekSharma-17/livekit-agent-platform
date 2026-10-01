@@ -286,7 +286,7 @@ function LayoutChoice({ value, onChange }: { value: "side" | "wide"; onChange: (
             value={option.value}
             checked={value === option.value}
             onChange={() => onChange(option.value)}
-            className="accent-primary mt-1"
+            className="accent-brand mt-1"
           />
           <span className="flex flex-col">
             <span className="text-sm font-medium">{option.label}</span>

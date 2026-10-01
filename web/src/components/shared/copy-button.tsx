@@ -62,7 +62,7 @@ export function CopyButton({ value, label, size = "sm", className }: CopyButtonP
         data-slot="copy-button"
         data-copied={copied ? "" : undefined}
         onClick={onClick}
-        className={cn("text-muted-foreground hover:text-foreground", copied && "text-success-text", className)}
+        className={cn("text-text-secondary hover:text-foreground", copied && "text-success-text", className)}
       >
         <Icon as={copied ? CheckIcon : CopyIcon} size={size === "md" ? "md" : "sm"} />
       </Button>

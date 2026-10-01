@@ -13,6 +13,9 @@
  *   opacity-colour   opacity-modified colour utilities (bg-muted/50 …)
  *   css-comment      a stray `*\/` or a nested `/*` in a CSS comment
  *   token-bridge     an @theme bridge var() that points at no token
+ *   legacy-token     a legacy token alias (text-muted-foreground, bg-brand-soft,
+ *                    shadow-md, rounded-xl, var(--danger) …) instead of its spec
+ *                    name (docs/ui/AUDIT.md section 4, decision O2)
  *
  * Today's violations are listed, per rule and per file, in
  * `scripts/design-lint-allowlist.txt`. The allowlist is a ratchet: a file may
@@ -47,7 +50,45 @@ export const RULES = {
   "opacity-colour": "Opacity-modified colour utility: use a token (e.g. muted, brand-subtle)",
   "css-comment": "CSS comment hazard: a stray */ or a nested /* can break the stylesheet",
   "token-bridge": "@theme bridge points at an undefined token",
+  "legacy-token": "Legacy token alias: use the spec name (docs/ui/AUDIT.md section 4)",
 };
+
+/**
+ * Legacy colour names that are only `var()` aliases of a spec token (docs/ui/AUDIT.md section 4).
+ * The session-only survivors stay out on purpose: `stage`, `--radius-2xl`, `--ease-in-out`
+ * (state meter) and `--ease-drawer` (session bottom sheet) have no spec equivalent.
+ */
+export const LEGACY_COLOURS = [
+  "card-foreground",
+  "popover-foreground",
+  "muted-foreground",
+  "accent-foreground",
+  "accent",
+  "secondary-foreground",
+  "secondary",
+  "primary-foreground",
+  "primary",
+  "destructive",
+  "brand-text",
+  "brand-soft",
+  "brand-line",
+  "success-soft",
+  "success",
+  "warning-soft",
+  "warning",
+  "info-soft",
+  "info",
+  "danger-soft",
+  "danger-text",
+  "danger",
+  "sidebar-foreground",
+  "sidebar-primary-foreground",
+  "sidebar-primary",
+  "sidebar-accent-foreground",
+  "sidebar-accent",
+  "sidebar-border",
+  "sidebar-ring",
+];
 
 /**
  * Blank out `//` and `/* *\/` comments (keeping newlines and columns) while
@@ -131,6 +172,24 @@ export function buildMatchers(colourNames) {
     {
       rule: "opacity-colour",
       re: new RegExp(`(?<![\\w-])(?:${PREFIX})-(?:${tokens})\\/(?:\\d+|\\[[^\\]]+\\])(?![\\w-])`, "g"),
+    },
+    {
+      rule: "legacy-token",
+      skipTokenFile: true,
+      re: new RegExp(`(?<![\\w-])(?:${PREFIX})-(?:${LEGACY_COLOURS.join("|")})(?![\\w-])`, "g"),
+    },
+    {
+      rule: "legacy-token",
+      skipTokenFile: true,
+      re: /(?<![\w-])(?:shadow-(?:sm|md|lg)|rounded(?:-[trblse]{1,2})?-(?:xs|md|xl)|ease-out)(?![\w-])/g,
+    },
+    {
+      rule: "legacy-token",
+      skipTokenFile: true,
+      re: new RegExp(
+        `var\\(\\s*--(?:${LEGACY_COLOURS.join("|")}|shadow-(?:sm|md|lg)|radius-(?:xs|md|xl)|dur-\\d|ease-out)\\s*[,)]`,
+        "g",
+      ),
     },
   ];
 }

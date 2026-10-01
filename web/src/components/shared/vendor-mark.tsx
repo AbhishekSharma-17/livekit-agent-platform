@@ -57,7 +57,7 @@ export function VendorMark({ vendor, size = "md", className }: VendorMarkProps) 
       data-slot="vendor-mark"
       style={style}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-xs font-semibold tracking-tight select-none",
+        "inline-flex shrink-0 items-center justify-center rounded-sm font-semibold tracking-tight select-none",
         "bg-[color-mix(in_oklch,var(--vendor-tint)_16%,var(--card))] text-[color-mix(in_oklch,var(--vendor-tint)_30%,var(--foreground))]",
         SIZE_CLASSES[size],
         className,

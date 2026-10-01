@@ -45,7 +45,7 @@ export function PreviewShell({ sceneId, params, surface, children }: PreviewShel
               scene at one h1 minimum (axe `page-has-heading-one`) without
               changing what the scene looks like. Scenes that render their
               own h1 still get this one too — a second h1 is allowed. */}
-          <h1 className="text-muted-foreground font-medium">
+          <h1 className="text-text-secondary font-medium">
             Preview<span className="sr-only">: {scene?.label ?? sceneId}</span>
           </h1>
           <nav aria-label="Scenes" className="flex flex-wrap gap-2">
@@ -56,8 +56,8 @@ export function PreviewShell({ sceneId, params, surface, children }: PreviewShel
                 aria-current={entry.id === sceneId ? "page" : undefined}
                 className={
                   entry.id === sceneId
-                    ? "text-brand-text underline underline-offset-4"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "text-brand underline underline-offset-4"
+                    : "text-text-secondary hover:text-foreground"
                 }
               >
                 {entry.label}
@@ -69,12 +69,12 @@ export function PreviewShell({ sceneId, params, surface, children }: PreviewShel
             <form action="/console/preview/panels" className="flex flex-wrap items-center gap-2">
               <input type="hidden" name="scene" value={sceneId} />
               {Object.keys(scene.params).map((key) => (
-                <span key={key} className="text-muted-foreground flex items-center gap-1">
+                <span key={key} className="text-text-secondary flex items-center gap-1">
                   {key}
                   <PreviewSelect name={key} label={key} defaultValue={params[key]} values={scene.params[key]} />
                 </span>
               ))}
-              <span className="text-muted-foreground flex items-center gap-1">
+              <span className="text-text-secondary flex items-center gap-1">
                 surface
                 <PreviewSelect name="surface" label="surface" defaultValue={surface} values={["dark", "light"]} />
               </span>

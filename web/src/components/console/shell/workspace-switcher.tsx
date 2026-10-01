@@ -89,7 +89,7 @@ export function WorkspaceSwitcher({ workspaces }: { workspaces: readonly Workspa
                   <span className="block truncate text-control text-foreground">{workspace.name}</span>
                   <span className="block truncate text-caption text-text-secondary capitalize">{workspace.role}</span>
                 </span>
-                {current ? <Icon as={CheckIcon} size="md" className="text-brand-text" /> : null}
+                {current ? <Icon as={CheckIcon} size="md" className="text-brand" /> : null}
               </button>
             </li>
           );

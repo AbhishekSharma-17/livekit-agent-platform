@@ -91,7 +91,7 @@ export function SectionNav({ sections, active, onSelect, summary, variant, class
                 onFocus={() => setFocusId(section.id)}
                 className={cn(
                   "group/nav-item flex w-full items-center gap-2.5 rounded-sm text-left text-sm font-medium outline-none",
-                  "transition-colors duration-(--duration-base) ease-out",
+                  "transition-colors duration-(--duration-base) ease-entrance",
                   "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   isBar ? "h-8 px-3 whitespace-nowrap" : "h-9 px-2.5",
                   selected

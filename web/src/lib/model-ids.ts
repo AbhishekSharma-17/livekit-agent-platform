@@ -62,7 +62,7 @@ export const ID_LIKE_FIELD_NAMES: ReadonlySet<string> = new Set([
 /** The one reason a secret-looking model id gets (`SECRET_LOOKING_REASON`). */
 export const SECRET_LOOKING_REASON = "looks like an API key, not a model id";
 /** The warning an id-like field gets for a bare token (`BARE_TOKEN_ID_REASON`). */
-export const BARE_TOKEN_ID_REASON = "looks like an API key; if it is the vendor's id, ignore this";
+export const BARE_TOKEN_ID_REASON = "looks like an API key. If it is the vendor's id, ignore this";
 
 export type IdFieldKind = "model" | "id";
 
@@ -172,7 +172,7 @@ export function modelIdPath(modelId: string): string {
     .join("/");
 }
 
-/** "Can't use this id: it looks like an API key, not a model id." — the sentence the UI shows. */
+/** "Can't use this id. It looks like an API key, not a model id." is the sentence the UI shows. */
 export function idIssueSentence(issue: IdIssue, subject = "this id"): string {
-  return `${issue.severity === "error" ? "Can't use" : "Check"} ${subject}: it ${issue.reason}.`;
+  return `${issue.severity === "error" ? "Can't use" : "Check"} ${subject}. It ${issue.reason}.`;
 }

@@ -1,6 +1,6 @@
 # Migration rehearsal: `v4_001_livekit_numbers` (V4-05)
 
-Rehearsed 2026-09-25 by V4-05. **Not applied to `api/data/lkap.db`**: the coordinator applies it (HANDOFF rule 4, R-V4-11). V4-05 only read the live DB, with one `.backup` and one `-readonly` query. It is still at `v3_001_agent_keys`.
+Rehearsed 2026-09-25 by V4-05. **Not applied to `api/data/lkap.db`.** The coordinator applies it (HANDOFF rule 4, R-V4-11). V4-05 only read the live DB, with one `.backup` and one `-readonly` query. It is still at `v3_001_agent_keys`.
 
 ## What the revision does
 
@@ -23,8 +23,8 @@ Rehearsed 2026-09-25 by V4-05. **Not applied to `api/data/lkap.db`**: the coordi
 - It gains `phone_number_id VARCHAR(32) NULL`, FK to `phone_numbers` with `ON DELETE SET NULL`.
 
 The backfill runs in Python. A rule gets its number's id when:
-- its `numbers` is exactly `[e164]` of a number;
-- it has the same workspace and trunk as that number;
+- its `numbers` is exactly `[e164]` of a number.
+- it has the same workspace and trunk as that number.
 - its agent is that number's `inbound_agent_id`.
 
 The downgrade deletes, and logs how many, every rule with `trunk_id IS NULL` and every `source='livekit'` number row. Then it drops the new columns and restores `trunk_id NOT NULL`.
@@ -43,21 +43,21 @@ SEED_V4=<1 livekit number + its trunk-less rule, inserted after the upgrade> reh
 `rehearse.sh` refuses any path that ends in `api/data/lkap.db`. It runs `uv run alembic -x url=sqlite+aiosqlite:///<file>` with `LIVEKIT_*`, `LKAP_MASTER_KEY`, `LKAP_DATABASE_URL` and `LKAP_DATA_DIR` unset. It runs the chain current → `upgrade head` → `downgrade v3_001_agent_keys` → `upgrade head` → `alembic check`.
 
 After each step it records:
-- the version;
-- for both tables, columns with NOT NULL flags, indexes and DDL;
-- the row count of every table;
-- a hash of every pre-existing column of both tables;
+- the version.
+- for both tables, columns with NOT NULL flags, indexes and DDL.
+- the row count of every table.
+- a hash of every pre-existing column of both tables.
 - `PRAGMA integrity_check` and `foreign_key_check`.
 
 ## Results
 
-### Copy of the live DB (0 trunks, 0 numbers, 0 rules; 31 sessions, 1010 audit rows)
+### Copy of the live DB (0 trunks, 0 numbers, 0 rules, 31 sessions, 1010 audit rows)
 
 | Step | Version | Shape | Rows / hash | Integrity |
 |---|---|---|---|---|
 | before | `v3_001_agent_keys` | v2_007 shape | every table count recorded | ok, 0 FK violations |
-| upgrade head | `v4_001_livekit_numbers` | `phone_numbers` has 14 columns; `sip_dispatch_rules.trunk_id` nullable, `+phone_number_id`; CHECK, unique and FKs present; `ix_*_workspace` kept | identical counts; "linked 0 managed rules" | ok, 0 |
-| downgrade `v3_001_agent_keys` | `v3_001_agent_keys` | back to 6 and 10 columns; `trunk_id NOT NULL` | identical; "deleted 0 … / 0 …" | ok, 0 |
+| upgrade head | `v4_001_livekit_numbers` | `phone_numbers` has 14 columns. `sip_dispatch_rules.trunk_id` nullable, `+phone_number_id`. CHECK, unique and FKs present. `ix_*_workspace` kept | identical counts. "Linked 0 managed rules" | ok, 0 |
+| downgrade `v3_001_agent_keys` | `v3_001_agent_keys` | back to 6 and 10 columns. `trunk_id NOT NULL` | identical. "Deleted 0 … / 0 …" | ok, 0 |
 | upgrade head (again) | `v4_001_livekit_numbers` | as after the first upgrade | identical | ok, 0 |
 | `alembic check` | | "No new upgrade operations detected." (the models match) | | |
 
@@ -84,7 +84,7 @@ The same path is covered in the suite by `api/tests/test_phone_numbers.py::test_
 ## For the coordinator: when to apply
 
 **Apply it now.** The model change is already live in the running dev api (`--reload`). Until the DB is at `v4_001_livekit_numbers`, these break:
-- `GET/PUT/DELETE /v1/telephony/numbers` and `GET/DELETE /v1/telephony/dispatch-rules` answer 500, because they read the new columns. So do the console's Numbers and Rules sections and the MCP `telephony_overview` `numbers`/`dispatch_rules` keys; they degrade to warnings.
+- `GET/PUT/DELETE /v1/telephony/numbers` and `GET/DELETE /v1/telephony/dispatch-rules` answer 500, because they read the new columns. So do the console's Numbers and Rules sections and the MCP `telephony_overview` `numbers`/`dispatch_rules` keys. They degrade to warnings.
 - A SIP `participant_joined` webhook for a leg that is not on one of our trunks would fail in `_is_our_leg`.
 - `/v1/health` reports `db: "error"`, because the schema is not at head.
 
@@ -100,7 +100,7 @@ sqlite3 -readonly data/lkap.db "SELECT version_num FROM alembic_version"
 
 # Migration rehearsal: `v4_002_provider_models` (V4-07)
 
-Rehearsed 2026-09-25 by V4-07. **Not applied to `api/data/lkap.db`**: the coordinator applies it (HANDOFF rule 4, R-V4-24). V4-07 only read the live DB with one `.backup`. The backup read `alembic_version = v4_001_livekit_numbers`, so the coordinator already applied `v4_001`.
+Rehearsed 2026-09-25 by V4-07. **Not applied to `api/data/lkap.db`.** The coordinator applies it (HANDOFF rule 4, R-V4-24). V4-07 only read the live DB with one `.backup`. The backup read `alembic_version = v4_001_livekit_numbers`, so the coordinator already applied `v4_001`.
 
 ## What the revision does
 
@@ -143,7 +143,7 @@ seeded.sh <scratchpad>/v407 <worktree>/api      # its own copy: rehearsal-seeded
 | Step | Version | Shape | Rows | Integrity |
 |---|---|---|---|---|
 | before | `v4_001_livekit_numbers` | no `provider_models` | every table count recorded | ok, 0 FK violations |
-| upgrade head | `v4_002_provider_models` | `provider_models`: 19 columns, PK, FK (cascade), unique, `ix_provider_models_workspace` | every pre-existing count identical; `provider_models=0` | ok, 0 |
+| upgrade head | `v4_002_provider_models` | `provider_models`: 19 columns, PK, FK (cascade), unique, `ix_provider_models_workspace` | every pre-existing count identical. `provider_models=0` | ok, 0 |
 | downgrade `v4_001_livekit_numbers` | `v4_001_livekit_numbers` | table and index gone | identical to "before" | ok, 0 |
 | upgrade head (again) | `v4_002_provider_models` | as after the first upgrade | identical | ok, 0 |
 | `alembic check` | | "No new upgrade operations detected." (the models match) | | |

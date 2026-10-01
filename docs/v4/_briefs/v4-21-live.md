@@ -2,7 +2,7 @@
 
 Status: **protocol only, not run.** No session ids yet. This is the coordinator's protocol for PLAN-V4 V4-21 "Live" (rulings R-V4-71 and R-V4-68). V4-21 makes the worker read `HttpToolDefinition.silent_reply`. `_assemble` passes the names of the `http` rows with `silent_reply=true` to `PlatformAgent(silent_reply_tools=…)`, and the `function_tools_executed` handler cancels the reply for a batch made only of silent tools. Realtime models always honour this. The cascaded pipeline honours it from livekit-agents 1.8.3.
 
-The repo is public: no token, key, host, phone number or transcript beyond the quoted turns goes in this file. Session ids and agent ids are fine. A failing step becomes an ask with the log line. Never patch during the run (R-V4-20).
+The repo is public. No token, key, host, phone number or transcript beyond the quoted turns goes in this file. Session ids and agent ids are fine. A failing step becomes an ask with the log line. Never patch during the run (R-V4-20).
 
 **Flow agents (ask #170, done):** `_assemble`'s flow branch passes the same names to `FlowServices.silent_reply_tools`, and every `FlowNodeAgent` carries them. The session's one `function_tools_executed` handler is the entry node's, and only the entry node logs the "not honoured" line, so that line appears once per session. Step 3 checks this on a flow agent.
 
@@ -22,8 +22,8 @@ For each step, record: pass/fail, the session id, the `tool_call_started` / `too
 Create `Demo — Silent cascaded` from the `blank` starter (cascaded, the default LLM, not changed). Attach `demo_silent_status`. Run `chat_start`, then `chat_send("Please update my status.")`.
 
 Pass when all of these hold:
-- `demo_silent_status` runs (`tool_call_ended.status == "done"`), and its activity row / block updates in the console;
-- the model does **not** narrate the result: after the call, the next assistant message is either missing or the model's own continuation. It does not read back or summarise httpbin's JSON ("Your status shows origin …", "The request returned …");
+- `demo_silent_status` runs (`tool_call_ended.status == "done"`), and its activity row / block updates in the console.
+- the model does **not** narrate the result. After the call, the next assistant message is either missing or the model's own continuation. It does not read back or summarise httpbin's JSON ("Your status shows origin …", "The request returned …").
 - the worker log for the session has no `silent_reply is not honoured` line (1.8.3), and has the debug line `cancelled tool reply` with `tools=["demo_silent_status"]` if debug logging is on.
 
 Then `chat_send("Thanks. What can you help me with?")`. The model answers normally (the tool didn't mute the session).
@@ -37,8 +37,8 @@ Repeat step 1 on `Demo — Silent realtime`: the `blank` starter switched to `pi
 Create `Demo — Silent flow` from the `receptionist` starter (a cascaded flow, the default LLM, not changed). Attach `demo_silent_status`. In `config.flow`, add `"demo_silent_status"` to the `identify` node's `tools` and change nothing else. Run `agent_flow_validate`, then `agent_update(patch={"flow": …})`, then `agent_validate` (expect 0 errors). Run `chat_start`, then `chat_send("Please update my status.")`.
 
 Pass when all of these hold:
-- the same three criteria as step 1, with the session `path` still on `identify` after the call (a silent tool doesn't move the flow);
-- then `chat_send` the turns that move the flow to `collect_booking` (the caller's name and a fictional 555-01xx number). The flow transitions normally, and the node's next message is its own;
+- the same three criteria as step 1, with the session `path` still on `identify` after the call (a silent tool doesn't move the flow).
+- then `chat_send` the turns that move the flow to `collect_booking` (the caller's name and a fictional 555-01xx number). The flow transitions normally, and the node's next message is its own.
 - the worker log for the session has no `silent_reply is not honoured` line on 1.8.3. On a worker below 1.8.3 it has **exactly one** such line for the whole session, including after the transition. Record it either way.
 
 ## Step 4: clean-up

@@ -5,7 +5,7 @@ import * as React from "react";
 import type { BreadcrumbEntry } from "@/components/shared/page-header";
 
 /**
- * Lets a deep-linked page (an agent editor, a session detail — owned by
+ * Lets a deep-linked page (an agent editor, a session detail, owned by
  * WP-2/WP-3/WP-7) hand the shell's top bar a richer trail than the static
  * one-level label `navLabelForPath` can produce ("Agents / Stage9
  * Insurance" per docs/UI_UX_SPEC.md §3.2). Depth-1 list pages don't need
@@ -47,7 +47,7 @@ export function useSetBreadcrumbs(trail: BreadcrumbEntry[] | undefined) {
 /**
  * Declarative form of `useSetBreadcrumbs` for server pages (V2-19C): renders
  * nothing, sets the top bar's trail. Every depth ≥ 2 console page uses the
- * top bar for its trail — one breadcrumb `nav` per page (axe
+ * top bar for its trail, one breadcrumb `nav` per page (axe
  * `landmark-unique`), never a second copy inside the `PageHeader`.
  */
 export function ConsoleBreadcrumbs({ trail }: { trail: BreadcrumbEntry[] }) {

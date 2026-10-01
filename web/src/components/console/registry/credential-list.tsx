@@ -36,7 +36,7 @@ import { useCan } from "@/components/console/shared/permission";
 import { RowsSkeleton } from "@/components/console/registry/rows-skeleton";
 import { EnableComposioDialog } from "@/components/console/tools/apps/enable-composio-dialog";
 import { appsErrorMessage, composioStatusChip, useComposioStatus } from "@/components/console/tools/apps/use-composio";
-import { pluralize } from "@/lib/format";
+import { EMPTY_VALUE, pluralize } from "@/lib/format";
 import { ApiError } from "@/lib/api";
 import type { AgentOut, CredentialOut, ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
 
@@ -360,7 +360,7 @@ function CredentialIdentity({
  * exactly what made the key look LLM-only.
  */
 function CredentialKind({ spec, registry }: { spec: ProviderSpec | undefined; registry: ProviderSpec[] }) {
-  if (!spec) return <span className="text-label text-text-secondary">—</span>;
+  if (!spec) return <span className="text-label text-text-secondary">{EMPTY_VALUE}</span>;
   const { usedBy } = credentialDisplay(spec, registry);
   if (usedBy.length <= 1) {
     return <span className="text-label text-text-secondary">{KIND_LABEL[spec.kind]}</span>;

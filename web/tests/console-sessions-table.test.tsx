@@ -260,9 +260,9 @@ describe("SessionsTable — columns, links, pagination", () => {
     expect(table().getByText("Phone (inbound)")).toBeTruthy();
     expect(table().getByText("Realtime")).toBeTruthy();
     expect(table().getByText("12")).toBeTruthy();
-    // Never started → "—" duration.
+    // Never started → "None" duration.
     const neverRow = table().getByText("room-never").closest("tr") as HTMLElement;
-    expect(within(neverRow).getAllByText("—").length).toBeGreaterThanOrEqual(2);
+    expect(within(neverRow).getAllByText("None").length).toBeGreaterThanOrEqual(2);
     const link = table().getAllByRole("link")[0];
     expect(link.getAttribute("href")).toBe("/console/sessions/abc");
   });
@@ -535,12 +535,12 @@ describe("SessionsTable — export CSV and post-call field columns (V5-34)", () 
     fireEvent.click(screen.getByRole("option", { name: "Claim type" }));
     const header = table().getByText("Claim type");
     expect(header).toBeTruthy();
-    // Not in the (not yet extended) list payload — the column renders honestly as "—",
+    // Not in the (not yet extended) list payload — the column renders honestly as "None",
     // in the cell right under the new header (never "Not mentioned", reserved for a value
     // the api actually returned as `null`).
     const columnIndex = Array.from(header.closest("tr")?.children ?? []).indexOf(header.closest("th")!);
     const bodyRow = table().getAllByRole("row")[1];
-    expect(bodyRow.children[columnIndex]?.textContent).toBe("—");
+    expect(bodyRow.children[columnIndex]?.textContent).toBe("None");
   });
 });
 

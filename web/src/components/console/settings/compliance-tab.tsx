@@ -21,6 +21,7 @@ import { LoadingRegion } from "@/components/shared/loading-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import type { ComplianceOut } from "@/contracts/lkap-contracts";
+import { EMPTY_VALUE } from "@/lib/format";
 
 /** `lkap_contracts.compliance.Jurisdiction` — the generated TS inlines it, so it's not an exported name. */
 type Jurisdiction = NonNullable<ComplianceOut["settings"]["jurisdiction"]>;
@@ -241,9 +242,9 @@ function ComplianceReadOnly({ compliance }: { compliance: ComplianceOut }) {
       <SectionRow>
         <MetaList
           items={[
-            { term: "Jurisdiction", value: preset?.label ?? jurisdiction ?? "—" },
-            { term: "AI disclosure line", value: disclosure ?? "—" },
-            { term: "Recording question", value: recording ?? "—" },
+            { term: "Jurisdiction", value: preset?.label ?? jurisdiction ?? EMPTY_VALUE },
+            { term: "AI disclosure line", value: disclosure ?? EMPTY_VALUE },
+            { term: "Recording question", value: recording ?? EMPTY_VALUE },
             {
               term: "Counsel review",
               value: compliance.settings.counsel_note_ack ? "Acknowledged" : "Not acknowledged yet",

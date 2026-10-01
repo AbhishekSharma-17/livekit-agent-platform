@@ -26,7 +26,7 @@ import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { useSetBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
 import type { LocaleEvent, SessionDetailOut, SessionEventOut } from "@/contracts/lkap-contracts";
 import { ApiError } from "@/lib/api";
-import { formatDuration } from "@/lib/format";
+import { EMPTY_VALUE, formatDuration } from "@/lib/format";
 
 import { formatMs } from "./detail/builtin-event-kinds";
 import { pickTab, visibleTabs } from "./detail/registry";
@@ -324,7 +324,7 @@ export function SessionHeaderMeta({ session }: { session: SessionDetailOut }) {
 
   const items: MetaItem[] = [
     { term: startedAt ? "Started" : "Created", value: <RelativeTime iso={startedAt ?? session.created_at} withExact /> },
-    { term: "Duration", value: duration === null ? "—" : formatDuration(duration) },
+    { term: "Duration", value: duration === null ? EMPTY_VALUE : formatDuration(duration) },
     ...(channel ? [{ term: "Channel", value: channel }] : []),
     { term: "Mode", value: pipelineModeLabel(session.pipeline_mode) },
     { term: "Config", value: `v${session.config_version}` },
@@ -355,7 +355,7 @@ export function SessionStats({ session }: { session: SessionDetailOut }) {
   const usage = React.useMemo(() => describeUsage(session.usage), [session.usage]);
 
   const counted = eventsQuery.isSuccess || (session.transcript?.length ?? 0) > 0;
-  const pending = eventsQuery.isLoading ? "…" : "—";
+  const pending = eventsQuery.isLoading ? "…" : EMPTY_VALUE;
   const turns = counted ? collectTurns(session.transcript, events).length : null;
   const tools = eventsQuery.isSuccess ? pairToolCalls(events).length : null;
   const errors = eventsQuery.isSuccess ? events.filter((event) => event.type === "error").length : null;

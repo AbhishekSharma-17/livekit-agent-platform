@@ -31,6 +31,7 @@ import type { AgentOut, DispatchRuleOut } from "@/contracts/lkap-contracts";
 
 import { useCreateDispatchRule, useDeleteDispatchRule, useDispatchRules, useTrunks } from "./hooks";
 import { E164_PATTERN, splitNumbers } from "./model";
+import { EMPTY_VALUE } from "@/lib/format";
 
 function sourceLabel(rule: DispatchRuleOut): string {
   return rule.managed_by_number ? "From number" : rule.has_pin ? "Manual · PIN" : "Manual";
@@ -52,7 +53,7 @@ export function RulesSection({ agents }: { agents: AgentOut[] }) {
   // A LiveKit-hosted number's rule has no trunk (V4-05): name the number instead.
   const trunkLabel = (rule: DispatchRuleOut) =>
     rule.trunk_id
-      ? (trunks.find((t) => t.id === rule.trunk_id)?.name ?? "—")
+      ? (trunks.find((t) => t.id === rule.trunk_id)?.name ?? EMPTY_VALUE)
       : rule.managed_by_number
         ? `LiveKit number ${rule.managed_by_number}`
         : "LiveKit number";

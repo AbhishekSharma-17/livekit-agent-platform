@@ -30,6 +30,7 @@ import type { Assumption, EstimateLine } from "@/contracts/lkap-contracts";
 import { cn } from "@/lib/utils";
 
 import { useDraftCostEstimate } from "./editor-context";
+import { EMPTY_VALUE } from "@/lib/format";
 
 /**
  * The Cost estimate dialog (docs/v4/COSTS.md §5 item 1, R-V4-50): everything
@@ -87,14 +88,14 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
                 <>
                   <p className="text-stat font-semibold tracking-[-0.02em] text-foreground tabular-nums">
                     {bandText(
-                      formatUsd(perMinute.low) ?? "—",
-                      formatUsd(perMinute.mid) ?? "—",
-                      formatUsd(perMinute.high) ?? "—",
+                      formatUsd(perMinute.low) ?? EMPTY_VALUE,
+                      formatUsd(perMinute.mid) ?? EMPTY_VALUE,
+                      formatUsd(perMinute.high) ?? EMPTY_VALUE,
                     )}
                   </p>
                   {perSession ? (
                     <p className="text-caption text-text-secondary tabular-nums">
-                      ≈ {formatUsd(perSession.mid) ?? "—"} for a {estimate?.session_minutes ?? "—"}-minute call · estimate
+                      ≈ {formatUsd(perSession.mid) ?? EMPTY_VALUE} for a {estimate?.session_minutes ?? EMPTY_VALUE}-minute call · estimate
                     </p>
                   ) : null}
                 </>

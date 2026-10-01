@@ -23,6 +23,7 @@ import {
   parseBindingTarget,
   type BindingKind,
 } from "@/components/console/tools/tool-context";
+import { EMPTY_VALUE } from "@/lib/format";
 
 const KIND_LABEL: Record<BindingKind, string> = {
   details: "A card's field",
@@ -338,5 +339,5 @@ function BindingWhere({
       </div>
     );
   }
-  return <span className="text-caption text-text-secondary">—</span>;
+  return <span className="text-caption text-text-secondary">{EMPTY_VALUE}</span>;
 }

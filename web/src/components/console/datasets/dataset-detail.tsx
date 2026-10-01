@@ -21,7 +21,7 @@ import { DatasetStatus, IMPORT_FAILED_FALLBACK } from "@/components/console/data
 import { DangerZoneCard } from "@/components/console/shared/danger-zone-card";
 import { plainStatusError } from "@/components/shared/status-error";
 import { useWriteGate } from "@/components/console/shared/write-gate";
-import { pluralize } from "@/lib/format";
+import { EMPTY_VALUE, pluralize } from "@/lib/format";
 import type { DatasetOut } from "@/contracts/lkap-contracts";
 
 const BACK = { href: "/console/datasets", label: "Back to lookup tables" };
@@ -114,7 +114,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
                           ))}
                         </TagList>
                       ) : (
-                        "—"
+                        EMPTY_VALUE
                       ),
                   },
                   { term: "Status", detail: <DatasetStatus dataset={dataset} size="sm" /> },

@@ -23,7 +23,7 @@ import { useAgents } from "@/components/console/lib/api-hooks";
 import { formatUsd } from "@/components/console/lib/cost-hooks";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
 import type { AgentOut, QaField, SessionOut } from "@/contracts/lkap-contracts";
-import { formatDuration } from "@/lib/format";
+import { EMPTY_VALUE, formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { RefreshButton } from "./refresh-button";
@@ -405,7 +405,7 @@ export function SessionsTable() {
     {
       id: "channel",
       header: "Channel",
-      cell: (session) => <span className="text-text-secondary">{channelLabel(session.channel) ?? "—"}</span>,
+      cell: (session) => <span className="text-text-secondary">{channelLabel(session.channel) ?? EMPTY_VALUE}</span>,
     },
     {
       id: "duration",
@@ -427,7 +427,7 @@ export function SessionsTable() {
       id: "turns",
       header: "Turns",
       align: "end",
-      cell: (session) => <span className="tabular-nums text-text-secondary">{usageTurns(session.usage) ?? "—"}</span>,
+      cell: (session) => <span className="tabular-nums text-text-secondary">{usageTurns(session.usage) ?? EMPTY_VALUE}</span>,
     },
     {
       id: "cost",
@@ -574,7 +574,7 @@ export function SessionsTable() {
 
 function durationText(session: SessionOut): string {
   const ms = sessionDurationMs(session);
-  return ms === null ? "—" : formatDuration(ms);
+  return ms === null ? EMPTY_VALUE : formatDuration(ms);
 }
 
 /**
@@ -627,7 +627,7 @@ function fieldCellValue(session: SessionOut, name: string): unknown {
 }
 
 function fieldCellText(value: unknown): string {
-  if (value === undefined) return "—";
+  if (value === undefined) return EMPTY_VALUE;
   if (value === null) return "Not mentioned";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   return String(value);
@@ -652,7 +652,7 @@ export function CostCell({ session }: { session: SessionOut }) {
   }
   if (actual) return <span className="tabular-nums text-foreground">{actual}</span>;
   if (estimate) return <span className="tabular-nums text-text-secondary">≈ {estimate} · estimate</span>;
-  return <span className="text-text-secondary">—</span>;
+  return <span className="text-text-secondary">{EMPTY_VALUE}</span>;
 }
 
 function StartedCell({ session }: { session: SessionOut }) {

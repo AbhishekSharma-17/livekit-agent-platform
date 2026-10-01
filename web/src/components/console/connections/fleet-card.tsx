@@ -26,6 +26,7 @@ import { ErrorBanner, errorMessage } from "@/components/console/shared/error-ban
 import { IfCan, ReadOnlyNote, readOnlyCopy } from "@/components/console/shared/permission";
 import { useConnectionFleet, useFleetAction } from "@/hooks/useConnections";
 import type { ConnectionOut, WorkerInstanceOut } from "@/contracts/lkap-contracts";
+import { EMPTY_VALUE } from "@/lib/format";
 
 const MANAGED_BY_LABEL: Record<NonNullable<WorkerInstanceOut["managed_by"]>, string> = {
   external: "external",
@@ -116,8 +117,8 @@ export function FleetCard({ connection }: { connection: ConnectionOut }) {
         </span>
       ),
     },
-    { id: "image", header: "Image", cell: (instance) => <span className="text-label text-text-secondary">{instance.image ?? "—"}</span> },
-    { id: "sdk", header: "SDK", cell: (instance) => <span className="text-label text-text-secondary tabular-nums">{instance.sdk_version ?? "—"}</span> },
+    { id: "image", header: "Image", cell: (instance) => <span className="text-label text-text-secondary">{instance.image ?? EMPTY_VALUE}</span> },
+    { id: "sdk", header: "SDK", cell: (instance) => <span className="text-label text-text-secondary tabular-nums">{instance.sdk_version ?? EMPTY_VALUE}</span> },
     { id: "status", header: "Status", cell: (instance) => <InstanceStatus instance={instance} /> },
     {
       id: "heartbeat",
@@ -126,7 +127,7 @@ export function FleetCard({ connection }: { connection: ConnectionOut }) {
         instance.last_heartbeat_at ? (
           <RelativeTime iso={instance.last_heartbeat_at} className="text-label text-text-secondary" />
         ) : (
-          <span className="text-label text-text-tertiary">—</span>
+          <span className="text-label text-text-tertiary">{EMPTY_VALUE}</span>
         ),
     },
     {
@@ -195,7 +196,7 @@ export function FleetCard({ connection }: { connection: ConnectionOut }) {
                         <InstanceStatus instance={instance} />
                       </div>
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-caption text-text-secondary">
-                        <span>{instance.image ?? "—"}</span>
+                        <span>{instance.image ?? EMPTY_VALUE}</span>
                         {instance.managed_by ? <span>{MANAGED_BY_LABEL[instance.managed_by]}</span> : null}
                         {instance.last_heartbeat_at ? (
                           <span>

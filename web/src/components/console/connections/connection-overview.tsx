@@ -29,6 +29,7 @@ import { RelativeTime } from "@/components/shared/relative-time";
 import { Section, SectionRow } from "@/components/shared/section";
 import { useSetDefaultConnection, useUpdateConnection } from "@/hooks/useConnections";
 import type { ConnectionOut, ConnectionUpdate } from "@/contracts/lkap-contracts";
+import { EMPTY_VALUE } from "@/lib/format";
 
 /**
  * Detail → Overview tab, laid out as the Detail / record archetype
@@ -110,7 +111,7 @@ export function ConnectionOverview({ connection }: { connection: ConnectionOut }
                   term: "Fingerprint",
                   detail: (
                     <span className="inline-flex items-center gap-1">
-                      <span className="font-mono text-caption">{connection.fingerprint ?? "—"}</span>
+                      <span className="font-mono text-caption">{connection.fingerprint ?? EMPTY_VALUE}</span>
                       {connection.fingerprint ? <CopyButton value={connection.fingerprint} label="Copy fingerprint" size="xs" /> : null}
                     </span>
                   ),

@@ -18,7 +18,7 @@ import { UploadDatasetDialog } from "@/components/console/datasets/upload-datase
 import { plainStatusError } from "@/components/shared/status-error";
 import { Highlight, ListToolbar, SEARCH_THRESHOLD, matchesQuery, useRememberedChoice } from "@/components/shared/list-search";
 import { useWriteGate } from "@/components/console/shared/write-gate";
-import { pluralize } from "@/lib/format";
+import { EMPTY_VALUE, pluralize } from "@/lib/format";
 import type { DatasetOut } from "@/contracts/lkap-contracts";
 
 /** The worker's reason for a failed import, when it reads as plain copy. */
@@ -128,7 +128,7 @@ export function DatasetList() {
       id: "keys",
       header: "Matches on",
       cell: (dataset) => (
-        <span className="text-text-secondary">{keysOf(dataset) ? <Highlight text={keysOf(dataset)} query={query} /> : "—"}</span>
+        <span className="text-text-secondary">{keysOf(dataset) ? <Highlight text={keysOf(dataset)} query={query} /> : EMPTY_VALUE}</span>
       ),
     },
     {
@@ -193,7 +193,7 @@ export function DatasetList() {
                 <div className="truncate font-medium text-foreground">
                   <Highlight text={dataset.name} query={query} />
                 </div>
-                <div className="truncate text-caption text-text-secondary">Matches on {keysOf(dataset) || "—"}</div>
+                <div className="truncate text-caption text-text-secondary">Matches on {keysOf(dataset) || EMPTY_VALUE}</div>
                 {failedLine(dataset)}
               </div>
               <DatasetStatus dataset={dataset} size="sm" />

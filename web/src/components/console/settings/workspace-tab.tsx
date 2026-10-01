@@ -22,6 +22,7 @@ import { api } from "@/lib/api";
 import { ROLE_LABEL } from "./api-types";
 import { FormSkeleton, SettingsCardFooter } from "./settings-card";
 import { useActiveWorkspace, useInvalidateSettings, useWorkspace } from "./use-settings-queries";
+import { EMPTY_VALUE } from "@/lib/format";
 
 /** `admin`/`owner` may rename the workspace or change its settings (CONTRACTS-V2 §3.2). */
 function canManageWorkspace(role: string | undefined): boolean {
@@ -261,7 +262,7 @@ function AccountSection() {
         <DescriptionList
           columns={2}
           items={[
-            { term: "Name", detail: me?.user.name || "—" },
+            { term: "Name", detail: me?.user.name || EMPTY_VALUE },
             { term: "Email", detail: me?.user.email, mono: true },
           ]}
         />

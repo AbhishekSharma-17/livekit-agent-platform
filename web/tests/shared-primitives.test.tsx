@@ -453,13 +453,13 @@ describe("Section, DescriptionList, VendorMark, CapabilityBadge, Kbd, RelativeTi
     expect(time?.getAttribute("title")).toMatch(/^19 Sep, \d{2}:\d{2}$/);
   });
 
-  it("RelativeTime withExact shows both; invalid input renders a dash", () => {
+  it("RelativeTime withExact shows both; invalid input renders the empty value", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-19T03:08:10Z"));
     const { rerender } = render(<RelativeTime iso="2026-09-19T03:04:05Z" withExact />);
     expect(document.querySelector("time")?.textContent).toMatch(/^19 Sep, \d{2}:\d{2} \(4 min ago\)$/);
     rerender(<RelativeTime iso="garbage" />);
     expect(document.querySelector("time")).toBeNull();
-    expect(screen.getByText("—")).toBeTruthy();
+    expect(screen.getByText("None")).toBeTruthy();
   });
 });

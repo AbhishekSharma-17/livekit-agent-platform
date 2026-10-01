@@ -33,6 +33,7 @@ import { connectionTypeLabel } from "@/components/console/agents/editor/use-conn
 import { useConnections } from "@/hooks/useConnections";
 
 import { Highlight, matchesQuery, readStoredFilters, SEARCH_THRESHOLD, writeStoredFilters } from "@/components/shared/list-search";
+import { EMPTY_VALUE } from "@/lib/format";
 
 const PIPELINE_MODE_LABEL: Record<string, string> = {
   cascaded: "Cascaded",
@@ -102,7 +103,7 @@ function agentConnectionLabel(agent: AgentOut, labels: Map<string | null, string
   const id = typeof agent.connection_id === "string" && agent.connection_id.trim() ? agent.connection_id.trim() : null;
   const label = labels.get(id);
   if (label) return label;
-  return loaded ? "Unknown connection" : "—";
+  return loaded ? "Unknown connection" : EMPTY_VALUE;
 }
 
 /** Non-null pipeline slots in display order, most agents show 1–3. */
@@ -327,7 +328,7 @@ export function AgentsTable() {
       header: "Pipeline",
       cell: (agent) => {
         const ids = pipelineProviderIds(agent);
-        if (ids.length === 0) return <span className="text-label text-text-secondary">—</span>;
+        if (ids.length === 0) return <span className="text-label text-text-secondary">{EMPTY_VALUE}</span>;
         return (
           <div className="flex items-center gap-1">
             {ids.map((id) => (

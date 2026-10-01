@@ -20,7 +20,7 @@ import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared
 import { RowMenu } from "@/components/shared/row-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Tag } from "@/components/shared/tag";
-import { pluralize } from "@/lib/format";
+import { EMPTY_VALUE, pluralize } from "@/lib/format";
 import type { KbOut } from "@/contracts/lkap-contracts";
 
 /**
@@ -80,14 +80,14 @@ export function KbList() {
       align: "end",
       // No local vectors for a managed search (Ragie) knowledge base — nothing to count.
       cell: (kb) =>
-        kb.kind === "external" ? <span className="text-text-tertiary">—</span> : <span className="tabular-nums">{kb.chunk_count}</span>,
+        kb.kind === "external" ? <span className="text-text-tertiary">{EMPTY_VALUE}</span> : <span className="tabular-nums">{kb.chunk_count}</span>,
     },
     {
       id: "embedder",
       header: "Embedder",
       cell: (kb) =>
         kb.kind === "external" ? (
-          <span className="text-text-tertiary">—</span>
+          <span className="text-text-tertiary">{EMPTY_VALUE}</span>
         ) : (
           <span className="text-text-secondary">{embedderLabel(kb.embedder_id)}</span>
         ),

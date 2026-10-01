@@ -57,6 +57,7 @@ import {
   normalizeE164,
   sipEnabled,
 } from "./model";
+import { EMPTY_VALUE } from "@/lib/format";
 
 /**
  * Numbers (V2-17, V4-05): the number → agent map. A number is either typed in
@@ -229,7 +230,7 @@ function NumberCell({ number, query }: { number: PhoneNumberOut; query: string }
 
 function SourceChip({ number, trunks }: { number: PhoneNumberOut; trunks: TrunkOut[] }) {
   if (isHostedNumber(number)) return <Tag>LiveKit</Tag>;
-  return <span className="text-label text-text-secondary">{sourceText(number, trunks) || "—"}</span>;
+  return <span className="text-label text-text-secondary">{sourceText(number, trunks) || EMPTY_VALUE}</span>;
 }
 
 function RoutingCell({ number }: { number: PhoneNumberOut }) {

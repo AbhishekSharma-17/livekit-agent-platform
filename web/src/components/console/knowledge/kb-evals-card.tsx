@@ -21,11 +21,11 @@ import {
   useKbEvals,
   useLatestKbEvalRun,
 } from "@/components/console/lib/api-hooks";
-import { pluralize } from "@/lib/format";
+import { EMPTY_VALUE, pluralize } from "@/lib/format";
 import type { KbEvalItemResult, KbEvalResult, KbEvalRunOut } from "@/contracts/lkap-contracts";
 
 function pct(value: number | null | undefined): string {
-  return value === null || value === undefined ? "—" : `${Math.round(value * 100)}%`;
+  return value === null || value === undefined ? EMPTY_VALUE : `${Math.round(value * 100)}%`;
 }
 
 function formatDate(iso: string): string {
@@ -56,7 +56,7 @@ function ResultSummary({ run, result }: { run: KbEvalRunOut; result: KbEvalResul
       <StatGrid>
         <StatCard label="Recall@1" value={pct(result.recall_at_1)} hint="Right passage ranked first" />
         <StatCard label={`Recall@${result.k}`} value={pct(result.recall_at_k)} hint={`Right passage in the top ${result.k}`} />
-        <StatCard label="MRR" value={result.mrr === null ? "—" : result.mrr.toFixed(2)} hint="How high it ranks, on average" />
+        <StatCard label="MRR" value={result.mrr === null ? EMPTY_VALUE : result.mrr.toFixed(2)} hint="How high it ranks, on average" />
         <StatCard
           label="Found"
           value={`${result.found} / ${result.scored}`}

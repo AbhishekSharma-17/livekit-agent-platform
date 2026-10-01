@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { formatDateTime, formatRelative, toMillis } from "@/lib/format";
+import { EMPTY_VALUE, formatDateTime, formatRelative, toMillis } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export interface RelativeTimeProps {
@@ -31,7 +31,7 @@ export function RelativeTime({ iso, withExact = false, className }: RelativeTime
 
   const ms = toMillis(iso);
   if (Number.isNaN(ms)) {
-    return <span className={className}>—</span>;
+    return <span className={className}>{EMPTY_VALUE}</span>;
   }
 
   const exact = formatDateTime(ms);

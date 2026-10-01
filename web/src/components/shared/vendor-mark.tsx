@@ -53,9 +53,9 @@ const SIZE_CLASSES = {
 /**
  * A third-party service's identity (docs/ui/DESIGN-SYSTEM.md section 5).
  *
- * - **A real mark** when `vendor-marks.ts` knows the vendor: the Simple Icons
- *   path in monochrome `currentColor` (foreground ink on a muted tile), so it
- *   reads in both themes whatever the brand colour is.
+ * - **The official mark** when `vendor-marks.ts` knows the vendor (Simple
+ *   Icons, else Lobe Icons), in monochrome `currentColor` (foreground ink on a
+ *   muted tile), so it reads in both themes whatever the brand colour is.
  * - **Otherwise a monogram** in a square faintly tinted with a per-vendor
  *   hue, mixed into theme tokens so it reads in both themes.
  *
@@ -71,6 +71,7 @@ export function VendorMark({ vendor, size = "md", labelled = false, className }:
         {...a11y}
         data-slot="vendor-mark"
         data-mark={icon.slug}
+        data-source={icon.source}
         className={cn(
           "inline-flex shrink-0 items-center justify-center rounded-sm bg-muted-strong text-foreground select-none",
           SIZE_CLASSES[size],
@@ -78,7 +79,9 @@ export function VendorMark({ vendor, size = "md", labelled = false, className }:
         )}
       >
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
-          <path d={icon.path} />
+          {icon.paths.map((path, index) => (
+            <path key={index} d={path.d} fillRule={path.fillRule} />
+          ))}
         </svg>
       </span>
     );

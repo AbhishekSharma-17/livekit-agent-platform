@@ -7,6 +7,7 @@ import {
   siBox,
   siBrave,
   siCaldotcom,
+  siClaude,
   siCalendly,
   siClickup,
   siCloudflare,
@@ -76,24 +77,75 @@ import {
   type SimpleIcon,
 } from "simple-icons";
 
+import {
+  lhAssemblyai,
+  lhAws,
+  lhBaseten,
+  lhCerebras,
+  lhCohere,
+  lhDeepinfra,
+  lhDeepseek,
+  lhExa,
+  lhFal,
+  lhFirecrawl,
+  lhFireworks,
+  lhGrok,
+  lhGroq,
+  lhHedra,
+  lhMicrosoft,
+  lhOpenai,
+  lhQwen,
+  lhRunway,
+  lhSambanova,
+  lhTavily,
+  lhTogether,
+  lhVoyage,
+  lhXai,
+  type LobehubMark,
+} from "./lobehub-marks";
+
+/** One mark, whichever source it came from: 24 x 24 path data drawn in `currentColor`. */
+export interface VendorMarkIcon {
+  slug: string;
+  /** The brand's own name ("Google Sheets", "OpenAI"), for a label beside the mark. */
+  title: string;
+  source: "simple-icons" | "lobehub";
+  paths: readonly { d: string; fillRule?: "evenodd" }[];
+}
+
+const si = (icon: SimpleIcon): VendorMarkIcon => ({
+  slug: icon.slug,
+  title: icon.title,
+  source: "simple-icons",
+  paths: [{ d: icon.path }],
+});
+const lh = (mark: LobehubMark): VendorMarkIcon => ({ slug: mark.slug, title: mark.title, source: "lobehub", paths: mark.paths });
+
 /**
  * Third-party marks (docs/ui/DESIGN-SYSTEM.md section 5, "Third-party logos").
  *
- * One table from a vendor's normalised name to its Simple Icons mark (CC0,
- * `simple-icons`, imported per icon so only these paths reach the bundle).
+ * One table from a vendor's normalised name to its official mark, from two
+ * licence-clean sources, imported per icon so only these paths reach the
+ * bundle:
+ *
+ * 1. **Simple Icons** (`simple-icons`, CC0), wherever it has the brand.
+ * 2. **Lobe Icons** (`@lobehub/icons-static-svg`, MIT) for the AI vendors it
+ *    lacks (OpenAI, xAI, Cerebras, Groq, Cohere …), copied into
+ *    `lobehub-marks.ts` by `scripts/gen-lobehub-marks.mjs`.
+ * 3. Otherwise the monogram in `VendorMark`. Never draw a mark by hand, and
+ *    never borrow a different company's mark that shares the name (Simple
+ *    Icons' "Rime" is an input method; its "X" is not xAI).
+ *
  * Keys are `vendorKey(name)`: lower case, letters and digits only, so
- * "Mistral AI", "mistral-ai" and "mistralai" are one key. A vendor that is not
- * here, or whose Simple Icons entry is a different company that happens to
- * share the name (the input method "Rime", "X" for xAI), falls back to the
- * monogram in `VendorMark`. Never draw a mark by hand.
+ * "Mistral AI", "mistral-ai" and "mistralai" are one key.
  *
  * Kept out of `/s/[slug]`: only console screens import `VendorMark`
  * (`tests/flow-bundle-split.test.ts` holds the session graph to that).
  */
-export const VENDOR_MARKS: Readonly<Record<string, SimpleIcon>> = {
+const SIMPLE_ICONS: Readonly<Record<string, SimpleIcon>> = {
   // Model, speech and inference providers
   anthropic: siAnthropic,
-  claude: siAnthropic,
+  claude: siClaude,
   google: siGoogle,
   googlecloud: siGoogle,
   googleworkspace: siGoogle,
@@ -182,6 +234,47 @@ export const VENDOR_MARKS: Readonly<Record<string, SimpleIcon>> = {
   duckduckgo: siDuckduckgo,
 };
 
+/** Vendors Simple Icons lacks, from Lobe Icons. */
+const LOBE_ICONS: Readonly<Record<string, LobehubMark>> = {
+  openai: lhOpenai,
+  xai: lhXai,
+  grok: lhGrok,
+  cerebras: lhCerebras,
+  groq: lhGroq,
+  assemblyai: lhAssemblyai,
+  cohere: lhCohere,
+  cohererank: lhCohere,
+  voyage: lhVoyage,
+  voyageai: lhVoyage,
+  fireworks: lhFireworks,
+  fireworksai: lhFireworks,
+  together: lhTogether,
+  togetherai: lhTogether,
+  sambanova: lhSambanova,
+  baseten: lhBaseten,
+  deepinfra: lhDeepinfra,
+  deepseek: lhDeepseek,
+  qwen: lhQwen,
+  hedra: lhHedra,
+  runway: lhRunway,
+  fal: lhFal,
+  falai: lhFal,
+  tavily: lhTavily,
+  exa: lhExa,
+  firecrawl: lhFirecrawl,
+  amazon: lhAws,
+  aws: lhAws,
+  amazonwebservices: lhAws,
+  microsoft: lhMicrosoft,
+  azure: lhMicrosoft,
+};
+
+/** The merged table: Simple Icons first, Lobe Icons for the rest. */
+export const VENDOR_MARKS: Readonly<Record<string, VendorMarkIcon>> = {
+  ...Object.fromEntries(Object.entries(LOBE_ICONS).map(([key, mark]) => [key, lh(mark)])),
+  ...Object.fromEntries(Object.entries(SIMPLE_ICONS).map(([key, icon]) => [key, si(icon)])),
+};
+
 /** "Mistral AI" / "mistral-ai" / "Cal.com" → "mistralai" / "mistralai" / "calcom". */
 export function vendorKey(vendor: string): string {
   return vendor.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -193,7 +286,7 @@ export function vendorKey(vendor: string): string {
  * ("livekit-inference-stt" → "livekitinference"; "deepgram-flux-stt" →
  * "deepgram"), so a caller holding only an id still gets the vendor's mark.
  */
-export function vendorMarkFor(vendor: string): SimpleIcon | null {
+export function vendorMarkFor(vendor: string): VendorMarkIcon | null {
   const exact = VENDOR_MARKS[vendorKey(vendor)];
   if (exact) return exact;
   const words = vendor.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);

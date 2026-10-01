@@ -229,3 +229,143 @@ describe("LoginPage", () => {
     expect(showcase?.getAttribute("aria-hidden")).toBe("true");
   });
 });
+
+/**
+ * The animated showcase (UI-R3). jsdom runs no CSS, so these check what the
+ * stylesheet keys off: the director's `data-motion`, `data-step` and
+ * `data-paused` on the scene root, and that its timers stop when motion
+ * isn't welcome, the tab is hidden or the panel isn't shown.
+ */
+describe("SignInShowcase", () => {
+  const ORIGINAL_WIDTH = window.innerWidth;
+
+  function stubMotion(allowed: boolean) {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: query.includes("no-preference") ? allowed : query.includes("reduce") ? !allowed : false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+  }
+
+  function setWidth(width: number) {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+  }
+
+  function setVisibility(state: DocumentVisibilityState) {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+  }
+
+  function scene(): HTMLElement {
+    const el = document.querySelector<HTMLElement>('[data-slot="showcase-scene"]');
+    expect(el).not.toBeNull();
+    return el!;
+  }
+
+  function advance(ms: number) {
+    act(() => {
+      vi.advanceTimersByTime(ms);
+    });
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    setWidth(1440);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    setWidth(ORIGINAL_WIDTH);
+    setVisibility("visible");
+  });
+
+  it("is a decorative scene: hidden from assistive tech, nothing focusable, the call and the panel in place", () => {
+    stubMotion(true);
+    render(<LoginPage />);
+
+    const showcase = document.querySelector<HTMLElement>('[data-slot="sign-in-showcase"]')!;
+    expect(showcase.getAttribute("aria-hidden")).toBe("true");
+    expect(showcase.className).toContain("hidden");
+    expect(showcase.className).toContain("min-[1081px]:block");
+    expect(showcase.querySelectorAll("a, button, input, [tabindex]")).toHaveLength(0);
+    expect(showcase.contains(scene())).toBe(true);
+    // The call, the transcript, and the agent's panel filling in.
+    expect(showcase.textContent).toContain("Front desk agent");
+    expect(showcase.textContent).toContain("Can I move my visit to Thursday?");
+    expect(showcase.textContent).toContain("Moved to Thursday, 10:30");
+    expect(showcase.querySelectorAll("[data-at]").length).toBe(8);
+    expect(showcase.querySelectorAll(".lkap-showcase-wave-bar").length).toBeGreaterThan(20);
+  });
+
+  it("holds the composed frame and stops every timer under reduced motion", () => {
+    stubMotion(false);
+    render(<LoginPage />);
+
+    const root = scene();
+    expect(root.getAttribute("data-motion")).toBe("reduce");
+    expect(root.getAttribute("data-step")).toBe("9");
+    expect(root.hasAttribute("data-paused")).toBe(true);
+    const timer = root.querySelector('[data-slot="call-timer"]')!;
+    expect(timer.textContent).toBe("01:24");
+
+    advance(60_000);
+    expect(root.getAttribute("data-step")).toBe("9");
+    expect(timer.textContent).toBe("01:24");
+  });
+
+  it("plays the story in a loop from the composed frame when motion is welcome", () => {
+    stubMotion(true);
+    render(<LoginPage />);
+
+    const root = scene();
+    expect(root.getAttribute("data-motion")).toBe("on");
+    expect(root.hasAttribute("data-paused")).toBe(false);
+    // Starts on the held frame, so nothing resets on load.
+    expect(root.getAttribute("data-step")).toBe("9");
+
+    advance(4200);
+    expect(root.getAttribute("data-step")).toBe("10");
+    advance(900);
+    expect(root.getAttribute("data-step")).toBe("0");
+    advance(900);
+    expect(root.getAttribute("data-step")).toBe("1");
+    expect(root.querySelector('[data-slot="call-timer"]')!.textContent).toBe("01:30");
+  });
+
+  it("pauses while the tab is hidden and picks up when it's back", () => {
+    stubMotion(true);
+    render(<LoginPage />);
+    const root = scene();
+
+    setVisibility("hidden");
+    expect(root.hasAttribute("data-paused")).toBe(true);
+    advance(30_000);
+    expect(root.getAttribute("data-step")).toBe("9");
+
+    setVisibility("visible");
+    expect(root.hasAttribute("data-paused")).toBe(false);
+    advance(4200);
+    expect(root.getAttribute("data-step")).toBe("10");
+  });
+
+  it("doesn't run at 1080 px and below, where the panel is hidden", () => {
+    stubMotion(true);
+    setWidth(1080);
+    render(<LoginPage />);
+    const root = scene();
+
+    expect(root.hasAttribute("data-paused")).toBe(true);
+    advance(30_000);
+    expect(root.getAttribute("data-step")).toBe("9");
+  });
+});

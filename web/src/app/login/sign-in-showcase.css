@@ -1,0 +1,334 @@
+/*
+ * The sign-in showcase scene (docs/ui/DESIGN-SYSTEM.md sections 1, 5 and 7.4).
+ * Markup in sign-in-showcase.tsx, the director in showcase-director.tsx.
+ * A plain stylesheet, so every class and keyframe here is prefixed
+ * lkap-showcase. The names stay readable in the markup and the tests.
+ *
+ * Rules this file keeps:
+ * - Only transform, opacity and colours animate. Nothing here animates
+ *   width, height, top or margin.
+ * - Every element's resting style is the composed frame, so the server
+ *   render, reduced motion and a paused tab all show the finished scene.
+ * - Ambient loops start from their resting pose and loop seamlessly.
+ * - Motion runs only while the director sets data-motion="on". A hidden tab
+ *   sets data-paused, and reduced motion turns every animation and
+ *   transition off, from the director and from the media query alike.
+ * - Tokens only (var(--x)), no colour literals.
+ */
+
+.lkap-showcase {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Ambient background: a drifting dotted grid and two indigo glows.    */
+/* ------------------------------------------------------------------ */
+
+.lkap-showcase-grid {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0.35;
+  mask-image: radial-gradient(ellipse at center, var(--foreground) 30%, transparent 75%);
+  pointer-events: none;
+}
+
+/* One grid cell larger on each side, then drifted by exactly one cell. */
+.lkap-showcase-grid-dots {
+  position: absolute;
+  inset: -20px;
+  background-image: radial-gradient(var(--border-strong) 1px, transparent 1px);
+  background-size: 20px 20px;
+  will-change: transform;
+}
+
+.lkap-showcase[data-motion="on"] .lkap-showcase-grid-dots {
+  animation: lkap-showcase-grid-drift 20s linear infinite;
+}
+
+@keyframes lkap-showcase-grid-drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(20px, 20px, 0);
+  }
+}
+
+.lkap-showcase-glow {
+  position: absolute;
+  width: 560px;
+  height: 560px;
+  border-radius: var(--radius-pill);
+  opacity: 0.14;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.dark .lkap-showcase-glow {
+  opacity: 0.18;
+}
+
+.lkap-showcase-glow-a {
+  top: -14%;
+  left: -20%;
+  background: radial-gradient(closest-side, var(--brand), transparent);
+}
+
+.lkap-showcase-glow-b {
+  right: -18%;
+  bottom: -20%;
+  background: radial-gradient(closest-side, var(--ring), transparent);
+}
+
+.lkap-showcase[data-motion="on"] .lkap-showcase-glow-a {
+  animation: lkap-showcase-glow-a 26s ease-in-out infinite;
+}
+
+.lkap-showcase[data-motion="on"] .lkap-showcase-glow-b {
+  animation: lkap-showcase-glow-b 32s ease-in-out infinite;
+}
+
+@keyframes lkap-showcase-glow-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(72px, 48px, 0) scale(1.1);
+  }
+}
+
+@keyframes lkap-showcase-glow-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-64px, -56px, 0) scale(1.08);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* The cards float a few pixels, each on its own period.              */
+/* ------------------------------------------------------------------ */
+
+.lkap-showcase[data-motion="on"] .lkap-showcase-float-a {
+  animation: lkap-showcase-float 7s ease-in-out infinite;
+}
+
+.lkap-showcase[data-motion="on"] .lkap-showcase-float-b {
+  animation: lkap-showcase-float 8.5s ease-in-out infinite;
+}
+
+.lkap-showcase[data-motion="on"] .lkap-showcase-float-c {
+  animation: lkap-showcase-float 10s ease-in-out infinite;
+}
+
+@keyframes lkap-showcase-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -4px, 0);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* The story. The director steps data-step through 0 to 10:           */
+/*   0 a fresh call, 1 to 3 the exchange, 4 the note, 5 to 7 the      */
+/*   checklist, 8 the chart bar, 9 the composed frame (held), 10 the  */
+/*   outro. An item with data-at="N" shows from step N to step 9.     */
+/*   Hidden items get --off: 1, and each effect reads it.             */
+/* ------------------------------------------------------------------ */
+
+.lkap-showcase [data-at] {
+  --off: 0;
+}
+
+.lkap-showcase[data-motion="on"]:is([data-step="0"], [data-step="10"]) [data-at="1"],
+.lkap-showcase[data-motion="on"]:is([data-step="0"], [data-step="1"], [data-step="10"]) [data-at="2"],
+.lkap-showcase[data-motion="on"]:is([data-step="0"], [data-step="1"], [data-step="2"], [data-step="10"]) [data-at="3"],
+.lkap-showcase[data-motion="on"]:is([data-step="0"], [data-step="1"], [data-step="2"], [data-step="3"], [data-step="10"])
+  [data-at="4"],
+.lkap-showcase[data-motion="on"]:is(
+    [data-step="0"],
+    [data-step="1"],
+    [data-step="2"],
+    [data-step="3"],
+    [data-step="4"],
+    [data-step="10"]
+  )
+  [data-at="5"],
+.lkap-showcase[data-motion="on"]:is(
+    [data-step="0"],
+    [data-step="1"],
+    [data-step="2"],
+    [data-step="3"],
+    [data-step="4"],
+    [data-step="5"],
+    [data-step="10"]
+  )
+  [data-at="6"],
+.lkap-showcase[data-motion="on"]:is(
+    [data-step="0"],
+    [data-step="1"],
+    [data-step="2"],
+    [data-step="3"],
+    [data-step="4"],
+    [data-step="5"],
+    [data-step="6"],
+    [data-step="10"]
+  )
+  [data-at="7"],
+.lkap-showcase[data-motion="on"]:not([data-step="8"], [data-step="9"]) [data-at="8"] {
+  --off: 1;
+}
+
+/* A transcript line or a note: fades and rises in, then its text types in. */
+.lkap-showcase-reveal {
+  position: relative;
+  overflow: hidden;
+  opacity: calc(1 - var(--off));
+  transform: translate3d(0, calc(var(--off) * 6px), 0);
+  transition:
+    opacity 280ms var(--ease-entrance),
+    transform 280ms var(--ease-entrance);
+}
+
+/*
+ * The typing cover: a block in the line's own surface colour, scaled away
+ * from the left so the words appear left to right. Showing, it sweeps after
+ * the line has risen in. Hiding, it snaps back only once the line has faded.
+ */
+.lkap-showcase-cover {
+  position: absolute;
+  inset: 0;
+  transform-origin: right center;
+  transform: scaleX(var(--off));
+  transition-property: transform;
+  transition-timing-function: linear;
+  transition-duration: calc((1 - var(--off)) * var(--type, 800ms));
+  transition-delay: calc(var(--off) * 400ms + (1 - var(--off)) * 180ms);
+  pointer-events: none;
+}
+
+/* A checklist item: the empty circle gives way to a check. */
+.lkap-showcase-tick {
+  opacity: calc(1 - var(--off));
+  transform: scale(calc(1 - var(--off) * 0.4));
+  transition:
+    opacity 200ms ease,
+    transform 260ms var(--ease-entrance);
+}
+
+.lkap-showcase-untick {
+  opacity: var(--off);
+  transition: opacity 200ms ease;
+}
+
+/* The chart's newest bar rises from the baseline. */
+.lkap-showcase-bar {
+  transform-origin: bottom center;
+  transform: scaleY(var(--h, 1));
+}
+
+.lkap-showcase-rise {
+  transform: scaleY(calc(var(--h, 1) * (1 - var(--off) * 0.92)));
+  transition: transform 700ms var(--ease-entrance);
+}
+
+/* ------------------------------------------------------------------ */
+/* The voice: a waveform and the agent's orb.                         */
+/*   Speaker by step: the caller at 1 and 3, nobody at 0 and 10, the  */
+/*   agent otherwise (the composed frame included).                   */
+/* ------------------------------------------------------------------ */
+
+.lkap-showcase-wave {
+  transform: scaleY(1);
+  transform-origin: center;
+  transition: transform 480ms var(--ease-entrance);
+}
+
+.lkap-showcase[data-motion="on"]:is([data-step="0"], [data-step="10"]) .lkap-showcase-wave {
+  transform: scaleY(0.3);
+}
+
+.lkap-showcase-wave-bar {
+  transform: scaleY(var(--h, 0.5));
+  transform-origin: center;
+  background-color: var(--brand);
+  transition: background-color 320ms ease;
+}
+
+.lkap-showcase[data-motion="on"]:is([data-step="1"], [data-step="3"]) .lkap-showcase-wave-bar {
+  background-color: var(--text-tertiary);
+}
+
+.lkap-showcase[data-motion="on"] .lkap-showcase-wave-bar {
+  animation: lkap-showcase-wave var(--dur, 0.9s) ease-in-out infinite alternate;
+}
+
+@keyframes lkap-showcase-wave {
+  from {
+    transform: scaleY(var(--h, 0.5));
+  }
+  to {
+    transform: scaleY(calc(var(--h, 0.5) * 0.3));
+  }
+}
+
+.lkap-showcase-orb-ring {
+  opacity: 0;
+}
+
+.lkap-showcase[data-motion="on"]:not([data-step="0"], [data-step="1"], [data-step="3"], [data-step="10"]) .lkap-showcase-orb-ring {
+  animation: lkap-showcase-orb-ring 2.4s var(--ease-entrance) infinite;
+}
+
+.lkap-showcase[data-motion="on"] .lkap-showcase-orb-ring + .lkap-showcase-orb-ring {
+  animation-delay: 1.2s;
+}
+
+@keyframes lkap-showcase-orb-ring {
+  0% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.75);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Pause and reduced motion.                                          */
+/* ------------------------------------------------------------------ */
+
+.lkap-showcase[data-paused] *,
+.lkap-showcase[data-paused] *::before,
+.lkap-showcase[data-paused] *::after {
+  animation-play-state: paused !important;
+}
+
+.lkap-showcase[data-motion="reduce"] *,
+.lkap-showcase[data-motion="reduce"] *::before,
+.lkap-showcase[data-motion="reduce"] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lkap-showcase *,
+  .lkap-showcase *::before,
+  .lkap-showcase *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

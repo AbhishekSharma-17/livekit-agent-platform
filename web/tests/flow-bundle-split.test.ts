@@ -104,3 +104,32 @@ describe("flow builder code splitting", () => {
     expect(packages.has("@dagrejs/dagre")).toBe(true);
   });
 });
+
+/**
+ * UI-R3: the animated sign-in showcase adds next to nothing to `/login`. Its
+ * markup is a server component (HTML only), its motion is a stylesheet, and
+ * the only client code is the small director with its timers. No animation
+ * library is involved.
+ */
+describe("sign-in showcase code splitting", () => {
+  const read = (file: string) => readFileSync(path.join(SRC, file), "utf8");
+
+  it("keeps any animation library out of /login", () => {
+    const { files, packages } = staticGraph(["app/layout.tsx", "app/login/page.tsx"]);
+    expect([...files].map(rel)).toContain("app/login/showcase-director.tsx");
+    expect(packages.has("motion")).toBe(false);
+    expect(packages.has("framer-motion")).toBe(false);
+  });
+
+  it("ships only the director to the browser: the scene markup stays on the server", () => {
+    expect(read("app/login/sign-in-showcase.tsx")).not.toMatch(/^\s*["']use client["']/);
+    expect(read("app/login/showcase-director.tsx")).toMatch(/^["']use client["']/);
+    const director = staticGraph(["app/login/showcase-director.tsx"]);
+    expect([...director.packages]).toEqual(["react"]);
+    expect([...director.files].map(rel).sort()).toEqual([
+      "app/login/showcase-director.tsx",
+      "hooks/use-media-query.ts",
+      "hooks/use-mobile.ts",
+    ]);
+  });
+});

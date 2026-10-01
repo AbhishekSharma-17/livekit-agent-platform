@@ -293,9 +293,9 @@ All values are `oklch(...)`.
   | Theme | `Sun`, `Moon`, `Monitor` |
   | Settings / admin | `Cpu`, `ChartNoAxesCombined` or the nearest literal |
 - **Third-party logos:** use the real mark, in monochrome `currentColor` if its brand colour fails contrast. Always
-  pair it with the name, and fall back to a neutral generic icon. In this console that is `VendorMark`: Simple Icons
-  marks (`simple-icons`, CC0) from one table, `components/shared/vendor-marks.ts`, drawn in `currentColor`, with
-  the tinted monogram as the fallback.
+  pair it with the name, and fall back to a neutral generic icon. In this console that is `VendorMark`: official marks
+  from Simple Icons (CC0), then Lobe Icons (MIT), in one table (`components/shared/vendor-marks.ts`), drawn in
+  `currentColor`, with the tinted monogram as the fallback.
 
 ### Motion
 

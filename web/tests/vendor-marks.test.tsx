@@ -154,11 +154,19 @@ describe("vendorMarkFor", () => {
   });
 });
 
-describe("lobehub-marks.ts", () => {
-  it("matches @lobehub/icons-static-svg (rerun scripts/gen-lobehub-marks.mjs when it changes)", async () => {
-    const { render: generate } = (await import("../scripts/gen-lobehub-marks.mjs")) as { render: () => string };
-    const current = readFileSync(path.resolve(__dirname, "../src/components/shared/lobehub-marks.ts"), "utf8");
-    expect(current).toBe(generate());
+describe("vendor-mark-data.ts", () => {
+  it("matches simple-icons and @lobehub/icons-static-svg (rerun scripts/gen-vendor-marks.mjs when they change)", async () => {
+    const { render: generate } = (await import("../scripts/gen-vendor-marks.mjs")) as { render: () => Promise<string> };
+    const current = readFileSync(path.resolve(__dirname, "../src/components/shared/vendor-mark-data.ts"), "utf8");
+    expect(current).toBe(await generate());
+  });
+
+  it("is the only way marks reach the app: no source file imports the icon packages", () => {
+    const shared = path.resolve(__dirname, "../src/components/shared");
+    for (const file of ["vendor-marks.ts", "vendor-mark.tsx", "vendor-mark-data.ts"]) {
+      const text = readFileSync(path.join(shared, file), "utf8");
+      expect(text, file).not.toMatch(/(?:from|import)\s*\(?\s*"(?:simple-icons|@lobehub\/icons[^"]*)"/);
+    }
   });
 });
 

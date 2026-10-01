@@ -75,15 +75,16 @@ describe("flow builder code splitting", () => {
     for (const heavy of HEAVY) expect(packages.has(heavy), heavy).toBe(false);
   });
 
-  it("keeps vendor marks (simple-icons, the Lobe Icons copy) out of the /s/[slug] session bundle", () => {
+  it("keeps vendor marks (the copied mark data) out of the /s/[slug] session bundle", () => {
     const { files, packages } = staticGraph(["app/layout.tsx", "app/(session)/layout.tsx", "app/(session)/s/[slug]/page.tsx"]);
     expect(packages.has("simple-icons")).toBe(false);
+    expect(packages.has("@lobehub/icons-static-svg")).toBe(false);
     const reached = [...files].map(rel);
     expect(reached).not.toContain("components/shared/vendor-mark.tsx");
     expect(reached).not.toContain("components/shared/vendor-marks.ts");
-    expect(reached).not.toContain("components/shared/lobehub-marks.ts");
-    // A real boundary: the console's mark table does pull the package.
-    expect(staticGraph(["components/shared/vendor-mark.tsx"]).packages.has("simple-icons")).toBe(true);
+    expect(reached).not.toContain("components/shared/vendor-mark-data.ts");
+    // A real boundary: the console's mark component does reach the copied data.
+    expect([...staticGraph(["components/shared/vendor-mark.tsx"]).files].map(rel)).toContain("components/shared/vendor-mark-data.ts");
   });
 
   it("loads the canvas and its libraries lazily from the agent editor", () => {

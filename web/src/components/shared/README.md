@@ -61,7 +61,7 @@ Nothing in `components/shared/**` imports screen code. The permission helpers re
 | Worker errors | `shared/status-error.ts` | `plainStatusError(raw, fallback)`: a stored import/indexing failure reason, shown only when it reads as plain copy |
 | Offline (8.8) | `hooks/use-online-status.ts`, `console/shell/offline-banner.tsx`, `session/connection-banner.tsx` | `useOnlineStatus`; the console shell mounts `OfflineBanner` once ("Changes save when you're back online. Reconnecting…", and the API-down alert steps aside); the caller page says it on the pre-call card and, mid-call, in `ConnectionBanner offline`. Screens don't add their own |
 | Icons (5) | `shared/icon.tsx` | `Icon` (sizes `xs` 12, `sm` 14, `select` 15, `md` 16, `nav` 17, `tile` 18, `lg` 20, `xl` 24, via `size-*` classes) |
-| Third-party marks (5) | `shared/vendor-mark.tsx`, `shared/vendor-marks.ts`, `shared/lobehub-marks.ts` (generated) | `VendorMark` (`labelled` for a mark with no printed name; decorative otherwise), `vendorMarkFor`, `vendorKey`, `VENDOR_MARKS`: Simple Icons first, Lobe Icons second (`scripts/gen-lobehub-marks.mjs`), the tinted monogram last; never imported by `/s/[slug]` |
+| Third-party marks (5) | `shared/vendor-mark.tsx`, `shared/vendor-marks.ts`, `shared/vendor-mark-data.ts` (generated) | `VendorMark` (`labelled` for a mark with no printed name; decorative otherwise), `vendorMarkFor`, `vendorKey`, `VENDOR_MARKS`: Simple Icons first, Lobe Icons second (both copied per icon by `scripts/gen-vendor-marks.mjs`; the packages are dev-only), the tinted monogram last; never imported by `/s/[slug]` |
 
 Earlier primitives keep their contracts: `StateMeter`, `CopyButton`, `RelativeTime`, `VendorMark`,
 `CapabilityBadge`, `agent-state`, `capability-meta`, `panel-meta`.

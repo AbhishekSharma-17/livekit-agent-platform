@@ -281,9 +281,12 @@ test.beforeAll(async ({ request }) => {
 
 test.afterAll(() => writeReport());
 
-/** A console route renders the shell, so it runs once per role; public routes run once. */
+/**
+ * A console route renders the shell, so it runs once per role. Public routes and the preview pages (no shell, no
+ * role-dependent content) run once.
+ */
 function isConsoleRoute(route: RouteSpec): boolean {
-  return route.name.startsWith("console");
+  return route.name.startsWith("console") && !route.name.startsWith("console-preview");
 }
 
 const RUNS = ROUTES.flatMap((route) =>

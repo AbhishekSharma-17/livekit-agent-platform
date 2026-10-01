@@ -194,7 +194,9 @@ green; a token test holds the accent at least 10 CIEDE2000 from both. Values and
 
 **Service marks.** `VendorMark` draws each third-party service's official mark in monochrome `currentColor`, from one
 table (`components/shared/vendor-marks.ts`). Simple Icons (`simple-icons`, CC0) comes first and Lobe Icons
-(`@lobehub/icons-static-svg`, MIT, copied per icon by `scripts/gen-lobehub-marks.mjs`) second. Anything else falls back
+(`@lobehub/icons-static-svg`, MIT) second. `scripts/gen-vendor-marks.mjs` copies the chosen icons' path data into
+`vendor-mark-data.ts`, so the packages are dev-only and never parsed at run time (Simple Icons' entry module alone is
+5.2 MB). Anything else falls back
 to the monogram. Marks sit beside the name and are decorative, except in stacks with no printed name. Marks now
 show on provider rows and pickers, keys, knowledge connections, the agents list, the summary rail, template previews,
 connected apps, Tools rows, connections (LiveKit), SIP trunks (the carrier), kits (the apps they work with), model ids

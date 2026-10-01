@@ -1,4 +1,27 @@
 import {
+  lhAssemblyai,
+  lhAws,
+  lhBaseten,
+  lhCerebras,
+  lhCohere,
+  lhDeepinfra,
+  lhDeepseek,
+  lhExa,
+  lhFal,
+  lhFirecrawl,
+  lhFireworks,
+  lhGrok,
+  lhGroq,
+  lhHedra,
+  lhMicrosoft,
+  lhOpenai,
+  lhQwen,
+  lhRunway,
+  lhSambanova,
+  lhTavily,
+  lhTogether,
+  lhVoyage,
+  lhXai,
   siAirtable,
   siAnthropic,
   siAsana,
@@ -7,8 +30,8 @@ import {
   siBox,
   siBrave,
   siCaldotcom,
-  siClaude,
   siCalendly,
+  siClaude,
   siClickup,
   siCloudflare,
   siConfluence,
@@ -74,64 +97,22 @@ import {
   siZapier,
   siZendesk,
   siZoom,
-  type SimpleIcon,
-} from "simple-icons";
+  type VendorMarkIcon,
+} from "./vendor-mark-data";
 
-import {
-  lhAssemblyai,
-  lhAws,
-  lhBaseten,
-  lhCerebras,
-  lhCohere,
-  lhDeepinfra,
-  lhDeepseek,
-  lhExa,
-  lhFal,
-  lhFirecrawl,
-  lhFireworks,
-  lhGrok,
-  lhGroq,
-  lhHedra,
-  lhMicrosoft,
-  lhOpenai,
-  lhQwen,
-  lhRunway,
-  lhSambanova,
-  lhTavily,
-  lhTogether,
-  lhVoyage,
-  lhXai,
-  type LobehubMark,
-} from "./lobehub-marks";
-
-/** One mark, whichever source it came from: 24 x 24 path data drawn in `currentColor`. */
-export interface VendorMarkIcon {
-  slug: string;
-  /** The brand's own name ("Google Sheets", "OpenAI"), for a label beside the mark. */
-  title: string;
-  source: "simple-icons" | "lobehub";
-  paths: readonly { d: string; fillRule?: "evenodd" }[];
-}
-
-const si = (icon: SimpleIcon): VendorMarkIcon => ({
-  slug: icon.slug,
-  title: icon.title,
-  source: "simple-icons",
-  paths: [{ d: icon.path }],
-});
-const lh = (mark: LobehubMark): VendorMarkIcon => ({ slug: mark.slug, title: mark.title, source: "lobehub", paths: mark.paths });
+export type { VendorMarkIcon };
 
 /**
  * Third-party marks (docs/ui/DESIGN-SYSTEM.md section 5, "Third-party logos").
  *
  * One table from a vendor's normalised name to its official mark, from two
- * licence-clean sources, imported per icon so only these paths reach the
- * bundle:
+ * licence-clean sources. `scripts/gen-vendor-marks.mjs` copies each chosen
+ * icon's path data into `vendor-mark-data.ts`, so only these paths reach the
+ * bundle and the full packages are never parsed at run time:
  *
  * 1. **Simple Icons** (`simple-icons`, CC0), wherever it has the brand.
  * 2. **Lobe Icons** (`@lobehub/icons-static-svg`, MIT) for the AI vendors it
- *    lacks (OpenAI, xAI, Cerebras, Groq, Cohere …), copied into
- *    `lobehub-marks.ts` by `scripts/gen-lobehub-marks.mjs`.
+ *    lacks (OpenAI, xAI, Cerebras, Groq, Cohere …).
  * 3. Otherwise the monogram in `VendorMark`. Never draw a mark by hand, and
  *    never borrow a different company's mark that shares the name (Simple
  *    Icons' "Rime" is an input method; its "X" is not xAI).
@@ -142,7 +123,7 @@ const lh = (mark: LobehubMark): VendorMarkIcon => ({ slug: mark.slug, title: mar
  * Kept out of `/s/[slug]`: only console screens import `VendorMark`
  * (`tests/flow-bundle-split.test.ts` holds the session graph to that).
  */
-const SIMPLE_ICONS: Readonly<Record<string, SimpleIcon>> = {
+const SIMPLE_ICONS: Readonly<Record<string, VendorMarkIcon>> = {
   // Model, speech and inference providers
   anthropic: siAnthropic,
   claude: siClaude,
@@ -235,7 +216,7 @@ const SIMPLE_ICONS: Readonly<Record<string, SimpleIcon>> = {
 };
 
 /** Vendors Simple Icons lacks, from Lobe Icons. */
-const LOBE_ICONS: Readonly<Record<string, LobehubMark>> = {
+const LOBE_ICONS: Readonly<Record<string, VendorMarkIcon>> = {
   openai: lhOpenai,
   xai: lhXai,
   grok: lhGrok,
@@ -270,10 +251,7 @@ const LOBE_ICONS: Readonly<Record<string, LobehubMark>> = {
 };
 
 /** The merged table: Simple Icons first, Lobe Icons for the rest. */
-export const VENDOR_MARKS: Readonly<Record<string, VendorMarkIcon>> = {
-  ...Object.fromEntries(Object.entries(LOBE_ICONS).map(([key, mark]) => [key, lh(mark)])),
-  ...Object.fromEntries(Object.entries(SIMPLE_ICONS).map(([key, icon]) => [key, si(icon)])),
-};
+export const VENDOR_MARKS: Readonly<Record<string, VendorMarkIcon>> = { ...LOBE_ICONS, ...SIMPLE_ICONS };
 
 /** "Mistral AI" / "mistral-ai" / "Cal.com" → "mistralai" / "mistralai" / "calcom". */
 export function vendorKey(vendor: string): string {

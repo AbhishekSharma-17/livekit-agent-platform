@@ -43,7 +43,7 @@ snippet with no link and no key name.
 
 With the stored Composio key and a low-risk connected helpdesk app (Zendesk, Jira or Linear in a
 sandbox): `kit_add(kit_id="case_ticket", agent_id=…, variant="composio", connection_id=…,
-block_prefix="helpdesk", dry_run=true)` → the predicted tool name; then without `dry_run`. **Verify the
+block_prefix="helpdesk", dry_run=true)` → the predicted tool name. Then without `dry_run`. **Verify the
 action slugs** (ask #143). If Composio refuses one as "not actions of …", pass the app's own slug in
 `actions=[…]` and record it on the ask. A Builder key is refused (403). An admin key succeeds.
 

@@ -422,7 +422,7 @@ async def test_a_32_hex_face_id_is_one_value_free_warning_and_the_agent_publishe
     at_path = [i for i in validated["issues"] if i["path"] == path]
     assert len(at_path) == 1
     assert at_path[0]["severity"] == "warning"
-    assert "looks like an API key; if it is the vendor's id, ignore this" in at_path[0]["message"]
+    assert "looks like an API key. If it is the vendor's id, ignore this" in at_path[0]["message"]
     assert not [i for i in validated["issues"] if i["severity"] == "error"]
     _assert_no_fragment(json.dumps(validated), HEX32)
     assert published.status_code == 200, published.text

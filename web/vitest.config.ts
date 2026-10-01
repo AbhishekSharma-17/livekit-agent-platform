@@ -24,6 +24,14 @@ export default defineConfig({
   esbuild: {
     jsx: "automatic",
   },
+  // Tests never run CSS (vitest swaps every stylesheet for an empty one),
+  // but Vite still loads a PostCSS config for each `.css` import, and the
+  // app's `postcss.config.mjs` names the Tailwind plugin by string, which
+  // Vite can't load. An inline, empty config skips that lookup, so a
+  // component may import its own stylesheet (the sign-in showcase does).
+  css: {
+    postcss: { plugins: [] },
+  },
   test: {
     // Dialog-heavy tests exceed vitest's 5 s default on a loaded machine;
     // a generous ceiling keeps the gate honest without masking hangs.

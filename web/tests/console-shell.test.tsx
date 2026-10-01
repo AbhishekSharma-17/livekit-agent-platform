@@ -4,11 +4,22 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/console/shell/theme-provider";
-import { ConsoleShell } from "@/components/console/shell/console-shell";
+import { ConsoleShellClient } from "@/components/console/shell/console-shell-client";
 import { HideBottomTabBar } from "@/components/console/shell/bottom-tab-bar";
 import { Headset } from "lucide-react";
 
 import { AGENTS_ICON, NAV_GROUPS, NAV_ITEMS, formatNavCount, tabBarItems } from "@/components/console/shell/nav-config";
+import { ConsoleShell } from "@/components/console/shell/console-shell";
+import { SIDEBAR_COOKIE, SIDEBAR_STORAGE_KEY } from "@/components/ui/sidebar-state";
+
+/** The cookie the server half of the shell sees (`next/headers` is mocked below). */
+let sidebarCookie: string | undefined;
+
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) => (name === SIDEBAR_COOKIE && sidebarCookie !== undefined ? { name, value: sidebarCookie } : undefined),
+  }),
+}));
 
 // jsdom has no matchMedia (next-themes and `use-mobile` subscribe to it) and
 // no ResizeObserver (Radix popper positioning) — same pattern as
@@ -91,10 +102,10 @@ function stubFetch({ me, liveSessions = 0 }: FetchOptions = {}) {
   return fetchMock;
 }
 
-function renderShell(children: React.ReactNode = <div>Page content</div>) {
+function renderShell(children: React.ReactNode = <div>Page content</div>, { defaultCollapsed = false } = {}) {
   return render(
     <ThemeProvider>
-      <ConsoleShell>{children}</ConsoleShell>
+      <ConsoleShellClient defaultCollapsed={defaultCollapsed}>{children}</ConsoleShellClient>
     </ThemeProvider>,
   );
 }
@@ -124,6 +135,8 @@ beforeEach(() => {
   stubLocalStorage();
   stubFetch();
   document.cookie = "";
+  document.cookie = `${SIDEBAR_COOKIE}=; max-age=0; path=/`;
+  sidebarCookie = undefined;
 });
 
 afterEach(() => {
@@ -403,6 +416,154 @@ describe("phone bottom tab bar", () => {
     expect(tabBar()).toBeNull();
     expect(screen.getByRole("main").className).not.toContain("--layout-bottombar");
     expect(document.querySelector('[data-slot="console-shell"]')?.hasAttribute("data-tab-bar")).toBe(false);
+  });
+});
+
+describe("collapsible sidebar", () => {
+  function sidebar(): HTMLElement {
+    return document.querySelector('[data-slot="sidebar"]') as HTMLElement;
+  }
+
+  it("collapses to the icon rail and back from the control at the top of the sidebar", () => {
+    renderShell();
+    const aside = sidebar();
+    expect(aside.getAttribute("data-state")).toBe("expanded");
+
+    const collapse = within(aside).getByRole("button", { name: "Collapse sidebar" });
+    expect(collapse.getAttribute("aria-controls")).toBe(aside.id);
+    expect(collapse.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(collapse);
+    expect(aside.getAttribute("data-state")).toBe("collapsed");
+    // Only the sidebar's own width animates, and reduced motion drops it.
+    expect(aside.className).toContain("data-[state=collapsed]:w-[58px]");
+    expect(aside.className).toContain("transition-[width]");
+    expect(aside.className).toContain("motion-reduce:transition-none");
+
+    const expand = within(aside).getByRole("button", { name: "Expand sidebar" });
+    expect(expand.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(expand);
+    expect(aside.getAttribute("data-state")).toBe("expanded");
+  });
+
+  it("remembers the choice in localStorage and mirrors it to the cookie the server reads", () => {
+    const { unmount } = renderShell();
+    fireEvent.click(within(sidebar()).getByRole("button", { name: "Collapse sidebar" }));
+    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe("collapsed");
+    expect(document.cookie).toContain(`${SIDEBAR_COOKIE}=collapsed`);
+    unmount();
+
+    // A cleared cookie: the server paints the full sidebar, then the stored choice wins.
+    document.cookie = `${SIDEBAR_COOKIE}=; max-age=0; path=/`;
+    renderShell();
+    expect(sidebar().getAttribute("data-state")).toBe("collapsed");
+    expect(document.cookie).toContain(`${SIDEBAR_COOKIE}=collapsed`);
+  });
+
+  it("ignores and drops a stored value it doesn't recognise", () => {
+    localStorage.setItem(SIDEBAR_STORAGE_KEY, "sideways");
+    renderShell();
+    expect(sidebar().getAttribute("data-state")).toBe("expanded");
+    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBeNull();
+  });
+
+  it("paints the remembered rail on the first render, so nothing jumps on load", () => {
+    renderShell(undefined, { defaultCollapsed: true });
+    expect(sidebar().getAttribute("data-state")).toBe("collapsed");
+    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe("collapsed");
+  });
+
+  it.each([
+    ["collapsed", true],
+    ["expanded", false],
+    ["bogus", false],
+    [undefined, false],
+  ])("the server half reads the %s cookie as defaultCollapsed=%s", async (value, expected) => {
+    sidebarCookie = value;
+    const element = await ConsoleShell({ children: <div>Page</div> });
+    expect((element.props as { defaultCollapsed: boolean }).defaultCollapsed).toBe(expected);
+  });
+
+  it("toggles with Cmd+B and Ctrl+B, but not with other modifiers or while typing", () => {
+    renderShell(<input aria-label="Agent name" />);
+    const aside = sidebar();
+
+    fireEvent.keyDown(window, { key: "b", metaKey: true });
+    expect(aside.getAttribute("data-state")).toBe("collapsed");
+    fireEvent.keyDown(window, { key: "b", ctrlKey: true });
+    expect(aside.getAttribute("data-state")).toBe("expanded");
+
+    fireEvent.keyDown(window, { key: "b" });
+    fireEvent.keyDown(window, { key: "B", metaKey: true, shiftKey: true });
+    fireEvent.keyDown(window, { key: "b", ctrlKey: true, altKey: true });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Agent name" }), { key: "b", metaKey: true });
+    expect(aside.getAttribute("data-state")).toBe("expanded");
+  });
+
+  it("names the shortcut in the collapse control's tooltip", async () => {
+    renderShell();
+    act(() => {
+      within(sidebar()).getByRole("button", { name: "Collapse sidebar" }).focus();
+    });
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip.textContent).toContain("Collapse sidebar");
+    expect(tooltip.textContent).toMatch(/(⌘|Ctrl)B/);
+  });
+
+  it("gives each rail link a tooltip with its name, only while collapsed", async () => {
+    pathname = "/console/agents";
+    renderShell();
+    const agents = within(sidebar()).getByRole("link", { name: "Agents" });
+    act(() => agents.focus());
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    act(() => agents.blur());
+
+    fireEvent.keyDown(window, { key: "b", metaKey: true });
+    act(() => agents.focus());
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip.textContent).toBe("Agents");
+  });
+
+  it("keeps names, the current page and the live count for assistive tech in the rail", async () => {
+    stubFetch({ liveSessions: 3 });
+    pathname = "/console/agents";
+    renderShell(undefined, { defaultCollapsed: true });
+    const aside = sidebar();
+
+    const agents = within(aside).getByRole("link", { name: "Agents" });
+    expect(agents.getAttribute("aria-current")).toBe("page");
+    for (const item of NAV_ITEMS) {
+      expect(within(aside).getAllByRole("link", { name: new RegExp(`^${item.label}`) })).toHaveLength(1);
+    }
+    expect(within(aside).getByRole("list", { name: "Build" })).toBeTruthy();
+    expect(await within(aside).findByRole("link", { name: /^Sessions\s*,\s*3 live$/ })).toBeTruthy();
+    // Group labels give way to hairlines; link labels fade but stay in the tree.
+    expect(aside.querySelectorAll('[data-slot="sidebar-group-divider"]').length).toBeGreaterThan(0);
+    expect(within(aside).getByText("Agents").getAttribute("data-slot")).toBe("sidebar-menu-label");
+
+    // The account menu is the avatar alone, opening the same popover.
+    const account = await within(aside).findByRole("button", { name: "Preferences" });
+    expect(account.hasAttribute("data-rail")).toBe(true);
+    fireEvent.click(account);
+    expect(await screen.findByRole("radiogroup", { name: "Theme" })).toBeTruthy();
+  });
+
+  it("has no rail at 820 px and below, with no collapse control in the Menu dialog and a shortcut that does nothing", async () => {
+    setViewportWidth(820);
+    renderShell();
+    const aside = sidebar();
+    fireEvent.keyDown(window, { key: "b", metaKey: true });
+    expect(aside.getAttribute("data-state")).toBe("expanded");
+    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    const dialog = await screen.findByRole("dialog", { name: "Menu" });
+    expect(within(dialog).queryByRole("button", { name: /sidebar$/ })).toBeNull();
+    // The collapse control exists only inside the desktop sidebar (hidden by CSS at 820 px and below).
+    const controls = document.querySelectorAll('[data-slot="sidebar-collapse-trigger"]');
+    expect(controls).toHaveLength(1);
+    expect(aside.contains(controls[0])).toBe(true);
+    expect(aside.className).toContain("hidden");
+    expect(aside.className).toContain("min-[821px]:flex");
   });
 });
 

@@ -43,7 +43,21 @@ function Separator() {
  * break-glass admin token has no session to end, so its menu says so instead
  * of offering a sign-out that does nothing.
  */
-export function AccountMenu({ version, touch = false }: { version?: string; /** 48 px trigger (the Menu dialog on phones). */ touch?: boolean }) {
+export function AccountMenu({
+  version,
+  touch = false,
+  rail = false,
+}: {
+  version?: string;
+  /** 48 px trigger (the Menu dialog on phones). */
+  touch?: boolean;
+  /**
+   * The desktop sidebar is the icon rail: the trigger is just the avatar
+   * (its name stays as the accessible name) and the same popover opens to
+   * the right.
+   */
+  rail?: boolean;
+}) {
   const { me, isLoading } = useMe();
   const [open, setOpen] = React.useState(false);
 
@@ -61,7 +75,8 @@ export function AccountMenu({ version, touch = false }: { version?: string; /** 
       <PopoverTrigger
         data-testid={user ? "account-menu-trigger" : "preferences-menu-trigger"}
         aria-label={displayName ? `Account: ${displayName}` : "Preferences"}
-        className={cn(TRIGGER, touch && "min-h-12")}
+        data-rail={rail ? "" : undefined}
+        className={cn(TRIGGER, touch && "min-h-12", rail && "px-[5px]")}
       >
         {user ? (
           <span
@@ -78,16 +93,21 @@ export function AccountMenu({ version, touch = false }: { version?: string; /** 
             <Icon as={SlidersHorizontalIcon} size="sm" />
           </span>
         )}
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-label font-medium text-foreground">{displayName ?? "Preferences"}</span>
-          {user?.name ? <span className="block truncate text-caption text-text-secondary">{user.email}</span> : null}
-        </span>
-        <Icon as={ChevronsUpDownIcon} size="md" className="text-text-tertiary" />
+        {rail ? null : (
+          <>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-label font-medium text-foreground">{displayName ?? "Preferences"}</span>
+              {user?.name ? <span className="block truncate text-caption text-text-secondary">{user.email}</span> : null}
+            </span>
+            <Icon as={ChevronsUpDownIcon} size="md" className="text-text-tertiary" />
+          </>
+        )}
       </PopoverTrigger>
       <PopoverContent
         data-slot="account-menu"
-        side="top"
-        align="start"
+        side={rail ? "right" : "top"}
+        align={rail ? "end" : "start"}
+        sideOffset={rail ? 8 : undefined}
         className="w-[min(calc(100vw-32px),260px)] gap-0"
       >
         {user ? (

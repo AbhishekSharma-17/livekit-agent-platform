@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Sign in · LKAP console" };
 /**
  * `/login` and `/login?invite=<token>` (V2-14, ask #37; CONTRACTS-V2 §3.1).
  * The sign-in archetype (docs/ui/DESIGN-SYSTEM.md section 7.4, docs/ui/AUDIT.md
- * D10): two columns, the 380 px form card on the left and a quiet showcase on
+ * D10): two columns, the 380 px form card on the left and an animated showcase on
  * the right that hides at 1080 px and below. A server component so `metadata`
  * works; the form is the client `LoginForm`, which reads `useSearchParams`,
  * hence the `Suspense` boundary with a skeleton of the card as its fallback.

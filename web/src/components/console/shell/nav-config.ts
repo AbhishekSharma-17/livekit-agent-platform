@@ -17,7 +17,7 @@ import {
 /**
  * Console IA (docs/ui/DESIGN-SYSTEM.md section 7.1, docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §1).
  * Single source of truth for the sidebar, the Menu dialog, the phone tab bar
- * and the breadcrumb fallback label — tests assert against this list rather
+ * and the breadcrumb fallback label. Tests assert against this list rather
  * than a hard-coded count. Items are grouped by job: Build, Connect, Observe,
  * Settings.
  *
@@ -85,7 +85,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Connections", href: "/console/connections", icon: Plug },
       { label: "Providers", href: "/console/providers", icon: Puzzle },
       // Stretch (V2-17, wave 3): kept visible per the amendments' IA table
-      // (no "coming soon" styling — it is a real destination once V2-17
+      // (no "coming soon" styling, as it is a real destination once V2-17
       // lands, not a placeholder). Flip `hidden: true` if it should be
       // pulled before that.
       { label: "Telephony", href: "/console/telephony", icon: Phone },
@@ -97,7 +97,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Sessions", href: "/console/sessions", icon: History },
       { label: "Analytics", href: "/console/analytics", icon: BarChart3 },
-      // Evals (Phase 2): deliberately absent — the amendments call out no
+      // Evals (Phase 2): deliberately absent, as the amendments call out no
       // "coming soon" nav entries.
     ],
   },

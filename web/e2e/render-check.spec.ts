@@ -11,7 +11,19 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
  * on console errors (and uncaught page errors) and on horizontal page scroll
  * at 390 px. One screenshot per route, theme and width lands in
  * `RENDER_CHECK_OUT` (default `test-results/render-check`) as
- * `<route>-<theme>-<width>.png`, with `render-report.md` beside them.
+ * `<route>-<theme>-<width>.png` (`<route>-<role>-<theme>-<width>.png` for a
+ * console route), with `render-report.md` beside them.
+ *
+ * **Every console route runs as owner, builder and viewer** (spec section 11,
+ * decision O6). The dev server signs in through the admin bypass, so every
+ * page is an owner's; the development-only "view as" switch
+ * (`src/components/console/lib/dev-view-as.ts`) lowers the role the console
+ * renders for. It is set here the way the account menu sets it, through its
+ * `localStorage` key, before each page loads. It changes rendering only, never
+ * what the server allows. Each builder and viewer shot must show the top bar's
+ * "Viewing as …" reminder for that role; when the switch is unavailable (a
+ * production build, or a real session instead of the bypass) the role run is
+ * reported as unreachable rather than passing as an owner.
  *
  * The browser also logs a failed request as a console error ("Failed to load
  * resource"). Those carry their URL here; the only ones that pass are a
@@ -32,6 +44,12 @@ const RESULTS = path.join(OUT, ".results");
 const THEMES = ["light", "dark"] as const;
 const WIDTHS = [390, 768, 1440] as const;
 const HEIGHT: Record<(typeof WIDTHS)[number], number> = { 390: 844, 768: 1024, 1440: 900 };
+
+/** The roles every console route is rendered as. Owner is the bypass's real role, so it clears the switch. */
+const ROLES = ["owner", "builder", "viewer"] as const;
+type ViewRole = (typeof ROLES)[number];
+/** `DEV_VIEW_AS_KEY` in `src/components/console/lib/dev-view-as.ts` (tests/console-dev-view-as.test.tsx keeps them equal). */
+export const VIEW_AS_STORAGE_KEY = "lkap:dev:view-as";
 
 const SETTINGS_TABS = [
   "workspace",
@@ -146,6 +164,8 @@ interface Shot {
 
 interface RouteResult {
   name: string;
+  /** The role the console rendered for, on a console route. */
+  role?: ViewRole;
   path: string | null;
   unreachable?: string;
   shots: Shot[];
@@ -199,7 +219,11 @@ function writeReport() {
   const results = readdirSync(RESULTS)
     .filter((file) => file.endsWith(".json"))
     .map((file) => JSON.parse(readFileSync(path.join(RESULTS, file), "utf8")) as RouteResult)
-    .sort((a, b) => ROUTES.findIndex((r) => r.name === a.name) - ROUTES.findIndex((r) => r.name === b.name));
+    .sort(
+      (a, b) =>
+        ROUTES.findIndex((r) => r.name === a.name) - ROUTES.findIndex((r) => r.name === b.name) ||
+        ROLES.indexOf(a.role ?? "owner") - ROLES.indexOf(b.role ?? "owner"),
+    );
   const shots = results.flatMap((r) => r.shots.map((s) => ({ route: r, shot: s })));
   const errors = shots.filter(({ shot }) => shot.consoleErrors.length > 0);
   const overflow = shots.filter(({ shot }) => shot.overflowPx > 0);
@@ -216,7 +240,7 @@ function writeReport() {
     "",
     `Generated ${new Date().toISOString()} by \`web/e2e/render-check.spec.ts\` against ${process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000"}.`,
     "",
-    `- Routes: ${results.length} (${results.length - unreachable.length} reached)`,
+    `- Route runs: ${results.length} (${results.length - unreachable.length} reached; console routes run as ${ROLES.join(", ")})`,
     `- Shots: ${shots.length} (${THEMES.length} themes x ${WIDTHS.length} widths per reached route)`,
     `- Shots with console errors: ${errors.length}`,
     `- Shots with horizontal page scroll: ${overflow.length} (fails the check only at 390 px)`,
@@ -227,7 +251,7 @@ function writeReport() {
   ];
   if (errors.length === 0) lines.push("None.", "");
   for (const { route, shot } of errors) {
-    lines.push(`- \`${route.path}\` ${shot.theme} ${shot.width}px:`);
+    lines.push(`- \`${route.path}\`${route.role ? ` as ${route.role}` : ""} ${shot.theme} ${shot.width}px:`);
     for (const message of shot.consoleErrors) lines.push(`  - ${message.replace(/\s+/g, " ").slice(0, 400)}`);
   }
   const accepted = [...new Set(shots.flatMap(({ route, shot }) => (shot.expectedFailures ?? []).map((f) => `\`${route.path}\`: ${f}`)))];
@@ -239,12 +263,12 @@ function writeReport() {
   for (const { route, shot } of overflow) lines.push(`- \`${route.path}\` ${shot.theme} ${shot.width}px: ${shot.overflowPx}px wider than the viewport`);
   lines.push("", "## Unreachable (needs auth or data)", "");
   if (unreachable.length === 0) lines.push("None.", "");
-  for (const route of unreachable) lines.push(`- ${route.name}: ${route.unreachable}`);
+  for (const route of unreachable) lines.push(`- ${route.name}${route.role ? ` as ${route.role}` : ""}: ${route.unreachable}`);
   lines.push("", "## Redirected", "");
   if (redirected.length === 0) lines.push("None.", "");
   for (const { route, shot } of redirected) lines.push(`- \`${route.path}\` ${shot.theme} ${shot.width}px ended at \`${shot.finalUrl}\``);
-  lines.push("", "## Routes", "", "| Route | Path | Shots |", "|---|---|---|");
-  for (const route of results) lines.push(`| ${route.name} | \`${route.path ?? "-"}\` | ${route.shots.length} |`);
+  lines.push("", "## Routes", "", "| Route | Role | Path | Shots |", "|---|---|---|---|");
+  for (const route of results) lines.push(`| ${route.name} | ${route.role ?? "-"} | \`${route.path ?? "-"}\` | ${route.shots.length} |`);
   writeFileSync(path.join(OUT, "render-report.md"), `${lines.join("\n")}\n`);
 }
 
@@ -257,18 +281,41 @@ test.beforeAll(async ({ request }) => {
 
 test.afterAll(() => writeReport());
 
-for (const route of ROUTES) {
-  test(`renders ${route.name} in both themes at 390, 768 and 1440 px`, async ({ page }) => {
+/** A console route renders the shell, so it runs once per role; public routes run once. */
+function isConsoleRoute(route: RouteSpec): boolean {
+  return route.name.startsWith("console");
+}
+
+const RUNS = ROUTES.flatMap((route) =>
+  isConsoleRoute(route) ? ROLES.map((role) => ({ route, role: role as ViewRole | undefined })) : [{ route, role: undefined as ViewRole | undefined }],
+);
+
+for (const { route, role } of RUNS) {
+  const runName = role ? `${route.name}-${role}` : route.name;
+  test(`renders ${route.name}${role ? ` as ${role}` : ""} in both themes at 390, 768 and 1440 px`, async ({ page }) => {
     test.setTimeout(600_000);
     const target = typeof route.path === "function" ? route.path(ids ?? {}) : route.path;
-    const result: RouteResult = { name: route.name, path: target, shots: [] };
-    const save = () => writeFileSync(path.join(RESULTS, `${route.name}.json`), JSON.stringify(result, null, 2));
+    const result: RouteResult = { name: route.name, role, path: target, shots: [] };
+    const save = () => writeFileSync(path.join(RESULTS, `${runName}.json`), JSON.stringify(result, null, 2));
     if (!target) {
       result.unreachable = `no ${route.needs ?? "data"} in the dev api`;
       save();
       test.skip(true, result.unreachable);
       return;
     }
+
+    // The view-as switch reads this before the console renders; owner (the real role) clears it.
+    await page.addInitScript(
+      ([key, value]) => {
+        try {
+          if (value === "owner") window.localStorage.removeItem(key);
+          else window.localStorage.setItem(key, value);
+        } catch {
+          // Storage blocked: the badge check below reports the role run as unreachable.
+        }
+      },
+      [VIEW_AS_STORAGE_KEY, role ?? "owner"] as const,
+    );
 
     const consoleErrors: string[] = [];
     const expectedFailures: string[] = [];
@@ -299,7 +346,17 @@ for (const route of ROUTES) {
           const doc = document.documentElement;
           return Math.max(doc.scrollWidth, document.body.scrollWidth) - doc.clientWidth;
         });
-        const file = `${route.name}-${theme}-${width}.png`;
+        if (role && role !== "owner" && (await page.locator('[data-slot="top-bar"]').count()) > 0) {
+          const badge = page.locator(`[data-slot="dev-view-as-badge"][data-role="${role}"]`);
+          if ((await badge.count()) === 0) {
+            result.unreachable =
+              "the view-as switch is unavailable (it needs `next dev` with the admin bypass), so this role could not be rendered";
+            save();
+            test.skip(true, result.unreachable);
+            return;
+          }
+        }
+        const file = `${runName}-${theme}-${width}.png`;
         await page.screenshot({ path: path.join(OUT, file), fullPage: width !== 390 });
         const shot: Shot = {
           theme,

@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import { useMe } from "@/components/console/shell/use-me";
+import { devViewAsAllowed, useDevViewAsChoice, viewAsRole } from "@/components/console/lib/dev-view-as";
 import type { WorkspaceMembership } from "@/contracts/lkap-contracts";
 import type { ApiKeyOut, AuditOut, MemberOut, Page, WorkspaceOut } from "./api-types";
 
@@ -30,14 +31,23 @@ export interface ActiveWorkspaceState {
   isLoading: boolean;
 }
 
-/** The workspace the Settings tabs act on, and the caller's role in it. */
+/**
+ * The workspace the Settings tabs act on, and the caller's role in it: the
+ * role every permission check in the console reads. In development under the
+ * admin bypass, the "view as" switch (`lib/dev-view-as.ts`) can lower that
+ * role for rendering only; the server still answers as the real role.
+ */
 export function useActiveWorkspace(): ActiveWorkspaceState {
   const { me, isLoading } = useMe();
+  const viewAs = useDevViewAsChoice();
   const workspace = React.useMemo(() => {
     const workspaces = me?.workspaces ?? [];
     const slug = readActiveWorkspaceCookie();
-    return workspaces.find((w) => w.slug === slug) ?? workspaces[0];
-  }, [me]);
+    const found = workspaces.find((w) => w.slug === slug) ?? workspaces[0];
+    if (!found) return found;
+    const role = viewAsRole(found.role, viewAs, devViewAsAllowed(me?.user.id));
+    return role === found.role ? found : { ...found, role };
+  }, [me, viewAs]);
   return { workspace, isLoading };
 }
 

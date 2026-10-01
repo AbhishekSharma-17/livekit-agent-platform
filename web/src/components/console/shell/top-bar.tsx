@@ -16,6 +16,7 @@ import {
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useActiveWorkspace } from "@/components/console/settings/use-settings-queries";
 import { cn } from "@/lib/utils";
+import { DevViewAsBadge } from "./dev-view-as";
 import { navLabelForPath } from "./nav-config";
 import { useBreadcrumbTrail } from "./breadcrumb-context";
 
@@ -70,6 +71,7 @@ export function TopBar() {
           })}
         </BreadcrumbList>
       </Breadcrumb>
+      {process.env.NODE_ENV === "development" ? <DevViewAsBadge /> : null}
     </header>
   );
 }

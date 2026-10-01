@@ -9,6 +9,7 @@ import { ThemeSwitcher } from "@/components/shared/theme-switcher";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BREAK_GLASS_USER_ID, signOut } from "@/components/console/lib/sign-out";
 import { cn } from "@/lib/utils";
+import { DevViewAsMenuGroup } from "./dev-view-as";
 import { useMe } from "./use-me";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
@@ -33,7 +34,8 @@ function Separator() {
  * The account menu at the foot of the sidebar (docs/ui/DESIGN-SYSTEM.md
  * section 7.1): avatar, name and email, then a popover with the workspace
  * switcher, the profile link, appearance (the System / Light / Dark theme
- * switcher) and sign out. It is on every console screen: in the sidebar on
+ * switcher), in development under the admin bypass a "Development" group
+ * with the view-as role switch (`dev-view-as.tsx`), and sign out. It is on every console screen: in the sidebar on
  * desktop and in the Menu dialog at 820 px and below.
  *
  * While `auth/me` isn't available (the admin-token mode), there is no person
@@ -114,6 +116,13 @@ export function AccountMenu({ version, touch = false }: { version?: string; /** 
           </span>
           <ThemeSwitcher />
         </div>
+        {/* Development only, under the admin bypass (decision O6); folded away in production builds. */}
+        {process.env.NODE_ENV === "development" && breakGlass ? (
+          <>
+            <Separator />
+            <DevViewAsMenuGroup />
+          </>
+        ) : null}
         {user ? (
           <>
             <Separator />

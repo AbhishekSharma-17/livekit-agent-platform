@@ -121,7 +121,7 @@ describe("sign-in showcase code splitting", () => {
     expect(packages.has("framer-motion")).toBe(false);
   });
 
-  it("ships only the director to the browser: the scene markup stays on the server", () => {
+  it("ships only the director to the browser and keeps the scene markup on the server", () => {
     expect(read("app/login/sign-in-showcase.tsx")).not.toMatch(/^\s*["']use client["']/);
     expect(read("app/login/showcase-director.tsx")).toMatch(/^["']use client["']/);
     const director = staticGraph(["app/login/showcase-director.tsx"]);

@@ -547,7 +547,7 @@ describe("collapsible sidebar", () => {
     expect(await screen.findByRole("radiogroup", { name: "Theme" })).toBeTruthy();
   });
 
-  it("has no rail at 820 px and below: no collapse control in the Menu dialog, and the shortcut does nothing", async () => {
+  it("has no rail at 820 px and below, with no collapse control in the Menu dialog and a shortcut that does nothing", async () => {
     setViewportWidth(820);
     renderShell();
     const aside = sidebar();

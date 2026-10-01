@@ -289,7 +289,7 @@ describe("SignInShowcase", () => {
     setVisibility("visible");
   });
 
-  it("is a decorative scene: hidden from assistive tech, nothing focusable, the call and the panel in place", () => {
+  it("is a decorative scene, hidden from assistive tech with nothing focusable, the call and the panel in place", () => {
     stubMotion(true);
     render(<LoginPage />);
 

@@ -14,7 +14,10 @@ the row is loaded by id, the nonce compared in constant time against the
 stored hash, the pending state claimed with a conditional ``UPDATE`` (single
 use), the expiry and the ``connected_account_id`` checked, and finally
 Composio asked whether that account is ``ACTIVE`` for the row's own subject.
-Nothing from the query string is trusted on its own.
+Nothing from the query string is trusted on its own. V6-36: ``user_id`` is
+deprecated on Composio's account read, so the owner is confirmed by the
+account's own id, auth config and toolkit, and, when ``user_id`` is missing, by
+the ``user_ids`` filter of the account list (:func:`_verify_owner`).
 
 Secrets: the key reaches an adapter and nothing else; ``fields`` typed in a
 Connect dialog are forwarded to Composio and dropped. No log line, audit
@@ -202,8 +205,12 @@ def api_error(exc: ToolProviderError) -> ApiError:
         case ToolProviderNotFoundError():
             return NotFoundError(f"Composio has no such object: {exc.message}")
         case ToolProviderRateLimitedError():
+            details: dict[str, Any] = {"reason": exc.reason}
+            if exc.retry_after_s is not None:
+                # V6-36: Composio's own Retry-After (its per-organisation one-minute window).
+                details["retry_after_s"] = round(max(exc.retry_after_s, 0.1), 1)
             return RateLimitedError(
-                "Composio is rate limiting this workspace. Try again shortly", details={"reason": exc.reason}
+                "Composio is rate limiting this workspace. Try again shortly", details=details
             )
         case ToolProviderRequestError():
             return UnprocessableEntityError(
@@ -1415,6 +1422,30 @@ async def _start_link(
     )
 
 
+async def _key_account_state(
+    adapter: ToolProviderAdapter, account_id: str | None, created: dict[str, Any]
+) -> tuple[ConnectionStatus, dict[str, Any]]:
+    """The status of an account just created from key fields, and the best record of it.
+
+    ``status`` on the create answer is deprecated (V6-36): it is read when present, then
+    ``connectionData.val.status``, then the account itself (``GET``, which also carries the
+    display name). Composio validates key fields on create, so an account it created with
+    no readable status counts as active, as before.
+    """
+    status = vendor_status(created.get("status"))
+    if status == "unknown":
+        status = vendor_status(_dict(_dict(created.get("connectionData")).get("val")).get("status"))
+    if status != "unknown" or not account_id:
+        return status, created
+    try:
+        account = await adapter.get_connection(account_id)
+    except ToolProviderError as exc:
+        log.info("apps_key_account_read_failed", reason=exc.reason)
+        return "active", created
+    status = vendor_status(account.get("status"))
+    return ("active" if status == "unknown" else status), account
+
+
 async def connect(
     db: AsyncSession,
     vault: Vault,
@@ -1543,9 +1574,9 @@ async def connect(
                     fields=dict(payload.fields),
                 )
             conn.connected_account_id = _str(created_account.get("id")) or None
-            conn.status = vendor_status(created_account.get("status"))
-            if conn.status == "unknown" and conn.connected_account_id:
-                conn.status = "active"
+            conn.status, created_account = await _key_account_state(
+                adapter, conn.connected_account_id, created_account
+            )
             if conn.status == "active":
                 conn.connected_at = now
                 await _after_activation(
@@ -1612,9 +1643,7 @@ async def reconnect(
                 )
                 old = conn.connected_account_id
                 conn.connected_account_id = _str(created.get("id")) or None
-                conn.status = vendor_status(created.get("status"))
-                if conn.status == "unknown" and conn.connected_account_id:
-                    conn.status = "active"
+                conn.status, created = await _key_account_state(adapter, conn.connected_account_id, created)
                 conn.alias = None  # the new account has none until the old one gives it up
                 if conn.status == "active":
                     conn.connected_at, conn.needs_reconnect = now, False
@@ -1647,6 +1676,70 @@ class CallbackOutcome:
     ok: bool
     reason: str
     connection_id: str | None = None
+
+
+def _account_mismatch(conn: AppConnection, account: dict[str, Any], *, toolkit: bool = True) -> str | None:
+    """The cheap checks of an account read against the row (V6-36): a reason, or ``None``.
+
+    Each field is compared only when Composio sent it (and, for the auth config, when the
+    row recorded one), so a field Composio drops, or a bag written before it was kept,
+    never turns a good account bad. ``user_id`` is deprecated on this read: when present it
+    must match; when absent the callback asks the list filter (:func:`_verify_owner`). A
+    status check passes ``toolkit=False``: an existing account is never failed on a slug
+    spelling, only on an id that LKAP recorded itself.
+    """
+    account_id = _str(account.get("id"))
+    if account_id and account_id != conn.connected_account_id:
+        return "account_mismatch"
+    auth_config_id = _str(_dict(account.get("auth_config")).get("id"))
+    if auth_config_id and conn.auth_config_id and auth_config_id != conn.auth_config_id:
+        return "auth_config_mismatch"
+    slug = _str(_dict(account.get("toolkit")).get("slug")).lower()
+    if toolkit and slug and conn.toolkit and slug != conn.toolkit:
+        return "toolkit_mismatch"
+    owner = _str(account.get("user_id"))
+    if owner and owner != conn.subject:
+        return "subject_mismatch"
+    return None
+
+
+async def _verify_owner(
+    adapter: ToolProviderAdapter, conn: AppConnection, account: dict[str, Any]
+) -> str | None:
+    """Whether ``account`` is the one LKAP linked for ``conn``'s subject (D-V5-C5, V6-36).
+
+    The binding itself is the flow nonce and the connected account id Composio returned to
+    LKAP's own ``link`` call (server to server, under the workspace key, for that subject);
+    this is the vendor-side confirmation on top. The account read's ``user_id`` is
+    deprecated ("you will only be able to read via userId"), so when it is missing the owner
+    is confirmed the supported way: ``GET /connected_accounts?user_ids=<subject>&
+    connected_account_ids=<id>`` must list the account. A failed or empty answer refuses
+    (fail closed). Nothing here logs an id, the subject or a vendor answer.
+
+    Returns:
+        ``None`` when verified, else the audit reason.
+    """
+    mismatch = _account_mismatch(conn, account)
+    if mismatch is not None:
+        return mismatch
+    if _str(account.get("user_id")):
+        return None
+    assert conn.connected_account_id is not None
+    try:
+        listed = await adapter.list_connections(
+            user_ids=[conn.subject], connected_account_ids=[conn.connected_account_id], limit=10
+        )
+    except ToolProviderError:
+        return "verify_failed"
+    for raw in _list(listed.get("items")):
+        item = _dict(raw)
+        if _str(item.get("id")) != conn.connected_account_id:
+            continue
+        owner = _str(item.get("user_id"))
+        if owner and owner != conn.subject:
+            return "subject_mismatch"
+        return None
+    return "subject_unverified"
 
 
 def _split_flow(flow: str | None) -> tuple[str, str] | None:
@@ -1724,8 +1817,10 @@ async def handle_callback(
         account = await adapter.get_connection(conn.connected_account_id)
     except (ToolProviderError, ApiError):
         return fail("verify_failed", consume=True)
-    if _str(account.get("user_id")) != conn.subject:
-        return fail("subject_mismatch", consume=True)
+    # V6-36: the owner is confirmed without relying on the deprecated ``user_id`` alone.
+    refused = await _verify_owner(adapter, conn, account)
+    if refused is not None:
+        return fail(refused, consume=True)
     if vendor_status(account.get("status")) != "active":
         return fail("not_active", consume=True)
     old = conn.previous_account_id
@@ -1781,7 +1876,9 @@ async def refresh_connection(
     except ToolProviderError as exc:
         raise api_error(exc) from exc
     else:
-        if _str(account.get("user_id")) and _str(account.get("user_id")) != conn.subject:
+        # V6-36: the cheap checks only (the owner was confirmed at the callback); a field
+        # Composio no longer sends is skipped, never read as a mismatch.
+        if _account_mismatch(conn, account, toolkit=False) is not None:
             conn.status = "failed"
         else:
             conn.status = vendor_status(account.get("status"))

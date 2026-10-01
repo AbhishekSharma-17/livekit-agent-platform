@@ -22,7 +22,13 @@ from lkap_contracts.tools import ProviderToolDefinition, ToolExecution
 from lkap_agent.observability import SessionObserver
 from lkap_agent.tools.declarative import build_http_tools
 from lkap_agent.tools.execution import policy_of
-from lkap_agent.tools.provider import EXECUTE_BASE, REAUTH_MESSAGE, build_provider_tool, spoken_safe
+from lkap_agent.tools.provider import (
+    BUSY_MESSAGE,
+    EXECUTE_BASE,
+    REAUTH_MESSAGE,
+    build_provider_tool,
+    spoken_safe,
+)
 
 KEY = "ak_placeholder_resolved_key"
 
@@ -205,6 +211,22 @@ async def test_auth_shaped_failures_become_the_admin_reconnect_message(response:
 async def test_a_vendor_5xx_is_a_short_error_not_a_crash() -> None:
     with pytest.raises(ToolError, match="Try later"):
         await _call(_definition(), Composio(httpx.Response(503, json={"error": {"message": "Try later."}})))
+
+
+async def test_a_composio_rate_limit_is_a_spoken_safe_busy_message_not_a_reconnect() -> None:
+    """V6-36: a 429 is the organisation's budget; the vendor sentence and any link stay out."""
+    response = httpx.Response(
+        429,
+        json={
+            "error": {"message": "Rate limit exceeded. Unauthorized burst, see https://x.example.com/limits"}
+        },
+        headers={"retry-after": "12"},
+    )
+
+    with pytest.raises(ToolError) as caught:
+        await _call(_definition(), Composio(response))
+
+    assert str(caught.value) == BUSY_MESSAGE
 
 
 def test_spoken_safe_strips_links_and_keeps_one_sentence() -> None:

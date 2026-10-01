@@ -344,6 +344,10 @@ class SchemaRefreshOut(BaseModel):
         description="Whether the account's label was put in front of the description (the app has "
         "several accounts; written only with apply)",
     )
+    deprecated: bool = Field(
+        False,
+        description="Whether Composio marks the action deprecated (it may be removed; pick a replacement)",
+    )
 
 
 def schema_diff(before: dict[str, Any], after: dict[str, Any]) -> tuple[list[str], list[str], list[str]]:
@@ -371,7 +375,12 @@ async def load_provider_tool(db: AsyncSession, ctx: WorkspaceContext, tool_id: s
 
 
 def refresh_result(
-    tool: Tool, action: AppActionOut, *, apply: bool, account: AccountNaming | None = None
+    tool: Tool,
+    action: AppActionOut,
+    *,
+    apply: bool,
+    account: AccountNaming | None = None,
+    deprecated: bool = False,
 ) -> SchemaRefreshOut:
     """Compare a tool's pinned schema with the action's current one; with ``apply``, write it.
 
@@ -411,6 +420,7 @@ def refresh_result(
         required_before=_required(definition.parameters),
         required_after=_required(fresh),
         description_prefixed="description" in updates,
+        deprecated=deprecated,
     )
 
 

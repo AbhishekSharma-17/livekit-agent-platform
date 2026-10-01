@@ -11,6 +11,14 @@ Wire shapes that differ from the SDK's names: a custom auth config sends
 ``authScheme`` (camel case) inside ``auth_config``; a key-based connection is
 ``POST /connected_accounts`` with ``connection.state = {authScheme, val:
 {status: "ACTIVE", …fields}}`` (``val.status`` is required).
+
+V6-36 (re-read 2026-10-01, docs/v5/COMPOSIO.md "V6-36 changes"): direct HTTP on
+v3.1 stays (the ``composio`` SDK is pre-1.0, pins a release-candidate client and
+uses ``requests``, which would bypass the guarded client). ``GET /tools`` takes
+``query`` (``search`` is deprecated there; ``/toolkits`` still documents
+``search``); an account's owner is read through the ``user_ids`` filter of
+``GET /connected_accounts`` because ``user_id`` is deprecated on the account
+itself; a 429 carries ``Retry-After``.
 """
 
 from __future__ import annotations
@@ -57,6 +65,18 @@ def _clean(params: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _retry_after(response: httpx.Response) -> float | None:
+    """``Retry-After`` in seconds (Composio sends seconds on a 429), or ``None``."""
+    raw = response.headers.get("retry-after")
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    return value if 0 <= value <= 3600 else None
+
+
 def _error_for(response: httpx.Response) -> ToolProviderError:
     """Map a vendor error response to a scrubbed, typed error."""
     message = f"Composio answered HTTP {response.status_code}"
@@ -81,7 +101,9 @@ def _error_for(response: httpx.Response) -> ToolProviderError:
     if status == 404:
         return ToolProviderNotFoundError(message, status=status, vendor_code=vendor_code)
     if status == 429:
-        return ToolProviderRateLimitedError(message, status=status, vendor_code=vendor_code)
+        return ToolProviderRateLimitedError(
+            message, status=status, vendor_code=vendor_code, retry_after_s=_retry_after(response)
+        )
     if 400 <= status < 500:
         return ToolProviderRequestError(message, status=status, vendor_code=vendor_code)
     return ToolProviderUnavailableError(message, status=status, vendor_code=vendor_code)
@@ -193,16 +215,18 @@ class ComposioAdapter:
         tool_slugs: list[str] | None = None,
         cursor: str | None = None,
         limit: int = 50,
+        include_deprecated: bool = False,
     ) -> dict[str, Any]:
-        """``GET /tools``."""
+        """``GET /tools`` (the text goes in ``query``: ``search`` is deprecated on this route)."""
         return await self._object(
             "GET",
             "/tools",
             params={
                 "toolkit_slug": toolkit,
-                "search": search,
+                "query": search,
                 "important": True if important else None,
                 "tool_slugs": ",".join(tool_slugs) if tool_slugs else None,
+                "include_deprecated": True if include_deprecated else None,
                 "cursor": cursor,
                 "limit": limit,
             },
@@ -279,6 +303,26 @@ class ComposioAdapter:
         """``GET /connected_accounts/{id}``."""
         return await self._object("GET", f"/connected_accounts/{_seg(connected_account_id)}")
 
+    async def list_connections(
+        self,
+        *,
+        user_ids: list[str] | None = None,
+        connected_account_ids: list[str] | None = None,
+        auth_config_ids: list[str] | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """``GET /connected_accounts`` filtered by owner, id and auth config (comma-joined)."""
+        return await self._object(
+            "GET",
+            "/connected_accounts",
+            params={
+                "user_ids": ",".join(user_ids) if user_ids else None,
+                "connected_account_ids": ",".join(connected_account_ids) if connected_account_ids else None,
+                "auth_config_ids": ",".join(auth_config_ids) if auth_config_ids else None,
+                "limit": limit,
+            },
+        )
+
     async def delete_connection(self, connected_account_id: str) -> None:
         """``DELETE /connected_accounts/{id}``."""
         await self._call("DELETE", f"/connected_accounts/{_seg(connected_account_id)}")
@@ -309,19 +353,6 @@ class ComposioAdapter:
             "/tools/execute/proxy",
             json={"endpoint": endpoint, "method": method, "connected_account_id": connected_account_id},
         )
-
-    async def create_mcp_server(
-        self, *, name: str, auth_config_ids: list[str], allowed_tools: list[str] | None = None
-    ) -> dict[str, Any]:
-        """``POST /mcp/servers`` (Composio marks this API deprecated in favour of sessions)."""
-        body: dict[str, Any] = {"name": name, "auth_config_ids": auth_config_ids}
-        if allowed_tools is not None:
-            body["allowed_tools"] = allowed_tools
-        return await self._object("POST", "/mcp/servers", json=body)
-
-    async def delete_mcp_server(self, server_id: str) -> None:
-        """``DELETE /mcp/{id}``."""
-        await self._call("DELETE", f"/mcp/{_seg(server_id)}")
 
     async def create_router_session(self, *, subject: str, options: dict[str, Any]) -> dict[str, Any]:
         """``POST /tool_router/session``."""

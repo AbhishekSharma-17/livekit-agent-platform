@@ -33,7 +33,9 @@ money). App names and descriptions are vendor text and come back as
 - `managed`: Composio's shared sign-in. The result's `redirect_url` is a
   consent page **for the human**. Give it to the user to open in their
   browser. Never open it yourself. It expires in about ten minutes. After
-  signing in, the browser lands back in the console.
+  signing in, the browser lands back in the console. The platform accepts
+  the sign-in only for the account it started, for this workspace or agent,
+  and confirms the owner with Composio before the connection turns `active`.
 - `custom_oauth`: the same, with the workspace's own OAuth app (`fields`:
   `client_id`, `client_secret`).
 - `api_key`: the app's own key in `fields`. Connects at once.
@@ -130,7 +132,10 @@ Composio's own host is ever contacted. When an app's sign-in has expired, the
 agent says the app needs to be reconnected by an admin (it never reads out
 a sign-in link) and the session records `tool_needs_reauth`. A tool's
 inputs can be compared with Composio's current ones with
-`POST /v1/tool-providers/composio/tools/{id}/refresh-schema`.
+`POST /v1/tool-providers/composio/tools/{id}/refresh-schema`, whose answer
+also says when Composio has deprecated the action (`deprecated`). When
+Composio rate limits the workspace, the agent says the app service is busy,
+and an api call answers `429` with `retry_after_s` when Composio sent one.
 
 ## Related tools
 

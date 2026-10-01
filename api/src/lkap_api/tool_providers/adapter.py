@@ -52,9 +52,20 @@ class ToolProviderNotFoundError(ToolProviderError):
 
 
 class ToolProviderRateLimitedError(ToolProviderError):
-    """The vendor is rate limiting us (429)."""
+    """The vendor is rate limiting us (429). ``retry_after_s`` is the vendor's ``Retry-After``."""
 
     reason = "rate_limited"
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = None,
+        vendor_code: str | None = None,
+        retry_after_s: float | None = None,
+    ) -> None:
+        super().__init__(message, status=status, vendor_code=vendor_code)
+        self.retry_after_s = retry_after_s
 
 
 class ToolProviderRequestError(ToolProviderError):
@@ -110,8 +121,9 @@ class ToolProviderAdapter(Protocol):
         tool_slugs: list[str] | None = None,
         cursor: str | None = None,
         limit: int = 50,
+        include_deprecated: bool = False,
     ) -> dict[str, Any]:
-        """A page of tools (actions)."""
+        """A page of tools (actions); deprecated ones only with ``include_deprecated``."""
         ...
 
     async def create_auth_config(
@@ -152,7 +164,22 @@ class ToolProviderAdapter(Protocol):
         ...
 
     async def get_connection(self, connected_account_id: str) -> dict[str, Any]:
-        """One connected account (``status``, ``user_id``)."""
+        """One connected account (``status``, ``auth_config``, ``toolkit``; ``user_id`` is deprecated)."""
+        ...
+
+    async def list_connections(
+        self,
+        *,
+        user_ids: list[str] | None = None,
+        connected_account_ids: list[str] | None = None,
+        auth_config_ids: list[str] | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Connected accounts filtered by owner, id or auth config (``items``).
+
+        The ``user_ids`` filter is how Composio says an account's owner is read now that
+        ``user_id`` is deprecated on the account itself (V6-36).
+        """
         ...
 
     async def delete_connection(self, connected_account_id: str) -> None:
@@ -176,16 +203,6 @@ class ToolProviderAdapter(Protocol):
 
         Returns ``{data, status, headers}``; the vendor attaches the account's auth.
         """
-        ...
-
-    async def create_mcp_server(
-        self, *, name: str, auth_config_ids: list[str], allowed_tools: list[str] | None = None
-    ) -> dict[str, Any]:
-        """Create an app server (MCP) config (V5-47)."""
-        ...
-
-    async def delete_mcp_server(self, server_id: str) -> None:
-        """Delete an app server config (V5-47)."""
         ...
 
     async def create_router_session(self, *, subject: str, options: dict[str, Any]) -> dict[str, Any]:

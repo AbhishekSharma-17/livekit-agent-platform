@@ -20,7 +20,7 @@ import { useTemplate } from "@/components/console/agents/create/use-templates";
 import { formatUsd } from "@/components/console/lib/cost-hooks";
 import type { AgentEditorForm, ProviderRefForm } from "@/components/console/lib/schemas";
 import type { AgentOut, ProviderSpec } from "@/contracts/lkap-contracts";
-import { EMPTY_VALUE, pluralize } from "@/lib/format";
+import { pluralize, UNKNOWN_COST } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { resolveBoundConnection } from "@/components/console/agents/providers-section/connection-gate";
@@ -403,11 +403,11 @@ export function SummaryRail({ agent, slots, className, onNavigate }: SummaryRail
           {costEstimate.estimate?.per_minute_usd ? (
             <span className="flex flex-col gap-0.5 tabular-nums">
               <span>
-                ≈ {formatUsd(costEstimate.estimate.per_minute_usd.mid) ?? EMPTY_VALUE}/min · estimate
+                ≈ {formatUsd(costEstimate.estimate.per_minute_usd.mid) ?? UNKNOWN_COST}/min · estimate
               </span>
               <span className="text-caption text-text-secondary">
-                typically {formatUsd(costEstimate.estimate.per_minute_usd.low) ?? EMPTY_VALUE} to{" "}
-                {formatUsd(costEstimate.estimate.per_minute_usd.high) ?? EMPTY_VALUE}
+                typically {formatUsd(costEstimate.estimate.per_minute_usd.low) ?? UNKNOWN_COST} to{" "}
+                {formatUsd(costEstimate.estimate.per_minute_usd.high) ?? UNKNOWN_COST}
               </span>
             </span>
           ) : costEstimate.isLoading ? (

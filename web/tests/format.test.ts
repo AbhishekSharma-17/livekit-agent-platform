@@ -66,8 +66,8 @@ describe("date formatting", () => {
   });
 
   it("returns an em dash for invalid input", () => {
-    expect(formatDateTime("nope")).toBe("None");
-    expect(formatTime("nope")).toBe("None");
+    expect(formatDateTime("nope")).toBe("Not set");
+    expect(formatTime("nope")).toBe("Not set");
   });
 
   it.each([
@@ -100,7 +100,7 @@ describe("formatDuration", () => {
   });
 
   it.each([[-1], [Number.NaN], [Number.POSITIVE_INFINITY]])("returns an em dash for %s", (ms) => {
-    expect(formatDuration(ms)).toBe("None");
+    expect(formatDuration(ms)).toBe("Not set");
   });
 });
 
@@ -118,7 +118,7 @@ describe("formatBytes", () => {
   });
 
   it("returns an em dash for negative input", () => {
-    expect(formatBytes(-5)).toBe("None");
+    expect(formatBytes(-5)).toBe("Not set");
   });
 });
 

@@ -460,6 +460,6 @@ describe("Section, DescriptionList, VendorMark, CapabilityBadge, Kbd, RelativeTi
     expect(document.querySelector("time")?.textContent).toMatch(/^19 Sep, \d{2}:\d{2} \(4 min ago\)$/);
     rerender(<RelativeTime iso="garbage" />);
     expect(document.querySelector("time")).toBeNull();
-    expect(screen.getByText("None")).toBeTruthy();
+    expect(screen.getByText("Not set")).toBeTruthy();
   });
 });

@@ -235,7 +235,7 @@ describe("formatting helpers", () => {
     expect(formatOffset(START + 125_000, START)).toBe("02:05");
     expect(formatOffset(START + 3_723_000, START)).toBe("1:02:03");
     expect(formatOffset(START - 2_000, START)).toBe("−00:02");
-    expect(formatOffset(Number.NaN, START)).toBe("None");
+    expect(formatOffset(Number.NaN, START)).toBe("Not set");
   });
 
   it("summarises state runs, compressing a repeating cycle", () => {

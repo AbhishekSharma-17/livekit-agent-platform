@@ -24,7 +24,6 @@ import { ErrorBanner, errorMessage } from "@/components/console/shared/error-ban
 import { useCan } from "@/components/console/shared/permission";
 import { useConnectionFleet, useConnections, useSetDefaultConnection, useTestConnection } from "@/hooks/useConnections";
 import type { ConnectionOut } from "@/contracts/lkap-contracts";
-import { EMPTY_VALUE } from "@/lib/format";
 
 /** Admins add connections (`auth/roles.py::ROUTE_POLICY`: `/v1/connections` writes need `admin`). */
 const READ_ONLY_NOTE = "Ask an admin to add connections.";
@@ -169,10 +168,7 @@ function FleetCell({ connectionId, deploymentMode }: { connectionId: string; dep
   const { data } = useConnectionFleet(connectionId, { poll: false });
   if (deploymentMode !== "supervised") {
     return (
-      <span className="text-label text-text-tertiary">
-        <span aria-hidden="true">{EMPTY_VALUE}</span>
-        <span className="sr-only">Not managed here</span>
-      </span>
+      <span className="text-label text-text-tertiary">Not managed here</span>
     );
   }
   const health = fleetHealth(data?.desired_replicas, data?.instances);

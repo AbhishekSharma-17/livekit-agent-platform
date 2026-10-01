@@ -193,7 +193,7 @@ export function DatasetList() {
                 <div className="truncate font-medium text-foreground">
                   <Highlight text={dataset.name} query={query} />
                 </div>
-                <div className="truncate text-caption text-text-secondary">Matches on {keysOf(dataset) || EMPTY_VALUE}</div>
+                <div className="truncate text-caption text-text-secondary">Matches on {keysOf(dataset) || "no columns"}</div>
                 {failedLine(dataset)}
               </div>
               <DatasetStatus dataset={dataset} size="sm" />

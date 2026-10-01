@@ -51,8 +51,8 @@ describe("formatUsageValue", () => {
   });
 
   it("renders null/undefined as an em dash", () => {
-    expect(formatUsageValue(null)).toBe("None");
-    expect(formatUsageValue(undefined)).toBe("None");
+    expect(formatUsageValue(null)).toBe("Not set");
+    expect(formatUsageValue(undefined)).toBe("Not set");
   });
 
   it("falls back to JSON for nested values (describeUsage never passes them)", () => {

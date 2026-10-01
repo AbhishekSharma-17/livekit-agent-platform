@@ -61,7 +61,9 @@ function calendarParts(date: Date, timeZone?: string): { day: number; month: num
  * that never started, an unset name). One constant so the console says it the
  * same way everywhere. The house copy style has no em dash (UI-R2b).
  */
-export const EMPTY_VALUE = "None";
+export const EMPTY_VALUE = "Not set";
+/** Shown where a price or cost can't be worked out (never read as zero). */
+export const UNKNOWN_COST = "unknown";
 
 /**
  * "19 Sep, 03:04" (adds the year when it isn't the current year). Month

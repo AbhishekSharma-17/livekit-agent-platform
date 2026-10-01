@@ -298,7 +298,7 @@ export const KbDocuments = React.forwardRef<KbDocumentsHandle, { kbId: string }>
                 <div className="min-w-0 flex-1">
                   <div className="truncate">
                     {item.name}
-                    {item.status === "uploading" ? <span className="text-text-secondary"> — uploading…</span> : null}
+                    {item.status === "uploading" ? <span className="text-text-secondary"> (uploading…)</span> : null}
                   </div>
                   {item.message ? <div className="text-caption text-destructive-text">{item.message}</div> : null}
                 </div>

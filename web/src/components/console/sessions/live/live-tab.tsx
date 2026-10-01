@@ -203,7 +203,7 @@ function LiveStatusBanner({
       <Alert variant="warning">
         <Icon as={CircleAlertIcon} size="md" />
         <AlertDescription>
-          Your connection to this call dropped — most likely your listen-in link expired after 15 minutes.
+          Your connection to this call dropped. Most likely your listen-in link expired after 15 minutes.
         </AlertDescription>
         <AlertAction>
           <Button type="button" size="sm" variant="secondary" onClick={onReconnect}>
@@ -238,7 +238,7 @@ function LiveStatusBanner({
     return (
       <Alert variant="info">
         <Icon as={ClockIcon} size="md" />
-        <AlertDescription>Your listen-in link expires soon; you may need to reconnect shortly.</AlertDescription>
+        <AlertDescription>Your listen-in link expires soon. You may need to reconnect shortly.</AlertDescription>
       </Alert>
     );
   }

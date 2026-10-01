@@ -133,7 +133,7 @@ export function SessionPanelTab({ session }: { session: SessionDetailOut }) {
         <EmptyState
           icon={LayoutPanelLeftIcon}
           title="No panel state was saved for this call"
-          description="The agent saves the panel when the call ends; this session ended before it could."
+          description="The agent saves the panel when the call ends. This session ended before it could."
         />
       ) : agentQuery.isLoading ? (
         <Skeleton className="h-96 w-full" />

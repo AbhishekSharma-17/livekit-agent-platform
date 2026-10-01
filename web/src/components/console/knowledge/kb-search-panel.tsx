@@ -151,7 +151,7 @@ export function KbSearchPanel({ kbId }: { kbId: string }) {
       if (outcome.status === "fulfilled") {
         const warnings = outcome.value.warnings ?? [];
         nextResults[key] = outcome.value.hits;
-        if (warnings.length > 0) nextErrors[key] = plainStatusError(warnings[0].message, "This setting had a problem; its results may be incomplete.");
+        if (warnings.length > 0) nextErrors[key] = plainStatusError(warnings[0].message, "This setting had a problem, so its results may be incomplete.");
         anyOk = true;
       } else {
         nextResults[key] = [];

@@ -104,7 +104,7 @@ export function FlowSection({ agent }: { agent: AgentOut }) {
         >
           base instructions (apply to every node)
         </button>
-        , then the global rules, then the step&apos;s own instructions. Click a node or path to edit it; drag
+        , then the global rules, then the step&apos;s own instructions. Click a node or path to edit it, and drag
         from a node&apos;s bottom handle to connect it.
       </p>
       <FlowCanvas agent={agent} />

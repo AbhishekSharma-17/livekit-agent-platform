@@ -110,7 +110,7 @@ export function ModeSwitchChip({ agent }: { agent: AgentOut }) {
             <DialogDescription>
               {toFlow
                 ? "Calls will follow a graph of steps with their own instructions, tools and paths. Your instructions stay as the base prompt for every step. We'll start you with a start node and one step."
-                : `Calls will use the instructions alone. The flow (${stepCount} ${stepCount === 1 ? "node" : "nodes"}) is removed when you save — you can bring it back from version history.`}
+                : `Calls will use the instructions alone. The flow (${stepCount} ${stepCount === 1 ? "node" : "nodes"}) is removed when you save. You can bring it back from version history.`}
             </DialogDescription>
           </DialogHeader>
           <p className="text-label text-text-secondary">Nothing changes until you save.</p>

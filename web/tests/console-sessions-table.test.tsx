@@ -276,14 +276,14 @@ describe("SessionsTable — columns, links, pagination", () => {
 
     expect(await (await loadedTable()).findByText("room-0")).toBeTruthy();
     expect(table().queryByText("room-25")).toBeNull();
-    expect(screen.getByText("1–25 of 30")).toBeTruthy();
+    expect(screen.getByText("1 to 25 of 30")).toBeTruthy();
     expect(screen.getByText("Page 1 of 2")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(table().getByText("room-29")).toBeTruthy();
     expect(table().queryByText("room-0")).toBeNull();
-    expect(screen.getByText("26–30 of 30")).toBeTruthy();
+    expect(screen.getByText("26 to 30 of 30")).toBeTruthy();
     expect(routerReplace).toHaveBeenLastCalledWith("/console/sessions?page=2", { scroll: false });
   });
 

@@ -62,7 +62,7 @@ export function RecordingTab({ session }: SessionTabProps) {
             ? (recording.error ?? "The recording could not be produced for this session.")
             : status === "none"
               ? (notRecordedReason ? undefined : "This session's agent doesn't have recording turned on, or the call hasn't ended yet.")
-              : "The recording is still being processed — check back in a moment."
+              : "The recording is still being processed. Check back in a moment."
         }
         action={
           status === "requested" || status === "active" ? (

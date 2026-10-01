@@ -246,7 +246,7 @@ function ConsentRow({ entry, origin }: { entry: EventEntry; origin: number }) {
     <RowFrame at={entry.at} origin={origin} testId="consent">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-caption">
         <StatusPill tone={payload.accepted ? "success" : "neutral"} size="sm">
-          {payload.accepted ? "Agreed" : "Declined"} — {kindLabel}
+          {payload.accepted ? "Agreed" : "Declined"} · {kindLabel}
         </StatusPill>
         <span className="text-text-secondary">{method}</span>
       </div>
@@ -356,7 +356,7 @@ function GuardrailTimeoutRow({ entry, origin }: { entry: EventEntry; origin: num
         <Icon as={ShieldOffIcon} size="sm" />
         <span>
           A check on {STAGE_LABEL[stage]} {TIMEOUT_REASON_LABEL[reason]}
-          {typeof payload.budget_ms === "number" ? ` (over ${formatMs(payload.budget_ms)})` : ""} — the text went
+          {typeof payload.budget_ms === "number" ? ` (over ${formatMs(payload.budget_ms)})` : ""}. The text went
           through unchecked.
         </span>
       </div>

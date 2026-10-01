@@ -76,7 +76,7 @@ export function DatasetRowsPreview({ datasetId, ready }: { datasetId: string; re
       </Table>
       <div className="flex flex-wrap items-center justify-between gap-2 text-label text-text-secondary">
         <span className="tabular-nums">
-          {offset + 1}–{Math.min(offset + rows.length, total)} of {total}
+          {offset + 1} to {Math.min(offset + rows.length, total)} of {total}
         </span>
         <div className="flex gap-2">
           <Button type="button" variant="secondary" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>

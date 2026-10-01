@@ -235,7 +235,7 @@ function OverviewTab({ summary, onSeeAll }: { summary: AnalyticsSummary; onSeeAl
       </StatGrid>
 
       <Alert tone="info" title="Costs are estimates">
-        Actual cost is computed from usage at list prices; OpenRouter sessions use live prices and can be reconciled with
+        Actual cost is computed from usage at list prices. OpenRouter sessions use live prices and can be reconciled with
         OpenRouter&apos;s charge. Vendor invoices may differ (included minutes, volume tiers, taxes).
       </Alert>
 

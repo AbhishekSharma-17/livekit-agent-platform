@@ -45,7 +45,7 @@ const MEMORY_UNAVAILABLE_NOTICE = "Memory is not installed on this server.";
 /** `SessionMemoryOut.recall_status`, in plain words. */
 const RECALL_TEXT: Record<NonNullable<SessionMemoryOut["recall_status"]>, string> = {
   recalled: "Recalled from an earlier call.",
-  empty: "Nothing to recall — this looks like the caller's first call.",
+  empty: "Nothing to recall. This looks like the caller's first call.",
   disabled: "Memory was off for this agent when the call started.",
   no_identity: "This caller was anonymous, so there was nothing to recall.",
   unavailable: MEMORY_UNAVAILABLE_NOTICE,
@@ -106,7 +106,7 @@ export function MemoryTab({ session }: SessionTabProps) {
     onSuccess: (result) => {
       toast.success(
         result.forgotten
-          ? `Caller forgotten — ${result.sessions_updated ?? 0} session${result.sessions_updated === 1 ? "" : "s"} updated.`
+          ? `Caller forgotten. ${result.sessions_updated ?? 0} session${result.sessions_updated === 1 ? "" : "s"} updated.`
           : "Nothing was stored for this caller.",
       );
       // A prefix match on ["sessions", session.id] also invalidates this tab's own
@@ -182,7 +182,7 @@ export function MemoryTab({ session }: SessionTabProps) {
         {storeStatus ? (
           <p className="text-label text-text-secondary">
             {STORE_TEXT[storeStatus]}
-            {memory.store_reason ? ` — ${memory.store_reason}.` : ""}
+            {memory.store_reason ? ` Reason: ${memory.store_reason}.` : ""}
           </p>
         ) : (
           <p className="text-label text-text-secondary">Nothing has been stored for this call yet.</p>

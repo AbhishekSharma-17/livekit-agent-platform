@@ -82,7 +82,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
               <CardTitle>
                 <h2>Rows</h2>
               </CardTitle>
-              <CardDescription>A page of the table, in file order. Cells are plain text; nothing in them runs.</CardDescription>
+              <CardDescription>A page of the table, in file order. Cells are plain text, and nothing in them runs.</CardDescription>
             </CardHeader>
             <CardContent>
               <DatasetRowsPreview datasetId={dataset.id} ready={ready} />

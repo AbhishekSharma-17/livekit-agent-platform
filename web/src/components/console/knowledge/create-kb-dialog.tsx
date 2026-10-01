@@ -192,7 +192,7 @@ export function CreateKbDialog({ variant = "primary" }: { variant?: "primary" | 
             <DialogTitle>New knowledge base</DialogTitle>
             <DialogDescription>
               {storage === "managed_search"
-                ? "The documents stay in Ragie; agents search them there."
+                ? "The documents stay in Ragie, and agents search them there."
                 : "Documents are chunked and embedded on upload."}
             </DialogDescription>
           </DialogHeader>
@@ -266,7 +266,7 @@ export function CreateKbDialog({ variant = "primary" }: { variant?: "primary" | 
                     connection.status === "ok"
                       ? "Tested and working."
                       : connection.status === "error"
-                        ? "The last test failed; check the key."
+                        ? "The last test failed. Check the key."
                         : "Not tested yet."
                   }
                 />

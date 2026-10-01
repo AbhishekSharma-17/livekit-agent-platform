@@ -548,7 +548,7 @@ export function SessionsTable() {
         {filtered.length > 0 ? (
           <nav aria-label="Pagination" className="flex flex-wrap items-center justify-between gap-2 text-caption text-text-secondary">
             <p aria-live="polite" className="tabular-nums">
-              {`${first}–${last} of ${filtered.length}`}
+              {`${first} to ${last} of ${filtered.length}`}
               {hasFilters ? ` (filtered from ${sessions.length})` : null}
               {truncated ? ` · newest ${SESSION_LIST_FETCH_LIMIT} of ${data?.total} loaded` : null}
             </p>
@@ -659,7 +659,7 @@ function StartedCell({ session }: { session: SessionOut }) {
   if (session.started_at) return <RelativeTime iso={session.started_at} className="text-text-secondary" />;
   return (
     <span className="text-text-tertiary">
-      <span className="sr-only">Not started; created </span>
+      <span className="sr-only">Not started, created </span>
       <RelativeTime iso={session.created_at} className="text-text-tertiary" />
     </span>
   );

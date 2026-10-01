@@ -49,6 +49,19 @@ def _wrap_action(item: Any, toolkit: str) -> Any:
     return out
 
 
+def _wrap_account(item: Any) -> Any:
+    """An account's ``identity`` (who it is signed in as, V6-35) is the app's own text: untrusted."""
+    if not isinstance(item, dict) or not isinstance(item.get("identity"), str):
+        return item
+    return {**item, "identity": untrusted(item["identity"], f"apps:{item.get('toolkit', '')}:account")}
+
+
+def _wrap_accounts(page: Any) -> Any:
+    if not isinstance(page, dict) or not isinstance(page.get("items"), list):
+        return page
+    return {**page, "items": [_wrap_account(item) for item in page["items"]]}
+
+
 def register(registry: Registry) -> None:
     """Declare the Apps tools."""
     ctx = registry.ctx
@@ -179,10 +192,11 @@ def register(registry: Registry) -> None:
     async def apps_connections() -> ToolResult:
         """Every connected app account of the workspace with its last known status (no vendor call).
 
-        An app may have several accounts: each item has its ``label`` (e.g. Work, Personal) and
-        ``is_default`` (exactly one per app; its tools keep the plain names).
+        An app may have several accounts: each item has its ``label`` (e.g. Work, Personal),
+        ``is_default`` (exactly one per app; its tools keep the plain names) and ``identity``,
+        who the account is signed in as (an address, user name or workspace; empty until known).
         """
-        return ToolResult.success(await client.get(f"{BASE}/connections"))
+        return ToolResult.success(_wrap_accounts(await client.get(f"{BASE}/connections")))
 
     @registry.tool(scopes={"providers:write"}, annotations=IDEMPOTENT_WRITE, data="AppConnectionOut")
     async def apps_connection_rename(
@@ -199,7 +213,7 @@ def register(registry: Registry) -> None:
         body = {"label": label}
         if plan:
             return planned(request("PATCH", path, body))
-        return ToolResult.success(await client.patch(path, body))
+        return ToolResult.success(_wrap_account(await client.patch(path, body)))
 
     @registry.tool(scopes={"providers:write"}, annotations=IDEMPOTENT_WRITE, data="AppConnectionOut")
     async def apps_connection_set_default(
@@ -213,18 +227,28 @@ def register(registry: Registry) -> None:
         body = {"is_default": True}
         if plan:
             return planned(request("PATCH", path, body))
-        return ToolResult.success(await client.patch(path, body))
+        return ToolResult.success(_wrap_account(await client.patch(path, body)))
 
     @registry.tool(scopes={"providers:read"}, annotations=READ, data="AppConnectionOut")
     async def apps_connection_status(
         id: Annotated[str, Field(description="A connection id from apps_connect or apps_connections")],  # noqa: A002
+        identify: Annotated[
+            bool,
+            Field(description="Also ask the app now who the account is signed in as (one metered call)"),
+        ] = False,
     ) -> ToolResult:
-        """Check one connected app with Composio now (active, initiated, expired, failed or inactive)."""
-        body = await client.get(f"{BASE}/connections/{seg(id)}")
+        """Check one connected app with Composio now (active, initiated, expired, failed or inactive).
+
+        The answer includes ``identity``, who the account is signed in as; an active account not
+        identified lately is asked again, and ``identify=true`` asks now.
+        """
+        body = await client.get(
+            f"{BASE}/connections/{seg(id)}", params={"identify": "true"} if identify else None
+        )
         steps: list[str] = []
         if isinstance(body, dict) and body.get("needs_reconnect"):
             steps = ["The app needs to be reconnected by a person: the console's Tools, Apps tab, Reconnect."]
-        return ToolResult.success(body, next_steps=steps)
+        return ToolResult.success(_wrap_account(body), next_steps=steps)
 
     @registry.tool(scopes={"providers:write"}, annotations=DESTRUCTIVE, data="AppConnectionOut")
     async def apps_disconnect(
@@ -248,7 +272,7 @@ def register(registry: Registry) -> None:
                 f"disconnect app connection {id} at Composio, switch off the tools that use it, and {effect}"
             )
         out = await client.delete(path, params=query)
-        return ToolResult.success(out if out is not None else {"deleted": True, "id": id})
+        return ToolResult.success(_wrap_account(out) if out is not None else {"deleted": True, "id": id})
 
     @registry.tool(scopes={"providers:write"}, annotations=WRITE, data="AppActionsPickOut")
     async def apps_add_tools(

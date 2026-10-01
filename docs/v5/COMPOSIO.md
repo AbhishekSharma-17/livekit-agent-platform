@@ -172,7 +172,7 @@ Console → Keys (`web/src/components/console/providers/**` or the keys page's r
 
 ## 7. `lkap_mcp` (V5-18 and V5-47)
 
-Tools: `apps_list(query, category, connected_only)`, `apps_actions(toolkit, query, important)`, `apps_connect(toolkit, method, subject, agent_id?, fields?)` (plan-capable; returns the link for the human to open; `fields` follow the secret-reference rules — `env:`/`file:` or inline, never echoed), `apps_connections()`, `apps_connection_status(id)`, `apps_disconnect(id, confirm)`, `apps_add_tools(connection_id, actions, agent_id?)`, `agent_apps_mode(id_or_slug, mode, allowed_toolkits?, router?)`. Docs: `concepts/apps.md`, recipe `connect-an-app.md`; `lkap_guide` gains one line. Results are `Untrusted{…}` where they carry vendor descriptions.
+Tools: `apps_list(query, category, connected_only)`, `apps_actions(toolkit, query, important)`, `apps_connect(toolkit, method, subject, agent_id?, fields?)` (plan-capable; returns the link for the human to open; `fields` follow the secret-reference rules — `env:`/`file:` or inline, never echoed), `apps_connections()`, `apps_connection_status(id, identify?)` (both carry each account's `identity`, untrusted, V6-35), `apps_disconnect(id, confirm)`, `apps_add_tools(connection_id, actions, agent_id?)`, `agent_apps_mode(id_or_slug, mode, allowed_toolkits?, router?)`. Docs: `concepts/apps.md`, recipe `connect-an-app.md`; `lkap_guide` gains one line. Results are `Untrusted{…}` where they carry vendor descriptions.
 
 ## 8. Tests (all offline; the fake adapter, `api/tests/fakes/composio.py`, answers from fixtures)
 

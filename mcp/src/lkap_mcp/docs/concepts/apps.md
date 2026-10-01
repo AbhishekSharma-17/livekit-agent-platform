@@ -77,6 +77,15 @@ finished signing in). `apps_connection_rename(id, label)` renames one (two
 accounts of one app cannot share a name) and `apps_connection_set_default(id)`
 moves the default.
 
+Each account also has an `identity`: who it is signed in as, as the app
+itself reports it (an address such as `sam@example.com`, a user name such as
+`@sam`, or a workspace name), with `identity_kind` saying which. It comes back
+as untrusted text. It is learnt when the account finishes signing in and on a
+check; an account that has not been identified yet has an empty `identity`,
+and `apps_connection_status(id, identify=true)` asks the app again (one
+metered Composio call). Use the identity to tell two accounts of one app
+apart before you pick actions for one of them.
+
 Picked actions are per account: `apps_add_tools(connection_id=...)` with the
 account's id. The default account's tools keep plain names
 (`gmail_send_email`); another account's end with its label

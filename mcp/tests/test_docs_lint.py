@@ -667,7 +667,7 @@ MCP_TOOLS: Final[dict[str, frozenset[str]]] = {
     "apps_actions": frozenset({"toolkit", "query", "important", "cursor"}),
     "apps_connect": frozenset({"toolkit", "method", "subject", "agent_id", "fields", "alias", "plan"}),
     "apps_connections": frozenset(),
-    "apps_connection_status": frozenset({"id"}),
+    "apps_connection_status": frozenset({"id", "identify"}),
     "apps_connection_rename": frozenset({"id", "label", "plan"}),
     "apps_connection_set_default": frozenset({"id", "plan"}),
     "apps_disconnect": frozenset({"id", "purge", "confirm", "plan"}),

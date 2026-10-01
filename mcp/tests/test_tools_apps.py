@@ -14,6 +14,7 @@ import pytest
 from conftest import BUILDER_SCOPES, OPERATOR_SCOPES, READ_ONLY_SCOPES, all_log_text, dumped
 from fakes.composio import VALID_KEY, ComposioWorld
 from fastapi import FastAPI
+from lkap_api.tool_providers import identity
 from lkap_api.tool_providers.router import get_adapter_factory
 
 APP_KEY = "acme-live-Qw4Er7Ty1Ui5Op9As3Df"
@@ -392,3 +393,36 @@ async def test_agent_apps_mode_sends_the_chosen_accounts_and_provisions_both(
     options = world.calls_of("create_router_session")[-1].kwargs["options"]
     assert len(options["connected_accounts"]["acmecrm"]) == 2
     assert options["multi_account"]["require_explicit_selection"] is True
+
+
+async def test_apps_connections_says_who_each_account_is_as_untrusted_text(
+    key: Any, mcp_session: Any, world: ComposioWorld, composio_key: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """V6-35: every account carries ``identity``; it is the app's own text, so it comes back untrusted."""
+    monkeypatch.setitem(
+        identity.PROBES,
+        "acmecrm",
+        identity.IdentityProbe(
+            tool="ACMECRM_WHO_AM_I", fields=(identity.IdentityField(("email",), "email"),)
+        ),
+    )
+    world.action_results["ACMECRM_WHO_AM_I"] = lambda account_id: {
+        "data": {"email": f"{account_id}@example.com"},
+        "successful": True,
+    }
+    raw = await key(OPERATOR_SCOPES)
+
+    async with mcp_session(raw) as mcp:
+        sales, support = await _two_crm_accounts(mcp)
+        listed = await mcp.call("apps_connections")
+        status = await mcp.call("apps_connection_status", id=sales, identify=True)
+
+    items = {item["id"]: item for item in listed["data"]["items"]}
+    pins = [call.kwargs["connected_account_id"] for call in world.calls_of("execute")]
+    assert len(pins) == 3 and pins[2] == pins[0], "identify=true asks again, on that account"
+    sales_identity = items[sales]["identity"]
+    assert sales_identity["untrusted"] is True and sales_identity["source"] == "apps:acmecrm:account"
+    assert sales_identity["content"] == f"{pins[0]}@example.com"
+    assert items[support]["identity"]["content"] == f"{pins[1]}@example.com"
+    assert items[sales]["identity_kind"] == "email"
+    assert status["data"]["identity"]["content"] == f"{pins[0]}@example.com"

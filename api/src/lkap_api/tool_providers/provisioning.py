@@ -200,7 +200,7 @@ def _named_accounts(
             if not _usable(conn, agent_id):
                 raise _account_error(
                     f"the {conn.toolkit_name or toolkit} account '{label}' cannot be used by this agent "
-                    f"(status {conn.status}, or connected for another agent); reconnect it or choose another",
+                    f"(status {conn.status}, or connected for another agent). Reconnect it or choose another",
                     toolkit,
                 )
             named.setdefault(toolkit, []).append(conn)
@@ -266,7 +266,7 @@ def plan_session(
         raise UnprocessableEntityError(
             "no connected app is available to this agent"
             + (" among tools.apps.allowed_toolkits" if allowed else "")
-            + "; connect one under Tools, Apps",
+            + ". Connect one under Tools, Apps",
             details={"path": "tools.apps.allowed_toolkits"},
         )
     named = _named_accounts(apps, connections, agent_id)
@@ -292,8 +292,8 @@ def plan_session(
         shared = [c for c in accounts if c.account_type == "SHARED"]
         if len(shared) > 1:
             raise _account_error(
-                f"a session can use only one shared {accounts[0].toolkit_name or toolkit} account; "
-                "choose one of: " + ", ".join(c.account_label or c.id for c in shared),
+                f"a session can use only one shared {accounts[0].toolkit_name or toolkit} account. "
+                "Choose one of: " + ", ".join(c.account_label or c.id for c in shared),
                 toolkit,
             )
     scope = _destructive(slug for conn in chosen for slug in conn.picked_actions)
@@ -331,12 +331,12 @@ def plan_session(
             unreviewed = [slug for slug in unreviewed_destructive(apps, scope) if slug in denied]
             if unreviewed:
                 raise UnprocessableEntityError(
-                    "the app server has no action to offer: its picked actions are destructive and "
+                    "the app server has no action to offer. Its picked actions are destructive and "
                     "blocked until reviewed in the Connected apps card: " + ", ".join(unreviewed),
                     details={"path": "tools.apps.denied_actions", "unreviewed": unreviewed},
                 )
             raise UnprocessableEntityError(
-                "the app server has no action to offer: pick actions of a connected app first",
+                "the app server has no action to offer. Pick actions of a connected app first",
                 details={"path": "tools.apps.mode"},
             )
         options["tools"] = {

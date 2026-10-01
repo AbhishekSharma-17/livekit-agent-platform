@@ -445,13 +445,13 @@ def _rule_info(conn: LiveKitConnection, trunk: SipTrunk | None, rule: SipDispatc
     """
     if trunk is not None and not trunk.lk_trunk_id:
         raise ConflictError(
-            f"trunk '{trunk.name}' is not on LiveKit yet; sync it first",
+            f"trunk '{trunk.name}' is not on LiveKit yet. Sync it first",
             details={"reason": "trunk_not_synced", "trunk_id": trunk.id},
         )
     numbers = list(rule.numbers or [])
     if trunk is None and not numbers:
         raise UnprocessableEntityError(
-            "a dispatch rule without a trunk must name the called number; refusing a project-wide catch-all"
+            "a dispatch rule without a trunk must name the called number. Refusing a project-wide catch-all"
         )
     return SIPDispatchRuleInfo(
         rule=SIPDispatchRule(
@@ -566,7 +566,7 @@ async def _new_rule(
     """
     if trunk is not None:
         if trunk.direction != "inbound":
-            raise UnprocessableEntityError("dispatch rules route inbound calls; pick an inbound trunk")
+            raise UnprocessableEntityError("dispatch rules route inbound calls. Pick an inbound trunk")
         home_connection_id = trunk.connection_id
     elif phone_number is not None and phone_number.connection_id:
         home_connection_id = phone_number.connection_id
@@ -576,7 +576,7 @@ async def _new_rule(
         raise UnprocessableEntityError(
             "the agent runs on a different connection than the "
             + ("trunk" if trunk is not None else "number's LiveKit project")
-            + "; its worker pool would never receive these calls",
+            + ". Its worker pool would never receive these calls",
             details={"agent_connection_id": agent_connection_id, "number_connection_id": home_connection_id},
         )
     conn = await connection_of(db, workspace_id, home_connection_id)
@@ -921,7 +921,7 @@ def _apply_lk(row: PhoneNumber, lk: LkPhoneNumber) -> bool:
 async def _hosted_connection(db: AsyncSession, workspace_id: str, number: PhoneNumber) -> LiveKitConnection:
     if not number.connection_id or not number.lk_number_id:
         raise ConflictError(
-            f"{number.e164} is not linked to a LiveKit project; press Refresh from LiveKit",
+            f"{number.e164} is not linked to a LiveKit project. Press Refresh from LiveKit",
             details={"reason": "number_not_mirrored", "number_id": number.id},
         )
     conn = await connection_of(db, workspace_id, number.connection_id)
@@ -939,7 +939,7 @@ async def _update_hosted_number(
     fields = payload.model_fields_set
     if "trunk_id" in fields and payload.trunk_id is not None:
         raise UnprocessableEntityError(
-            "a LiveKit-hosted number has no trunk; pick its inbound agent instead",
+            "a LiveKit-hosted number has no trunk. Pick its inbound agent instead",
             details={"reason": "hosted_number_has_no_trunk"},
         )
     if payload.label is not None:
@@ -1039,7 +1039,7 @@ async def assign_number(
     agent_conn = await resolve_agent_connection(db, agent)
     if agent_conn.id != conn.id:
         raise UnprocessableEntityError(
-            "the agent's connection is not the number's LiveKit project; its worker pool would never "
+            "the agent's connection is not the number's LiveKit project. Its worker pool would never "
             "receive these calls",
             details={"agent_connection_id": agent_conn.id, "number_connection_id": conn.id},
         )

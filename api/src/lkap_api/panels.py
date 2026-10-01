@@ -76,7 +76,7 @@ from lkap_api.db.models import Agent
 
 #: A `link` block on an agent set up for phone calls without text messages (V5-43, a tip).
 LINK_ON_PHONE_MESSAGE: Final[str] = (
-    "Tip: callers on a phone line cannot see links; set up text messages so the agent can text the "
+    "Tip: callers on a phone line cannot see links. Set up text messages so the agent can text the "
     "link to them instead"
 )
 
@@ -91,13 +91,13 @@ DRAWING_ON_PHONE_MESSAGE: Final[str] = (
 )
 #: A signature block on an agent set up for phone calls (V6-23, a tip).
 SIGNATURE_ON_PHONE_MESSAGE: Final[str] = (
-    "Tip: callers on a phone line cannot see the panel, so they cannot sign; only callers on the web "
+    "Tip: callers on a phone line cannot see the panel, so they cannot sign. Only callers on the web "
     "page can sign here"
 )
 #: A picture model on a panel with no gallery block (V6-06, a tip).
 PICTURES_NEED_A_GALLERY_MESSAGE: Final[str] = (
     "Tip: a picture model is set, but the panel has no gallery block, so the agent cannot show "
-    "pictures; add a gallery block"
+    "pictures. Add a gallery block"
 )
 
 #: The built-in panel that renders `PanelLayout.blocks`.

@@ -126,7 +126,7 @@ def _refuse_connection_row(row: Credential) -> None:
     if row.provider_id == MEMORY_KEY_PROVIDER_ID:
         # V5-40 (ask #257): deleting it would make every caller memory unreachable.
         raise ConflictError(
-            "the caller-memory key is managed by the platform; purge memories with POST /v1/memory/purge",
+            "the caller-memory key is managed by the platform. Purge memories with POST /v1/memory/purge",
             details={"credential_id": row.id},
         )
     if row.provider_id == TOOL_PROVIDER_ACCOUNT:
@@ -252,7 +252,7 @@ async def update_credential(
     row = await _load(db, ctx, credential_id)
     _refuse_connection_row(row)
     if payload.provider_id and credential_home(payload.provider_id) != credential_home(row.provider_id):
-        raise UnprocessableEntityError("a credential's provider cannot be changed; create a new one")
+        raise UnprocessableEntityError("a credential's provider cannot be changed. Create a new one")
     if payload.secrets is not None:
         _refuse_hand_made_sign_in(row.provider_id)
     spec = _spec_for(row.provider_id)

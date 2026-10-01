@@ -194,7 +194,7 @@ def _tool_issue(config: AgentConfig, name: str) -> str:
         if name in config.tools.builtin_disabled or name == "http_request":
             return f"built-in tool '{name}' is off for this agent (Tools section)"
         return f"tool '{name}' needs camera or screen share (Panel & capabilities)"
-    return f"unknown tool '{name}' — a node can use only the agent's own tools (Tools section)"
+    return f"unknown tool '{name}'. A node can use only the agent's own tools (Tools section)"
 
 
 def _tool_and_kb_issues(ctx: ValidationContext, flow: FlowSpec) -> list[Issue]:
@@ -305,7 +305,7 @@ def override_issue(config: AgentConfig, slot: OverrideSlot, ref: ProviderRef) ->
     return Issue(
         path="",
         message=(
-            f"'{spec.id}' needs a key this agent's pipeline does not use; a node can switch to a "
+            f"'{spec.id}' needs a key this agent's pipeline does not use. A node can switch to a "
             f"different model on a provider the pipeline already uses (same key), or to a provider "
             f"that needs no key"
         ),
@@ -324,7 +324,7 @@ def _override_issues(config: AgentConfig, flow: FlowSpec) -> list[Issue]:
                 issues.append(
                     Issue(
                         path=path,
-                        message=f"ignored in {mode.replace('_', '-')} mode: realtime and half-cascade flows "
+                        message=f"ignored in {mode.replace('_', '-')} mode. Realtime and half-cascade flows "
                         "share one model",
                         severity="warning",
                     )
@@ -347,7 +347,7 @@ def _variable_issues(flow: FlowSpec) -> list[Issue]:
                     issues.append(
                         Issue(
                             path=f"flow.nodes[{i}].extract[{j}]",
-                            message=f"'{name}' is not a flow variable; add it under Variables",
+                            message=f"'{name}' is not a flow variable. Add it under Variables",
                         )
                     )
         for field, text in _template_fields(node):
@@ -457,14 +457,14 @@ def _definition_issues(node: ToolNode, definition: Mapping[str, Any], path: str)
         spec = spec if isinstance(spec, Mapping) else {}
     elif node.mcp_tool:
         issues.append(
-            Issue(path=f"{path}.mcp_tool", message=f"'{name}' is a single tool; leave the server tool empty")
+            Issue(path=f"{path}.mcp_tool", message=f"'{name}' is a single tool. Leave the server tool empty")
         )
     if spec.get("confirm_readback"):
         issues.append(
             Issue(
                 path=f"{path}.tool",
                 message=f"'{node.mcp_tool or name}' reads values back to the caller before it runs, so it "
-                "cannot run as a tool step; call it from an agent step instead",
+                "cannot run as a tool step. Call it from an agent step instead",
             )
         )
     parameters = definition.get("parameters") if kind in ("http", "provider") else None
@@ -522,10 +522,10 @@ def _tool_step_issues(ctx: ValidationContext, flow: FlowSpec) -> list[Issue]:
                     Issue(
                         path=f"{path}.tool",
                         message=(
-                            f"'{node.tool}' is built in; a tool step calls one of the agent's own tools "
+                            f"'{node.tool}' is built in. A tool step calls one of the agent's own tools "
                             "(Tools section)"
                             if built_in
-                            else f"'{node.tool}' is not one of the agent's tools; attach it (Tools section)"
+                            else f"'{node.tool}' is not one of the agent's tools. Attach it (Tools section)"
                         ),
                     )
                 )
@@ -541,7 +541,7 @@ def _tool_step_issues(ctx: ValidationContext, flow: FlowSpec) -> list[Issue]:
                     issues.append(
                         Issue(
                             path=where,
-                            message=f"'{target.key}' is not a flow variable; add it under Variables",
+                            message=f"'{target.key}' is not a flow variable. Add it under Variables",
                         )
                     )
                 continue
@@ -565,7 +565,7 @@ def _tool_step_issues(ctx: ValidationContext, flow: FlowSpec) -> list[Issue]:
             issues.append(
                 Issue(
                     path=f"{path}.on.error",
-                    message="no path for when the tool fails: the call then ends with a short apology",
+                    message="no path for when the tool fails. The call then ends with a short apology",
                     severity="warning",
                 )
             )
@@ -702,7 +702,7 @@ def draft_flow_issues(raw: Mapping[str, Any]) -> tuple[FlowSpec | None, list[Iss
         for i, node in nodes:
             if node.kind not in (*_UNCONNECTABLE_KINDS, "start") and node.id not in reachable:
                 issues.append(
-                    Issue(path=f"flow.nodes[{i}]", message="not reachable from the start node — connect it")
+                    Issue(path=f"flow.nodes[{i}]", message="not reachable from the start node. Connect it")
                 )
 
     if issues:

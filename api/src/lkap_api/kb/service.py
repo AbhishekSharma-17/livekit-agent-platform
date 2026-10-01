@@ -442,8 +442,8 @@ class KnowledgeService:
             warnings.append(
                 KnowledgeSearchWarning(
                     code="lexical_unavailable",
-                    message="keyword search is unavailable (the database migrations have not been applied); "
-                    "results are vector-only",
+                    message="keyword search is unavailable (the database migrations have not been applied). "
+                    "Results are vector-only",
                 )
             )
         return result
@@ -532,7 +532,7 @@ class KnowledgeService:
             warnings.append(
                 KnowledgeSearchWarning(
                     code="rerank_failed",
-                    message=f"reranking failed ({type(exc).__name__}); order not reranked",
+                    message=f"reranking failed ({type(exc).__name__}). Order not reranked",
                 )
             )
             return ranked
@@ -568,7 +568,7 @@ class KnowledgeService:
             response.warnings.append(
                 KnowledgeSearchWarning(
                     code="rerank_refused",
-                    message="automatic knowledge never uses a re-ranking service; order not reranked",
+                    message="automatic knowledge never uses a re-ranking service. Order not reranked",
                 )
             )
             return ranked
@@ -587,7 +587,7 @@ class KnowledgeService:
             log.warning("kb_hosted_rerank_failed", error_type=type(exc).__name__)
             response.warnings.append(
                 KnowledgeSearchWarning(
-                    code="rerank_failed", message=f"re-ranking failed ({message}); order not reranked"
+                    code="rerank_failed", message=f"re-ranking failed ({message}). Order not reranked"
                 )
             )
             return ranked

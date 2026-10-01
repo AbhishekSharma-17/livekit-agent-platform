@@ -193,7 +193,7 @@ def upload_media_type(filename: str) -> str:
     media = UPLOAD_MEDIA_TYPES.get(extension)
     if media is None:
         raise UnsupportedMediaTypeError(
-            f"cannot ingest a {extension or 'file without an extension'}; accepted: {SUPPORTED_UPLOADS}",
+            f"cannot ingest a {extension or 'file without an extension'}. Accepted: {SUPPORTED_UPLOADS}",
             details={"extension": extension[:16] or None},
         )
     return media
@@ -406,7 +406,8 @@ def _refuse_external(kb: KnowledgeBase, what: str) -> None:
     """409 for a managed-search knowledge base (V5-45): its documents live in the service."""
     if kb.kind == "external":
         raise ConflictError(
-            f"'{kb.name}' is searched in a managed search service (Ragie); {what} there, not here",
+            f"'{kb.name}' is searched in a managed search service (Ragie). "
+            f"{what[:1].upper() + what[1:]} there, not here",
             details={"kb_id": kb.id, "kind": "external"},
         )
 
@@ -422,7 +423,7 @@ async def _check_quota(db: AsyncSession, kb: KnowledgeBase, size: int) -> None:
     ).scalar_one()
     if documents >= MAX_DOCUMENTS_PER_KB:
         raise KbQuotaExceededError(
-            f"this knowledge base already holds {MAX_DOCUMENTS_PER_KB} documents; delete some first",
+            f"this knowledge base already holds {MAX_DOCUMENTS_PER_KB} documents. Delete some first",
             details={"limit": "documents_per_kb", "max": MAX_DOCUMENTS_PER_KB},
         )
     used = (
@@ -434,7 +435,7 @@ async def _check_quota(db: AsyncSession, kb: KnowledgeBase, size: int) -> None:
     ).scalar_one()
     if int(used) + size > MAX_WORKSPACE_KB_BYTES:
         raise KbQuotaExceededError(
-            "the workspace's knowledge bases are full; delete documents first",
+            "the workspace's knowledge bases are full. Delete documents first",
             details={"limit": "workspace_bytes", "max_bytes": MAX_WORKSPACE_KB_BYTES},
         )
 
@@ -450,7 +451,7 @@ async def _check_no_run_pending(db: AsyncSession, kb_id: str, *, kind: str, what
         query = query.where(Job.payload["reindex"].as_boolean().is_(True))
     if (await db.execute(query.limit(1))).first() is not None:
         raise ConflictError(
-            f"{what} of this knowledge base is already running; wait for it to finish",
+            f"{what} of this knowledge base is already running. Wait for it to finish",
             details={"kb_id": kb_id},
         )
 
@@ -602,7 +603,7 @@ async def update_kb(kb_id: str, payload: KbCreate, db: DbDep, ctx: AdminCtxDep) 
     _check_embedder_id(payload.embedder_id)
     if payload.embedder_id != row.embedder_id and row.chunk_count > 0:
         raise ConflictError(
-            "embedder_id cannot change once the knowledge base holds chunks; delete and recreate it instead"
+            "embedder_id cannot change once the knowledge base holds chunks. Delete and recreate it instead"
         )
     if payload.connection_id is not None and payload.connection_id != row.connection_id:  # V5-20
         raise ConflictError("where a knowledge base is stored is fixed when it is created")
@@ -664,7 +665,7 @@ async def describe_source(
     kb = await _load_kb(db, ctx, kb_id)
     if kb.kind != "external":
         raise ConflictError(
-            f"'{kb.name}' holds its own documents; only a managed search knowledge base has a source",
+            f"'{kb.name}' holds its own documents. Only a managed search knowledge base has a source",
             details={"kb_id": kb.id, "kind": kb.kind},
         )
     checked_at = utcnow()
@@ -1007,7 +1008,7 @@ async def evaluate_kb(
     count = (await db.execute(count_query)).scalar_one()
     if count == 0:
         raise UnprocessableEntityError(
-            "the knowledge base has no evaluation set; add golden questions with PUT .../evals first",
+            "the knowledge base has no evaluation set. Add golden questions with PUT .../evals first",
             details={"field": "evals"},
         )
     now = utcnow()

@@ -60,10 +60,10 @@ VAD_SILENCE_FLOOR_MESSAGE: Final[str] = (
 )
 STT_MODE_UNSUPPORTED_MESSAGE: Final[str] = (
     "'{name}' cannot decide by itself when the caller has finished, so the turn detector decides, as if "
-    "this were not set; pick a Deepgram Flux model to let speech-to-text decide"
+    "this were not set. Pick a Deepgram Flux model to let speech-to-text decide"
 )
 FLUX_OPTION_IGNORED_MESSAGE: Final[str] = (
-    "'{label}' is used only by Deepgram Flux models; with '{model}' it is ignored"
+    "'{label}' is used only by Deepgram Flux models. With '{model}' it is ignored"
 )
 FAST_PRESET_FOR_FLUX_TIP: Final[str] = (
     "Tip: Deepgram Flux already decides when the caller has finished, and this agent then waits another "

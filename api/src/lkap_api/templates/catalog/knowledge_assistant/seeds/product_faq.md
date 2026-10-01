@@ -1,4 +1,4 @@
-# Acme Meter — product FAQ
+# Acme Meter product FAQ
 
 Acme Meter is a fictional smart energy meter with a companion app. This FAQ is sample content for the Knowledge assistant starter; replace it with your own documents.
 

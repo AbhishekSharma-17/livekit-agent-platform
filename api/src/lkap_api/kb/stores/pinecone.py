@@ -86,7 +86,7 @@ def check_host(host: object) -> str:
     parsed = urlsplit(candidate)
     name = (parsed.hostname or "").lower()
     if parsed.scheme != "https" or not name.endswith(HOST_SUFFIX) or parsed.path not in ("", "/"):
-        raise ConnectorError("Pinecone returned an index address outside pinecone.io; refusing to use it")
+        raise ConnectorError("Pinecone returned an index address outside pinecone.io. Refusing to use it")
     return f"https://{name}" + (f":{parsed.port}" if parsed.port else "")
 
 
@@ -136,7 +136,7 @@ class PineconeStore:
             )
         if isinstance(metric, str) and metric != "cosine":
             raise ConnectorError(
-                f"Pinecone index '{self.index}' uses the {metric} metric; it must use cosine"
+                f"Pinecone index '{self.index}' uses the {metric} metric. It must use cosine"
             )
 
     def _bind(self, description: Mapping[str, Any]) -> VendorHttp:
@@ -181,7 +181,7 @@ class PineconeStore:
             if isinstance(status, Mapping) and status.get("ready") is True and description is not None:
                 return description
             if waited >= READY_TIMEOUT_S:
-                raise ConnectorError(f"Pinecone index '{self.index}' is not ready yet; try again in a minute")
+                raise ConnectorError(f"Pinecone index '{self.index}' is not ready yet. Try again in a minute")
             await asyncio.sleep(READY_POLL_S)
             waited += READY_POLL_S
 

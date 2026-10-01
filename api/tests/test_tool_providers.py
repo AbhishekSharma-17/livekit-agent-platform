@@ -207,7 +207,7 @@ async def test_key_test_falls_back_to_the_app_count_when_the_project_is_unavaila
     body = (await admin_client.post(f"{BASE}/key/test", json={"api_key": VALID_KEY})).json()
 
     assert body["ok"] is True and body["project_name"] is None
-    assert body["message"] == "Key works — 1000 apps available"
+    assert body["message"] == "Key works. 1000 apps available"
     assert world.calls_of("list_auth_configs"), "a key-scoped list decides validity"
 
 
@@ -221,7 +221,7 @@ async def test_key_test_accepts_a_project_key_the_account_endpoint_refuses(
     body = (await admin_client.post(f"{BASE}/key/test", json={"api_key": VALID_KEY})).json()
 
     assert body["ok"] is True and body["project_name"] is None
-    assert body["message"] == "Key works — 1000 apps available"
+    assert body["message"] == "Key works. 1000 apps available"
     assert world.calls_of("list_auth_configs"), "a key-scoped list decides validity"
 
 

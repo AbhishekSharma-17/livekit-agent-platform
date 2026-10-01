@@ -101,7 +101,7 @@ def _authority_secret_problem(url: str) -> str | None:
         authority = authority.split(stop, 1)[0]
     if _SECRET_RE.search(scheme if sep else "") or _SECRET_RE.search(authority):
         return (
-            "a secret may not be placed in the url's scheme, host or port; use the path, a header or the body"
+            "a secret may not be placed in the url's scheme, host or port. Use the path, a header or the body"
         )
     return None
 
@@ -276,14 +276,14 @@ def _check_sign_in_binding(
         )
     if credential.provider_id != MCP_OAUTH_PROVIDER_ID:
         raise UnprocessableEntityError(
-            "an MCP server that signs in takes no key: its credential is created by signing in",
+            "an MCP server that signs in takes no key. Its credential is created by signing in",
             details={**details, "reason": "oauth_credential_misuse"},
         )
     if tool_id is None or not binds_tool(
         vault.decrypt(credential.ciphertext), tool_id=tool_id, url=definition.url
     ):
         raise UnprocessableEntityError(
-            "this sign-in belongs to another server or address: clear auth.credential_id and sign in again",
+            "this sign-in belongs to another server or address. Clear auth.credential_id and sign in again",
             details={**details, "reason": "oauth_credential_mismatch"},
         )
 
@@ -562,8 +562,8 @@ async def dry_run_tool(
     net_guard.validate_url(url, net_guard.policy_from_settings(settings), field_name="definition.url")
     if not host_allowed(url, allowed_hosts=definition.allowed_hosts):
         raise BadRequestError(
-            "the request host is not in the tool's allowed_hosts — add it "
-            "(the worker also fails closed at call time; LKAP_HTTP_TOOL_ALLOWED_HOSTS "
+            "the request host is not in the tool's allowed_hosts. Add it "
+            "(the worker also fails closed at call time, and LKAP_HTTP_TOOL_ALLOWED_HOSTS "
             "on the worker is a separate, optional list)",
             details={"allowed_hosts": definition.allowed_hosts},
         )
@@ -619,8 +619,8 @@ async def dry_run_tool(
         log.info("tool_dry_run_too_large", tool_id=tool_id, status_code=response.status_code)
         return ToolDryRunResult(
             ok=False,
-            result=f"the response is larger than {DRY_RUN_MAX_BYTES // 1_000_000} MB; "
-            "the dry run stopped reading",
+            result=f"the response is larger than {DRY_RUN_MAX_BYTES // 1_000_000} MB. "
+            "The dry run stopped reading",
             status_code=response.status_code,
             duration_ms=duration_ms,
         )
@@ -701,7 +701,7 @@ async def _oauth_request_headers(
         )
     except NeedsReauth:
         return McpTestResult(
-            ok=False, reason="needs_auth", error="the sign-in needs to be renewed: sign in again"
+            ok=False, reason="needs_auth", error="the sign-in needs to be renewed. Sign in again"
         )
     except TokenUnavailable:
         return McpTestResult(

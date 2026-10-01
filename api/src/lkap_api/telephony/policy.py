@@ -263,7 +263,7 @@ def destination_problem(policy: TelephonyPolicy, target: str) -> str | None:
     """
     if not policy.dialing_enabled:
         return (
-            "outbound calls and transfers are off for this workspace: an admin must list the "
+            "outbound calls and transfers are off for this workspace. An admin must list the "
             "allowed number prefixes in the dialing policy (Console → Telephony → Outbound dialing policy)"
         )
     number, host = _number_and_host(target)
@@ -275,8 +275,8 @@ def destination_problem(policy: TelephonyPolicy, target: str) -> str | None:
         if host in policy.allowed_sip_hosts:
             return None
         return (
-            f"SIP host '{host}' is not in the dialing policy's allowed SIP hosts (allowed_sip_hosts); "
-            "to transfer to a phone number use +E.164, and use sip: only for a listed SIP host"
+            f"SIP host '{host}' is not in the dialing policy's allowed SIP hosts (allowed_sip_hosts). "
+            "To transfer to a phone number use +E.164, and use sip: only for a listed SIP host"
         )
     if number is not None:
         return None

@@ -256,7 +256,7 @@ def require_principal(principal: OptionalPrincipalDep) -> Principal:
     """
     if principal is None:
         raise UnauthorizedError(
-            "authentication required: sign in, or send an API key as 'Authorization: Bearer lkap_…'"
+            "authentication required. Sign in, or send an API key as 'Authorization: Bearer lkap_…'"
         )
     return principal
 
@@ -333,7 +333,7 @@ async def resolve_workspace(db: AsyncSession, principal: Principal, selector: st
             if not memberships:
                 raise ForbiddenError("this user is not a member of any workspace")
             raise BadRequestError(
-                f"you belong to several workspaces; send '{WORKSPACE_HEADER}: <slug>'",
+                f"you belong to several workspaces. Send '{WORKSPACE_HEADER}: <slug>'",
                 details={"workspaces": [w.slug for w, _ in memberships]},
             )
         case "api_key":

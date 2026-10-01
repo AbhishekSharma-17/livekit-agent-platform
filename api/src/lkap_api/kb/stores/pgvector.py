@@ -215,7 +215,7 @@ class PgVectorStore:
     def _mismatch(kb_id: str, stored: int, given: int) -> KbEmbedderMismatchError:
         return KbEmbedderMismatchError(
             f"knowledge base '{kb_id}' holds {stored}-dimension vectors but these vectors have "
-            f"{given}; re-index the knowledge base with the configured embedder",
+            f"{given}. Re-index the knowledge base with the configured embedder",
             details={"kb_id": kb_id, "kb_dimension": stored, "embedder_dimension": given},
         )
 
@@ -431,7 +431,7 @@ class PgVectorStore:
             return StoreHealth(
                 ok=False,
                 backend="pgvector",
-                detail="the Postgres 'vector' extension is not installed; run the migrations on a server "
+                detail="the Postgres 'vector' extension is not installed. Run the migrations on a server "
                 "that has pgvector (the pgvector/pgvector image) or set LKAP_VECTOR_STORE=lancedb",
             )
         if not table:
@@ -439,6 +439,6 @@ class PgVectorStore:
                 ok=False,
                 backend="pgvector",
                 version=version,
-                detail="the kb_vectors table is missing; run the migrations",
+                detail="the kb_vectors table is missing. Run the migrations",
             )
         return StoreHealth(ok=True, backend="pgvector", version=version)

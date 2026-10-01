@@ -198,7 +198,7 @@ async def _unique_name(db: AsyncSession, workspace_id: str, wanted: str, taken: 
         candidate = f"{wanted[: MAX_TOOL_NAME - len(suffix)]}{suffix}"
         if candidate not in names:
             return candidate
-    raise ConflictError(f"too many tools are named like '{wanted}'; rename some first")
+    raise ConflictError(f"too many tools are named like '{wanted}'. Rename some first")
 
 
 @dataclass(frozen=True)
@@ -299,7 +299,7 @@ async def attach_tools(
     try:
         config = AgentConfig.model_validate(agent.config)
     except ValidationError as exc:
-        raise ConflictError("the agent's stored configuration does not parse; fix it first") from exc
+        raise ConflictError("the agent's stored configuration does not parse. Fix it first") from exc
     ids = list(dict.fromkeys([*config.tools.tool_ids, *tool_ids]))
     mode = config.tools.apps.mode
     config.tools.tool_ids = ids

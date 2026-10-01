@@ -1,7 +1,7 @@
 {
   "id": "verify_identity",
   "name": "Verify the caller",
-  "summary": "Checks who the caller is before the agent discusses their account: their answers are read back and compared with your records, and the panel shows when they are verified.",
+  "summary": "Checks who the caller is before the agent discusses their account. Their answers are read back and compared with your records, and the panel shows when they are verified.",
   "default_prefix": "verify",
   "default_variant": "rest",
   "defaults": [
@@ -132,7 +132,7 @@
     {
       "id": "dataset",
       "label": "Lookup table",
-      "summary": "Compares the answers with a row of one of your lookup tables: the caller is verified when every answer matches the same row.",
+      "summary": "Compares the answers with a row of one of your lookup tables. The caller is verified when every answer matches the same row.",
       "source": "dataset",
       "requires": {
         "dataset": "A lookup table whose key columns are the reference and each answer to check (a date of birth, a postcode).",

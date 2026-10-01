@@ -202,7 +202,7 @@ def test_bindings_write_declared_variables_and_real_blocks_only() -> None:
         "flow.nodes[2].bindings[1].to",
         "flow.nodes[2].bindings[2].to",
     ]
-    assert "add it under Variables" in issues[0][2]
+    assert "Add it under Variables" in issues[0][2]
 
 
 def test_a_variable_nothing_sets_and_a_step_without_an_error_path_are_warnings() -> None:

@@ -87,7 +87,7 @@
         "id": "start",
         "kind": "start",
         "label": "Start",
-        "greeting": "Thanks for calling Acme Dental. I can book, move or cancel an appointment — how can I help?",
+        "greeting": "Thanks for calling Acme Dental. I can book, move or cancel an appointment. How can I help?",
         "position": [
           0,
           0
@@ -172,7 +172,7 @@
         "id": "no_booking",
         "kind": "end",
         "label": "Not booked",
-        "farewell": "No problem — call back any time and we'll find a slot. Goodbye!",
+        "farewell": "No problem. Call back any time and we'll find a slot. Goodbye!",
         "disposition": "not_booked",
         "position": [
           0,

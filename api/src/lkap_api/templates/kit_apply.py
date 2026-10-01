@@ -182,7 +182,7 @@ async def _dataset_inputs(
 
     if payload.dataset_id is None:
         raise _refuse(
-            "this way of adding the kit reads a lookup table: pick one (dataset_id)",
+            "this way of adding the kit reads a lookup table. Pick one (dataset_id)",
             field="dataset_id",
             reason="dataset_required",
         )
@@ -194,7 +194,7 @@ async def _dataset_inputs(
         ) from None
     if dataset.status == "failed":
         raise _refuse(
-            f"the lookup table '{dataset.name}' failed to import; upload it again",
+            f"the lookup table '{dataset.name}' failed to import. Upload it again",
             field="dataset_id",
             reason="dataset_failed",
         )
@@ -203,7 +203,7 @@ async def _dataset_inputs(
     outside = [column for column in chosen if column not in keys]
     if outside:
         raise _refuse(
-            f"'{outside[0]}' is not a key column of '{dataset.name}'; its key columns: {', '.join(keys)}",
+            f"'{outside[0]}' is not a key column of '{dataset.name}'. Its key columns: {', '.join(keys)}",
             field="key_columns",
             reason="not_a_key_column",
         )
@@ -247,7 +247,7 @@ async def _app_inputs(
     app = next((entry for entry in variant.apps if entry.toolkit == conn.toolkit), None)
     if app is None:
         raise _refuse(
-            f"this kit works with {apps}; the connection is to '{conn.toolkit}'",
+            f"this kit works with {apps}. The connection is to '{conn.toolkit}'",
             field="connection_id",
             reason="app_not_supported",
         )
@@ -304,7 +304,7 @@ async def _plan(
     variant_id = payload.variant or str(raw.get("default_variant"))
     if variant_id not in variants:
         raise _refuse(
-            f"the kit '{kit_id}' has no variant '{variant_id}'; its variants: {', '.join(variants)}",
+            f"the kit '{kit_id}' has no variant '{variant_id}'. Its variants: {', '.join(variants)}",
             field="variant",
             reason="unknown_variant",
             known=variants,
@@ -365,7 +365,7 @@ async def _plan(
                     id=kit_tool.key,
                     label=kit_tool.label,
                     status="skipped",
-                    note="needs text messages: set up sending texts for this agent, then add the kit again",
+                    note="needs text messages. Set up sending texts for this agent, then add the kit again",
                 )
             )
             continue
@@ -478,7 +478,7 @@ def _add_blocks(plan: _Plan, config: AgentConfig) -> None:
     panel = config.panel
     if panel.panel_id != "composite":
         raise _refuse(
-            "this agent shows its own panel, so the kit's blocks have nowhere to go; switch the panel to "
+            "this agent shows its own panel, so the kit's blocks have nowhere to go. Switch the panel to "
             "blocks first",
             field="agent_id",
             reason="not_a_composite_panel",
@@ -495,7 +495,7 @@ def _add_blocks(plan: _Plan, config: AgentConfig) -> None:
         if same_id is not None:
             if str(same_id.type) != str(block.type):
                 raise _refuse(
-                    f"the panel already has a {same_id.type} block named '{block.id}'; add the kit with "
+                    f"the panel already has a {same_id.type} block named '{block.id}'. Add the kit with "
                     "another block_prefix",
                     field="block_prefix",
                     reason="block_id_taken",
@@ -574,7 +574,7 @@ def _add_flow(plan: _Plan, config: AgentConfig, anchor: str | None) -> None:
     flow = config.flow
     if anchor is None or flow is None or not flow.nodes:
         why = (
-            "the agent has no flow; the kit works without one"
+            "the agent has no flow. The kit works without one"
             if flow is None or not flow.nodes
             else "name the step to add them after (flow_anchor) to add them"
         )
@@ -702,7 +702,7 @@ async def _add_notify_team(
             "tools.notify_team",
             "Team notifications",
             "skipped",
-            "no key given: the hand-over still works, the team is not messaged",
+            "no key given. The hand-over still works, but the team is not messaged",
         )
         plan.notes.append(
             "To also message your team, add the kit again with a tool-secret key holding the team's webhook "
@@ -819,7 +819,7 @@ async def instantiate_kit(
     try:
         config = AgentConfig.model_validate(agent.config)
     except ValidationError as exc:
-        raise ConflictError("the agent's stored configuration does not parse; fix it first") from exc
+        raise ConflictError("the agent's stored configuration does not parse. Fix it first") from exc
     plan = await _plan(db, vault, app_settings, ctx, kit_id, payload, agent, config)
     before = await _validate(db, agent, config)
 
@@ -1030,7 +1030,7 @@ def _response(
         )
     if plan.app is not None and any(tool.status == "added" for tool in plan.tools):
         notes.append(
-            "App actions run on the connected account; review each action's settings on the Tools tab."
+            "App actions run on the connected account. Review each action's settings on the Tools tab."
         )
     return ToolKitInstantiated(
         kit_id=plan.kit.id,

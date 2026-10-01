@@ -109,4 +109,4 @@ class CohereReranker:
         body = await self._http.call("POST", "/v1/check-api-key", json={})
         if not (isinstance(body, dict) and body.get("valid") is True):
             raise ConnectorError("Cohere says this key is not valid", auth=True)
-        return f"Cohere accepted the key; re-ranking with {self._model}"
+        return f"Cohere accepted the key. Re-ranking with {self._model}"

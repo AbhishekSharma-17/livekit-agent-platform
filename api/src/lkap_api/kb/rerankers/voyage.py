@@ -94,4 +94,4 @@ class VoyageReranker:
             ConnectorError: The key is invalid or Voyage AI cannot be reached.
         """
         await self._call("test", ["test"], timeout_s=None)
-        return f"Voyage AI accepted the key; re-ranking with {self._model}"
+        return f"Voyage AI accepted the key. Re-ranking with {self._model}"

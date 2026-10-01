@@ -132,11 +132,11 @@ def resolve_template(packs: list[str], template_id: str) -> tuple[StarterTemplat
                 return template, manifest
             raise UnprocessableEntityError(
                 f"template '{template_id}' needs pack '{template.pack_id}', which is not installed "
-                f"(LKAP_PACKS); known templates: {', '.join(known)}",
+                f"(LKAP_PACKS). Known templates: {', '.join(known)}",
                 details={"template_id": template_id, "pack_id": template.pack_id, "known": known},
             )
     raise UnprocessableEntityError(
-        f"unknown template '{template_id}'; known templates: {', '.join(known)}",
+        f"unknown template '{template_id}'. Known templates: {', '.join(known)}",
         details={"template_id": template_id, "known": known},
     )
 
@@ -233,7 +233,7 @@ async def instantiate_tool_template(
         unknown = sorted(set(payload.names) - known)
         if unknown:
             raise UnprocessableEntityError(
-                f"unknown template name(s) {', '.join(unknown)}; known: {', '.join(sorted(known))}",
+                f"unknown template name(s) {', '.join(unknown)}. Known: {', '.join(sorted(known))}",
                 details={"unknown": unknown},
             )
         templates = [t for t in templates if t.definition.name in payload.names]

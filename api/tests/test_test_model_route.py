@@ -143,7 +143,7 @@ async def test_a_passing_llm_test_is_recorded_with_detected_tools(
     assert [p["name"] for p in result["probes"]] == ["basic", "tools"]
     assert result["sample"] == "ok"
     assert result["cost_estimate_usd"] is None
-    assert result["cost_note"].startswith("no price on file for this model; the probe used 22 tokens")
+    assert result["cost_note"].startswith("no price on file for this model. The probe used 22 tokens")
     assert len(vendor.requests) == 2
     assert vendor.requests[0].headers["authorization"] == f"Bearer {FAKE_OPENAI_KEY}"
 
@@ -452,7 +452,7 @@ async def test_an_entry_without_a_probe_answers_none(admin_client: httpx.AsyncCl
     assert response.status_code == 200
     assert response.json()["ok"] is None
     assert (
-        response.json()["message"] == "no test for this provider; the model is checked on the first session"
+        response.json()["message"] == "no test for this provider. The model is checked on the first session"
     )
     assert vendor.requests == []
 
@@ -588,7 +588,7 @@ async def test_a_passing_test_clears_the_untested_warning(
     )
     after = await llm_warnings()
 
-    assert len(before) == 1 and "run Test model" in before[0]
+    assert len(before) == 1 and "Run Test model" in before[0]
     assert tested.json()["ok"] is True
     assert after == []
 

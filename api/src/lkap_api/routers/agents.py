@@ -461,7 +461,7 @@ async def _seed_config(
     manifest = get_manifest(settings.packs_list, pack_id)
     if manifest is None:
         raise UnprocessableEntityError(
-            f"pack '{pack_id}' is not installed; send an explicit config or set LKAP_PACKS",
+            f"pack '{pack_id}' is not installed. Send an explicit config or set LKAP_PACKS",
             details={"packs": settings.packs_list},
         )
     config, seeds = await _seed_from(
@@ -631,7 +631,7 @@ def _check_mode(requested: str | None, config: AgentConfig) -> None:
     message = (
         "mode 'flow' needs a flow with at least one node in config.flow"
         if requested == "flow"
-        else "mode 'prompt' needs config.flow to be empty; send config with flow: null"
+        else "mode 'prompt' needs config.flow to be empty. Send config with flow: null"
     )
     issue = Issue(path="mode", message=message)
     raise UnprocessableEntityError(
@@ -964,7 +964,7 @@ async def delete_agent(
     try:
         await db.flush()
     except IntegrityError as exc:
-        raise ConflictError("agent still has sessions; delete them first, or archive and purge it") from exc
+        raise ConflictError("agent still has sessions. Delete them first, or archive and purge it") from exc
     await apps.after_delete(db, ctx, row.id, app_sessions)  # V5-47: its Composio sessions, best effort
     log.info("agent_deleted", agent_id=agent_id, purged=purge)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -1180,6 +1180,6 @@ async def estimate_agent_cost(
     """
     body = payload or CostEstimateRequest()
     if body.template_id is not None or body.config is not None:
-        raise UnprocessableEntityError("this route estimates the agent in the path; drop template_id/config")
+        raise UnprocessableEntityError("this route estimates the agent in the path. Drop template_id/config")
     request = body.model_copy(update={"agent_id": agent_id})
     return await estimate_for_request(db, ctx, settings, request)

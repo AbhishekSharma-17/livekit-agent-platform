@@ -41,8 +41,8 @@ def telephony_issues(ctx: ValidationContext) -> list[Issue]:
             issues.append(
                 Issue(
                     path=path,
-                    message=f"'{target.label}' is already the name of destination {seen[key] + 1}; "
-                    "names must be unique",
+                    message=f"'{target.label}' is already the name of destination {seen[key] + 1}. "
+                    "Names must be unique",
                     severity="error",
                 )
             )

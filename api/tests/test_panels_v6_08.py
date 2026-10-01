@@ -34,7 +34,7 @@ def test_the_notebook_preset_validates_without_an_issue() -> None:
             "panel.blocks[2]",
             "warning",
             "'google/gemma-4-31b-it' cannot see pictures, so the agent cannot read what the "
-            "caller draws on this board — pick a model marked 'supports video' (e.g. "
+            "caller draws on this board. Pick a model marked 'supports video' (e.g. "
             "google/gemini-3.5-flash)",
         )
     ]

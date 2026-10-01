@@ -312,7 +312,7 @@ class Mem0MemoryStore:
         telemetry = _import("mem0.memory.telemetry")
         if telemetry.MEM0_TELEMETRY:
             raise MemoryUnavailableError(
-                "Mem0 was imported before its telemetry could be switched off; restart the api"
+                "Mem0 was imported before its telemetry could be switched off. Restart the api"
             )
         embedder = get_fastembed_embedder(settings.data_dir, settings.embed_model)
         url = settings.resolved_database_url

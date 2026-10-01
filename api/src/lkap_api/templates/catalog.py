@@ -73,7 +73,7 @@ def _load_entry(directory: Traversable) -> StarterTemplate:
         raise CatalogError(f"catalogue entry '{name}' is not a valid StarterTemplate: {exc}") from exc
     if template.id != name:
         raise CatalogError(
-            f"catalogue entry '{name}' has id '{template.id}'; the id must equal the directory"
+            f"catalogue entry '{name}' has id '{template.id}'. The id must equal the directory"
         )
     for seed in template.kb_seeds:
         for file_name in seed.files:

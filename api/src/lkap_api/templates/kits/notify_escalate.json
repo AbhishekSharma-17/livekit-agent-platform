@@ -48,7 +48,7 @@
     {
       "id": "team",
       "label": "Your team",
-      "summary": "Uses the built-in hand-over; pick a tool-secret key holding your team's webhook address to also post a message to the team.",
+      "summary": "Uses the built-in hand-over. Pick a tool-secret key holding your team's webhook address to also post a message to the team.",
       "source": "none",
       "requires": {"secret_names": ["TEAM_WEBHOOK_URL"]},
       "configures": ["notify_team"]

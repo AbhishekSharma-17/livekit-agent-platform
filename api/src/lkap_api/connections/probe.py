@@ -187,5 +187,5 @@ async def probe_connection(
     absent = [name for name, on in (("SIP", sip), ("Egress", egress), ("Ingress", ingress)) if not on]
     message = "connected"
     if absent:
-        message += f"; not reachable: {', '.join(absent)}"
+        message += f". Not reachable: {', '.join(absent)}"
     return ConnectionTestResult(ok=True, message=message, capabilities=caps, latency_ms=latency_ms)

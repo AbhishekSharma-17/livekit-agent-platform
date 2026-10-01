@@ -34,7 +34,7 @@
     {
       "id": "rest",
       "label": "Your own system",
-      "summary": "Sends the summary to your system's address (a key is optional; without one the call carries no key).",
+      "summary": "Sends the summary to your system's address (a key is optional, and without one the call carries no key).",
       "source": "http",
       "requires": {"secret_names": ["API_KEY"]},
       "tools": [

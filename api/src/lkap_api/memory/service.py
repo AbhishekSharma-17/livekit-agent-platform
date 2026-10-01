@@ -113,7 +113,7 @@ EXTRACTION_PROVIDERS: Final[dict[str, str]] = {
 }
 NO_MODEL_REASON: Final[str] = (
     "the agent has no language model the platform can call after the call (OpenAI or OpenRouter "
-    "with a key); turn on 'verbatim' or pick one of those"
+    "with a key). Turn on 'verbatim' or pick one of those"
 )
 
 _FINISHED: Final[frozenset[str]] = frozenset({"ended", "failed"})
@@ -556,12 +556,12 @@ async def forget_subject(
     if rows:
         store, unavailable = _store_or_none(settings)
         if store is None:
-            raise MemoryBackendError(f"memory is unavailable ({unavailable}); nothing was deleted")
+            raise MemoryBackendError(f"memory is unavailable ({unavailable}). Nothing was deleted")
         try:
             count = await store.forget(subject)
         except Exception as exc:
             log.warning("memory_forget_failed", error_type=type(exc).__name__)
-            raise MemoryBackendError("the memory backend failed; nothing was deleted") from exc
+            raise MemoryBackendError("the memory backend failed. Nothing was deleted") from exc
         await db.execute(
             delete(MemorySubject).where(
                 MemorySubject.workspace_id == workspace_id, MemorySubject.subject_id == subject

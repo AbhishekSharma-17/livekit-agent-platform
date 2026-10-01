@@ -335,7 +335,7 @@ class ConnectionRuntime:
         binding = await self._binding(kb_id)
         if binding is not None and binding.kind == "external":
             raise ConnectorError(
-                f"knowledge base '{kb_id}' is searched in a managed search service; it has no vector store"
+                f"knowledge base '{kb_id}' is searched in a managed search service. It has no vector store"
             )
         if binding is None or binding.connection_id is None:
             return None

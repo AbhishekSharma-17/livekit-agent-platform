@@ -155,8 +155,8 @@ class WeaviateStore:
             config = schema.get("multiTenancyConfig")
             if not (isinstance(config, Mapping) and config.get("enabled") is True):
                 raise ConnectorError(
-                    f"Weaviate collection '{self._collection}' does not have multi-tenancy enabled; "
-                    "use a new collection name and the platform creates it"
+                    f"Weaviate collection '{self._collection}' does not have multi-tenancy enabled. "
+                    "Use a new collection name and the platform creates it"
                 )
         self._collection_ready = True
 

@@ -141,7 +141,7 @@ async def _credential(db: AsyncSession, ctx: WorkspaceContext, kind: str, creden
     expected = credential_home(KNOWLEDGE_CONNECTION_PROVIDER_IDS[kind])
     if credential_home(row.provider_id) != expected:
         raise UnprocessableEntityError(
-            f"credential '{credential_id}' is a '{row.provider_id}' key; this connection needs a "
+            f"credential '{credential_id}' is a '{row.provider_id}' key. This connection needs a "
             f"'{expected}' key",
             details={"field": "credential_id"},
         )
@@ -304,7 +304,7 @@ async def update_connection(
             if kbs:
                 raise ConflictError(
                     f"'{', '.join(moved)}' cannot change while knowledge bases are stored through this "
-                    "connection; move them first",
+                    "connection. Move them first",
                     details={"fields": moved, "knowledge_bases": [kb.name for kb in kbs[:MAX_NAMED_KBS]]},
                 )
         row.settings = new
@@ -379,7 +379,7 @@ async def _probe_store(store: object, expected: int | None) -> _Probe:
             )
             metric = mine.get("metric") if mine is not None else None
             if isinstance(metric, str) and metric != "cosine":
-                probe.error = f"Pinecone index '{store.index}' uses the {metric} metric; it must use cosine"
+                probe.error = f"Pinecone index '{store.index}' uses the {metric} metric. It must use cosine"
             label = f"Pinecone index '{store.index}'"
         case WeaviateStore():
             collections = await store.list_collections()
@@ -390,8 +390,8 @@ async def _probe_store(store: object, expected: int | None) -> _Probe:
                 config = schema.get("multiTenancyConfig")
                 if not (isinstance(config, dict) and config.get("enabled") is True):
                     probe.error = (
-                        f"Weaviate collection '{store.collection}' does not have multi-tenancy enabled; "
-                        "use a new collection name and the platform creates it"
+                        f"Weaviate collection '{store.collection}' does not have multi-tenancy enabled. "
+                        "Use a new collection name and the platform creates it"
                     )
             label = f"Weaviate collection '{store.collection}'"
         case _:  # pragma: no cover - build_store returns one of the three
@@ -400,7 +400,7 @@ async def _probe_store(store: object, expected: int | None) -> _Probe:
         if probe.dimension_found != expected:
             probe.error = (
                 f"{label} holds {probe.dimension_found}-dimension vectors, but knowledge bases here are "
-                f"built with {expected}-dimension vectors; pick another collection or index, or change "
+                f"built with {expected}-dimension vectors. Pick another collection or index, or change "
                 "the embedder"
             )
     if probe.error is None:
@@ -411,7 +411,7 @@ async def _probe_store(store: object, expected: int | None) -> _Probe:
             probe.message = f"Connected. {label} exists and holds {holds}."
         else:
             probe.message = (
-                f"Connected. {label} does not exist yet; it is created with the first knowledge base."
+                f"Connected. {label} does not exist yet. It is created with the first knowledge base."
             )
     return probe
 
@@ -522,14 +522,14 @@ async def bind_for_kb(
     if kb_kind == "external":
         if row.kind not in EXTERNAL_RETRIEVER_CONNECTION_KINDS:
             raise UnprocessableEntityError(
-                f"knowledge connection '{row.name}' is not a managed search service; a managed search "
+                f"knowledge connection '{row.name}' is not a managed search service. A managed search "
                 "knowledge base needs a Ragie connection",
                 details={"field": "connection_id"},
             )
         return KbBinding(connection_id=row.id, external_ref=check_external_ref(row.kind, requested_ref))
     if row.kind in EXTERNAL_RETRIEVER_CONNECTION_KINDS:
         raise UnprocessableEntityError(
-            f"knowledge connection '{row.name}' is a managed search service: it holds its own documents. "
+            f"knowledge connection '{row.name}' is a managed search service. It holds its own documents. "
             "Create the knowledge base as managed search (kind 'external') with a partition instead",
             details={"field": "connection_id"},
         )

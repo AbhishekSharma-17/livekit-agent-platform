@@ -56,7 +56,7 @@ async def start_run(
     """
     agent = await load_scoped_agent(db, ctx, agent_id)
     if agent.archived_at is not None:
-        raise ConflictError("the agent is archived; unarchive it to run its tests")
+        raise ConflictError("the agent is archived. Unarchive it to run its tests")
     run = await create_run(
         db,
         agent,

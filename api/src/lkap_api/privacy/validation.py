@@ -29,7 +29,7 @@ __all__ = [
 ]
 
 FIELDS_WITHOUT_QA_MESSAGE = (
-    "Post-call fields are filled by the call review, which is off: turn on QA to fill them"
+    "Post-call fields are filled by the call review, which is off. Turn on QA to fill them"
 )
 SCRUB_MODEL_UNUSED_MESSAGE = (
     "The cleanup model only runs when transcripts are not kept in full: choose 'redacted' or 'basic'"
@@ -46,7 +46,7 @@ def _stt_issues(ctx: ValidationContext) -> list[Issue]:
             Issue(
                 path="privacy.stt_redact",
                 message="This pipeline has no separate speech-to-text provider, so nothing can mask "
-                "while transcribing; use the storage tier to clean transcripts after the call",
+                "while transcribing. Use the storage tier to clean transcripts after the call",
                 severity="warning",
             )
         ]
@@ -60,7 +60,7 @@ def _stt_issues(ctx: ValidationContext) -> list[Issue]:
     return [
         Issue(
             path="privacy.stt_redact",
-            message=f"{spec.label} cannot mask {', '.join(unsupported)} while transcribing; it is "
+            message=f"{spec.label} cannot mask {', '.join(unsupported)} while transcribing. It is "
             "ignored (Deepgram can)",
             severity="warning",
         )
@@ -85,7 +85,7 @@ def _scrub_model_issues(ctx: ValidationContext) -> list[Issue]:
         return [
             Issue(
                 path=path,
-                message=f"{spec.label} cannot be called after the call; only OpenAI or OpenRouter with "
+                message=f"{spec.label} cannot be called after the call. Only OpenAI or OpenRouter with "
                 "a key can. Transcripts are still cleaned of emails, card and long numbers",
                 severity="warning",
             )

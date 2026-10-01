@@ -11,7 +11,7 @@
   ],
   "order": 30,
   "pack_id": "generic",
-  "greeting": "Hi! Turn on your camera or share your screen and I'll tell you what I see — or just ask.",
+  "greeting": "Hi! Turn on your camera or share your screen and I'll tell you what I see, or just ask.",
   "pipeline": {
     "mode": "cascaded",
     "stt": {

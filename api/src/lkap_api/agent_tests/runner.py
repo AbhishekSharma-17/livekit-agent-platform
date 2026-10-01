@@ -165,7 +165,7 @@ async def _run(ctx: JobContext, http: httpx.AsyncClient, run_id: str, workspace_
         if agent.config_version != run.config_version:
             raise _RunError(
                 f"the agent changed after the run was queued (version {run.config_version} → "
-                f"{agent.config_version}); run the tests again"
+                f"{agent.config_version}). Run the tests again"
             )
         try:
             config = AgentConfig.model_validate(agent.config)
@@ -267,7 +267,7 @@ async def _preflight_worker(db: AsyncSession, agent: Agent) -> None:
     if ready is None:
         raise _RunError(
             f"no ready worker is registered for the agent's LiveKit connection '{connection.name}', so no "
-            "agent would answer; start one (Connections → Workers) and run the tests again"
+            "agent would answer. Start one (Connections → Workers) and run the tests again"
         )
 
 
@@ -379,7 +379,7 @@ async def _mint_session(
                 await db.commit()
         except AgentBusyError as exc:
             raise _CaseError(
-                "the agent is at its concurrent session limit; run the tests when it is less busy"
+                "the agent is at its concurrent session limit. Run the tests when it is less busy"
             ) from exc
         except ApiError as exc:
             raise _CaseError(exc.message) from exc

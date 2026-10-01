@@ -180,13 +180,13 @@ async def check_quota(db: AsyncSession, workspace_id: str, rows: int) -> None:
     ).one()
     if int(count) >= MAX_DATASETS_PER_WORKSPACE:
         raise DatasetQuotaExceededError(
-            f"this workspace already has {MAX_DATASETS_PER_WORKSPACE} lookup tables; delete one first",
+            f"this workspace already has {MAX_DATASETS_PER_WORKSPACE} lookup tables. Delete one first",
             details={"limit": "datasets_per_workspace", "max": MAX_DATASETS_PER_WORKSPACE},
         )
     if int(used) + rows > MAX_DATASET_ROWS_PER_WORKSPACE:
         raise DatasetQuotaExceededError(
-            f"this workspace's lookup tables would hold more than {MAX_DATASET_ROWS_PER_WORKSPACE:,} rows; "
-            "delete a table first",
+            f"this workspace's lookup tables would hold more than {MAX_DATASET_ROWS_PER_WORKSPACE:,} rows. "
+            "Delete a table first",
             details={"limit": "rows_per_workspace", "max": MAX_DATASET_ROWS_PER_WORKSPACE},
         )
 
@@ -324,7 +324,7 @@ async def import_rows(database: Database, storage: StorageBackend, dataset_id: s
                 session,
                 dataset_id,
                 workspace_id,
-                "the uploaded file is missing from storage; upload it again",
+                "the uploaded file is missing from storage. Upload it again",
             )
             return
         key_spec: dict[str, DatasetKeyType] = {
@@ -375,7 +375,7 @@ async def import_rows(database: Database, storage: StorageBackend, dataset_id: s
                 session,
                 dataset_id,
                 workspace_id,
-                f"the import failed ({type(exc).__name__}); upload the file again",
+                f"the import failed ({type(exc).__name__}). Upload the file again",
             )
             return
     log.info("dataset_imported", dataset_id=dataset_id, rows=total, key_columns=[name for name, _ in keys])
@@ -398,9 +398,9 @@ async def lookup(db: AsyncSession, dataset: Dataset, request: DatasetLookupIn) -
     """
     if dataset.status != "ready":
         message = (
-            "this lookup table is still being imported; try again in a moment"
+            "this lookup table is still being imported. Try again in a moment"
             if dataset.status == "pending"
-            else "this lookup table's import failed; upload the file again"
+            else "this lookup table's import failed. Upload the file again"
         )
         raise ConflictError(message, details={"dataset_id": dataset.id, "status": dataset.status})
     key_types = {str(column["name"]): column["type"] for column in dataset.key_columns or []}
@@ -408,7 +408,7 @@ async def lookup(db: AsyncSession, dataset: Dataset, request: DatasetLookupIn) -
     unknown_keys = sorted(set(request.keys) - set(key_types))
     if unknown_keys:
         raise UnprocessableEntityError(
-            f"'{unknown_keys[0]}' is not a key column of this lookup table; its keys are: "
+            f"'{unknown_keys[0]}' is not a key column of this lookup table. Its keys are: "
             f"{', '.join(key_types)}",
             details={"reason": "not_a_key_column", "column": unknown_keys[0]},
         )
@@ -524,7 +524,7 @@ async def delete_dataset(db: AsyncSession, storage: StorageBackend, dataset: Dat
     users = await tools_using(db, dataset.workspace_id, dataset.id)
     if users:
         raise ConflictError(
-            f"these tools still use this lookup table: {', '.join(users)}; delete or change them first",
+            f"these tools still use this lookup table: {', '.join(users)}. Delete or change them first",
             details={"dataset_id": dataset.id, "tools": users},
         )
     await _clear_rows(db, dataset.id)

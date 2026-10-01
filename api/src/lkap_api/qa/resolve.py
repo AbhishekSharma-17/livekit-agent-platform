@@ -69,7 +69,7 @@ async def resolve_judge(
     if not spec.requires_credential:
         return None, (
             f"unsupported judge provider: {ref.provider_id} "
-            "(requires no credential; no HTTP endpoint documented for the api process)"
+            "(requires no credential, and no HTTP endpoint is documented for the api process)"
         )
     if not ref.credential_id:
         return None, f"provider {ref.provider_id} requires a credential_id on qa.model/pipeline.workflow_llm"

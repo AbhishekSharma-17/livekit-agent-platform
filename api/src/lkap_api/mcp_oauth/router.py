@@ -193,7 +193,7 @@ async def get_callback(
     )
     if outcome.bad_state:
         raise BadRequestError(
-            "this sign-in link is not valid any more: start the sign-in again from the console",
+            "this sign-in link is not valid any more. Start the sign-in again from the console",
             details={"reason": outcome.reason},
         )
     redirect = RedirectResponse(

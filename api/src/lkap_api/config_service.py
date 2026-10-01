@@ -528,7 +528,7 @@ def validate(ctx: ValidationContext) -> ValidationResult:
         findings.add(
             "warning",
             f"pipeline.turn_handling.{where}",
-            f"'{where}' does not look right ({first['msg']}); the call may fail to start with it",
+            f"'{where}' does not look right ({first['msg']}). The call may fail to start with it",
         )
 
     if ctx.known_tool_ids is not None:
@@ -544,8 +544,8 @@ def validate(ctx: ValidationContext) -> ValidationResult:
         findings.add(
             "warning",
             "instructions",
-            "instructions are empty; the agent will rely on the model's defaults",
-            flat="instructions are empty; the agent will rely on the model's defaults",
+            "instructions are empty. The agent will rely on the model's defaults",
+            flat="instructions are empty. The agent will rely on the model's defaults",
         )
 
     findings.extend(connection_flag_issues(ctx))
@@ -575,11 +575,11 @@ def validate(ctx: ValidationContext) -> ValidationResult:
 
 #: V5-32 (D-V5-21): a warm target where the worker cannot run a warm transfer.
 WARM_NEEDS_CLOUD_MESSAGE = (
-    "Warm transfer needs a LiveKit Cloud connection; on this connection it falls back to a standard "
+    "Warm transfer needs a LiveKit Cloud connection. On this connection it falls back to a standard "
     "transfer (the summary is kept on the call)."
 )
 WARM_NEEDS_ONE_LINE_MESSAGE = (
-    "Warm transfer needs exactly one outbound phone line on this connection; until then it falls back "
+    "Warm transfer needs exactly one outbound phone line on this connection. Until then it falls back "
     "to a standard transfer."
 )
 AMD_NEEDS_OUTBOUND_MESSAGE = (
@@ -587,7 +587,7 @@ AMD_NEEDS_OUTBOUND_MESSAGE = (
     "outbound phone line."
 )
 AMD_NEEDS_CASCADED_MESSAGE = (
-    "Answering-machine detection needs a speech-to-text and language-model pipeline; with a realtime "
+    "Answering-machine detection needs a speech-to-text and language-model pipeline. With a realtime "
     "model it is skipped."
 )
 AMD_DEFAULT_MESSAGE_TIP = "Tip: no voicemail message is set, so the agent leaves a short call-back request."
@@ -690,13 +690,13 @@ def _not_installed_message(spec: ProviderSpec, connection: ConnectionContext | N
     if connection is None:
         return (
             f"provider '{spec.id}' is not available yet on the default worker pool "
-            f"(it needs the '{spec.worker_image}' worker image; the pool runs 'slim')"
+            f"(it needs the '{spec.worker_image}' worker image, and the pool runs 'slim')"
         )
     where = _connection_label(connection)
     if connection.installed_provider_ids is not None:
         return f"provider '{spec.id}' is not installed on {where}'s worker pool"
     return (
-        f"provider '{spec.id}' needs the '{spec.worker_image}' worker image; "
+        f"provider '{spec.id}' needs the '{spec.worker_image}' worker image, but "
         f"{where} runs '{connection.worker_image}'"
     )
 
@@ -714,13 +714,13 @@ def _validate_modes(ctx: ValidationContext, findings: _Findings) -> None:
                     "error",
                     "pipeline.realtime",
                     f"'{spec.id}' cannot produce text-only output, so it cannot drive half-cascade "
-                    "mode; pick a realtime model with text output, or use realtime or cascaded mode",
+                    "mode. Pick a realtime model with text output, or use realtime or cascaded mode",
                 )
             if not spec.capabilities.video_input and wants_video:
                 findings.add(
                     "warning",
                     "pipeline.realtime",
-                    f"'{spec.id}' cannot see video frames; camera/screen share "
+                    f"'{spec.id}' cannot see video frames. Camera/screen share "
                     "still reach the UI and the pin/describe tools, but not the model",
                 )
 
@@ -752,16 +752,16 @@ def _validate_llm_vision(ctx: ValidationContext, ref: ProviderRef, findings: _Fi
         findings.add(
             "warning",
             "pipeline.llm",
-            f"{name} cannot see images (per its {caps.source or 'registry'} capabilities); camera/screen "
+            f"{name} cannot see images (per its {caps.source or 'registry'} capabilities). Camera/screen "
             "share still reach the UI and pin_frame, but per-turn vision and describe_current_frame "
-            f"are disabled — {_vision_suggestion(spec, model)}",
+            f"are disabled. {_vision_suggestion(spec, model)}",
         )
         return
     findings.add(
         "warning",
         "pipeline.llm",
         f"Tip: whether {name} accepts images is unknown, so camera/screen share frames are still "
-        "sent to it; run Test model with the vision probe, or declare its capabilities, to be sure",
+        "sent to it. Run Test model with the vision probe, or declare its capabilities, to be sure",
     )
 
 
@@ -769,17 +769,17 @@ def _vision_suggestion(spec: ProviderSpec, model: str) -> str:
     """Vision models of the same provider (never ``model`` itself), else the vision probe."""
     others = [m.id for m in spec.models if m.supports_video and m.id != model]
     if others:
-        return f"pick a model marked 'supports video' (e.g. {', '.join(others[:2])})"
+        return f"Pick a model marked 'supports video' (e.g. {', '.join(others[:2])})"
     return (
-        "if it does accept images, run Test model with the vision probe or declare its capabilities; "
-        "otherwise pick a vision model"
+        "If it does accept images, run Test model with the vision probe or declare its capabilities. "
+        "Otherwise pick a vision model"
     )
 
 
 #: V6-12: a drawing board on a realtime or half-cascade pipeline (`read_canvas` cannot read it).
 CANVAS_NEEDS_CASCADED_MESSAGE: Final[str] = (
     "the agent reads what the caller draws with its own language model, which only works on a "
-    "cascaded pipeline whose model can see pictures; with a realtime model the caller can still draw, "
+    "cascaded pipeline whose model can see pictures. With a realtime model the caller can still draw, "
     "but the agent cannot read the board"
 )
 
@@ -821,11 +821,11 @@ def canvas_vision_issues(ctx: ValidationContext) -> list[Issue]:
         if caps.vision is False:
             message = (
                 f"{name} cannot see pictures, so the agent cannot read what the caller draws on this "
-                f"board — {_vision_suggestion(spec, model)}"
+                f"board. {_vision_suggestion(spec, model)}"
             )
         elif caps.vision is None:
             message = (
-                f"Tip: whether {name} can see pictures is unknown; the agent reads what the caller draws "
+                f"Tip: whether {name} can see pictures is unknown. The agent reads what the caller draws "
                 "only with a model that can, so run Test model with the vision probe to be sure"
             )
     if message is None:
@@ -845,7 +845,7 @@ def _validate_credential(
             findings.add("error", label, f"provider '{spec.id}' requires a credential")
             return
     elif ref.credential_id:
-        findings.add("warning", label, f"provider '{spec.id}' needs no credential; the reference is ignored")
+        findings.add("warning", label, f"provider '{spec.id}' needs no credential. The reference is ignored")
         return
     if ref.credential_id:
         # R-V4-7: a provider with a credential home (every OpenRouter entry)
@@ -866,7 +866,7 @@ def _validate_credential(
 DEEPGRAM_FLUX_PREFIX: Final[str] = "flux-"
 DEEPGRAM_FLUX_MOVED_MESSAGE: Final[str] = (
     "Flux models run on the 'Deepgram Flux' transcriber, which also decides when the caller has "
-    "finished speaking; pick 'Deepgram Flux' instead (the same Deepgram key works)"
+    "finished speaking. Pick 'Deepgram Flux' instead (the same Deepgram key works)"
 )
 
 #: How long a passing "Test model" run silences the unknown-model warning (R-V4-24).
@@ -894,7 +894,7 @@ def _validate_model(
     listed = {m.id: m for m in spec.models}
     if model in listed and listed[model].deprecated:
         # V6-02 (D-V6-4a): the id is the registry's own, so naming it here leaks nothing.
-        replacement = f"; pick '{spec.default_model}'" if spec.default_model else ""
+        replacement = f". Pick '{spec.default_model}'" if spec.default_model else ""
         findings.add("warning", label, f"'{model}' is deprecated by the vendor{replacement}")
         return
     if model == spec.default_model or model in listed:
@@ -910,8 +910,8 @@ def _validate_model(
     findings.add(
         "warning",
         label,
-        f"this model id is not in the suggestion list or the live catalog for '{spec.id}' "
-        "— run Test model, or pick a listed one",
+        f"this model id is not in the suggestion list or the live catalog for '{spec.id}'. "
+        "Run Test model, or pick a listed one",
     )
 
 
@@ -936,7 +936,7 @@ def _validate_fields(label: str, ref: ProviderRef, spec: ProviderSpec, findings:
 
 #: Shown on a `choices` block of an agent set up for phone calls (V5-08).
 CHOICES_ON_PHONE_MESSAGE: Final[str] = (
-    "callers on a phone line cannot see or tap choices; on a call the agent asks the question "
+    "callers on a phone line cannot see or tap choices. On a call the agent asks the question "
     "out loud instead"
 )
 
@@ -971,7 +971,7 @@ def choices_on_phone_issues(ctx: ValidationContext) -> list[Issue]:
 
 #: V5-15: a `require_consent` agent whose panel has no recording consent block.
 CONSENT_BLOCK_MISSING_MESSAGE: Final[str] = (
-    "callers can agree to the recording out loud; add a consent block so they can also tap to accept"
+    "callers can agree to the recording out loud. Add a consent block so they can also tap to accept"
 )
 
 
@@ -1020,7 +1020,7 @@ def consent_issues(ctx: ValidationContext) -> list[Issue]:
         issues.append(
             Issue(
                 path="disclosure.enabled",
-                message=f"callers will not be told they are talking to an AI; in {label} the law expects "
+                message=f"callers will not be told they are talking to an AI. In {label} the law expects "
                 "them to be told (confirm with counsel)",
                 severity="warning",
             )
@@ -1085,13 +1085,13 @@ def knowledge_auto_inject_issues(ctx: ValidationContext) -> list[Issue]:
         message = (
             "Tip: auto-inject changes the conversation on every turn with a knowledge hit, which "
             "discards the preemptive reply this agent keeps enabled (turn_handling.preemptive_generation), "
-            "so each such turn pays for two LLM calls. Nothing is broken; for faster, cheaper replies, "
+            "so each such turn pays for two LLM calls. Nothing is broken. For faster, cheaper replies, "
             "turn auto-inject off and let the agent call the search_knowledge tool"
         )
     else:
         message = (
             "Tip: auto-inject turns off preemptive generation for this agent's sessions, so replies "
-            "start only after the caller's turn ends. Nothing is broken; for faster replies, turn "
+            "start only after the caller's turn ends. Nothing is broken. For faster replies, turn "
             "auto-inject off and let the agent call the search_knowledge tool"
         )
     return [Issue(path="knowledge.auto_inject", message=message, severity="warning")]
@@ -1131,7 +1131,7 @@ def knowledge_retrieval_issues(ctx: ValidationContext) -> list[Issue]:
                 Issue(
                     path="knowledge.rerank",
                     message="a re-ranking service is used only by the search tool, never by automatic "
-                    "knowledge; turn automatic knowledge off or re-rank on this server instead",
+                    "knowledge. Turn automatic knowledge off or re-rank on this server instead",
                     severity="error",
                 )
             )
@@ -1140,7 +1140,7 @@ def knowledge_retrieval_issues(ctx: ValidationContext) -> list[Issue]:
         issues.append(
             Issue(
                 path="knowledge.rerank",
-                message=f"unknown rerank '{knowledge.rerank}'; use 'none', 'local' or 'connection:<id>'",
+                message=f"unknown rerank '{knowledge.rerank}'. Use 'none', 'local' or 'connection:<id>'",
                 severity="error",
             )
         )
@@ -1148,7 +1148,7 @@ def knowledge_retrieval_issues(ctx: ValidationContext) -> list[Issue]:
         issues.append(
             Issue(
                 path="knowledge.rerank",
-                message="reranking without pre-fetch adds ~60 ms to every turn; turn pre-fetch on to "
+                message="reranking without pre-fetch adds ~60 ms to every turn. Turn pre-fetch on to "
                 "rerank while the caller is still speaking",
                 severity="warning",
             )
@@ -1236,7 +1236,7 @@ def telephony_noise_cancellation_issues(ctx: ValidationContext) -> list[Issue]:
     where = _connection_label(connection)
     if connection.capabilities.noise_cancellation_tier != "krisp":
         message = (
-            f"The phone call preset tunes turn-taking only: noise cancellation for phone calls "
+            f"The phone call preset tunes turn-taking only. Noise cancellation for phone calls "
             f"needs LiveKit Cloud, which {where} does not offer"
         )
     else:
@@ -1247,9 +1247,10 @@ def telephony_noise_cancellation_issues(ctx: ValidationContext) -> list[Issue]:
         if spec is None and _telephony_filter_offered():
             return []
         message = (
-            f"The phone call preset keeps the noise filter '{spec.label}' as it is: it has no phone version"
+            f"The phone call preset keeps the noise filter '{spec.label}' as it is, because it has no "
+            "phone version"
             if spec is not None
-            else "The phone call preset tunes turn-taking only: no noise filter for phone calls is "
+            else "The phone call preset tunes turn-taking only. No noise filter for phone calls is "
             "available on this platform yet"
         )
     return [Issue(path="pipeline.conversation_preset", message=message, severity="warning")]
@@ -1260,12 +1261,12 @@ def telephony_noise_cancellation_issues(ctx: ValidationContext) -> list[Issue]:
 BATCH_SPEECH_MESSAGES: Final[dict[str, str]] = {
     "openrouter-stt": (
         "OpenRouter transcribes each turn in one request after you stop speaking (no live "
-        "transcript), which adds roughly 0.5-2 s per turn; for a snappy voice agent use a streaming "
+        "transcript), which adds roughly 0.5-2 s per turn. For a snappy voice agent use a streaming "
         "STT such as LiveKit Inference or Deepgram"
     ),
     "openrouter-tts": (
-        "OpenRouter speech is not streamed: each sentence is synthesised in full before it starts "
-        "playing, which adds roughly 1-2.5 s before the agent speaks; for a snappy voice agent use a "
+        "OpenRouter speech is not streamed. Each sentence is synthesised in full before it starts "
+        "playing, which adds roughly 1-2.5 s before the agent speaks. For a snappy voice agent use a "
         "streaming TTS such as LiveKit Inference or Cartesia"
     ),
 }
@@ -1279,16 +1280,16 @@ _ISO_639_1: Final[re.Pattern[str]] = re.compile(r"^[a-z]{2}$")
 #: V6-02 (D-V6-1, D-V6-2): the tip for a transcriber that does not stream (``stt_not_streaming``).
 STT_NOT_STREAMING_TIP: Final[str] = (
     "Tip: '{label}' transcribes each turn in one request after the caller stops speaking, which slows "
-    "every reply on a live call; pick a transcriber that streams, such as LiveKit Inference or Deepgram"
+    "every reply on a live call. Pick a transcriber that streams, such as LiveKit Inference or Deepgram"
 )
 #: The tip for a voice that does not stream (``tts_not_streaming``).
 TTS_NOT_STREAMING_TIP: Final[str] = (
     "Tip: '{label}' waits for the whole sentence before it starts speaking, which slows every reply on "
-    "a live call; pick a voice that streams, such as LiveKit Inference, Cartesia or Deepgram"
+    "a live call. Pick a voice that streams, such as LiveKit Inference, Cartesia or Deepgram"
 )
 #: The tip when a field turns streaming on (``openai-stt``, ``rime-tts``).
 STREAMING_FIELD_TIP: Final[str] = (
-    "Tip: '{label}' is not streaming, which slows every reply on a live call; turn on '{field}'"
+    "Tip: '{label}' is not streaming, which slows every reply on a live call. Turn on '{field}'"
 )
 
 
@@ -1351,7 +1352,9 @@ def speech_latency_issues(ctx: ValidationContext) -> list[Issue]:
             issues.append(
                 Issue(
                     path="pipeline.stt.fields.language",
-                    message=f"'{code}' is not a two-letter language code this transcriber accepts; {detail}",
+                    message=(
+                        f"'{code}' is not a two-letter language code this transcriber accepts, so {detail}"
+                    ),
                     severity="warning",
                 )
             )
@@ -1434,14 +1437,14 @@ def language_issues(ctx: ValidationContext) -> list[Issue]:
             issues.append(
                 Issue(
                     path="voice.voices_by_language",
-                    message="A realtime model speaks with its own voice; voices per language are not used",
+                    message="A realtime model speaks with its own voice. Voices per language are not used",
                     severity="warning",
                 )
             )
         issues.append(
             Issue(
                 path="voice.languages",
-                message="Tip: a realtime model hears the language itself; switching changes only the "
+                message="Tip: a realtime model hears the language itself. Switching changes only the "
                 "language the agent answers in",
                 severity="warning",
             )
@@ -1458,7 +1461,7 @@ def language_issues(ctx: ValidationContext) -> list[Issue]:
             issues.append(
                 Issue(
                     path="voice.languages",
-                    message=f"{stt_spec.label} cannot transcribe {_names(unsupported)}; pick another "
+                    message=f"{stt_spec.label} cannot transcribe {_names(unsupported)}. Pick another "
                     "speech-to-text provider or remove the language",
                     severity="error",
                 )
@@ -1467,7 +1470,7 @@ def language_issues(ctx: ValidationContext) -> list[Issue]:
             issues.append(
                 Issue(
                     path="voice.auto_detect",
-                    message=f"{stt_spec.label} cannot detect the caller's language by itself; the agent "
+                    message=f"{stt_spec.label} cannot detect the caller's language by itself. The agent "
                     "switches only when the caller asks",
                     severity="warning",
                 )
@@ -1483,7 +1486,7 @@ def language_issues(ctx: ValidationContext) -> list[Issue]:
                 issues.append(
                     Issue(
                         path="voice.auto_detect",
-                        message=f"{stt_spec.label} cannot detect {_names(undetected)} automatically; the "
+                        message=f"{stt_spec.label} cannot detect {_names(undetected)} automatically. The "
                         "agent switches to it only when the caller asks",
                         severity="warning",
                     )
@@ -1518,7 +1521,7 @@ def language_issues(ctx: ValidationContext) -> list[Issue]:
                 message=(
                     f"{language_name(code)} has no voice of its own"
                     + (f" and {voice_label} does not list it" if spoken is False else "")
-                    + f"; {voice_label} speaks it, which may sound wrong. Add a {language_name(code)} voice"
+                    + f". {voice_label} speaks it, which may sound wrong. Add a {language_name(code)} voice"
                 ),
                 severity="warning",
             )
@@ -1580,7 +1583,7 @@ def tool_execution_issues(ctx: ValidationContext) -> list[Issue]:
         issues.append(
             Issue(
                 path=f"tools.builtin_execution.{name}",
-                message=f"'{name}' always runs blocking; only "
+                message=f"'{name}' always runs blocking. Only "
                 f"{', '.join(sorted(BACKGROUNDABLE_BUILTINS))} can run in the background",
             )
         )
@@ -1589,8 +1592,8 @@ def tool_execution_issues(ctx: ValidationContext) -> list[Issue]:
             Issue(
                 path="tools.max_tool_steps",
                 message=f"read tools run '{tools.execution_default}' by default and each announcement "
-                f"spends a tool step; with max_tool_steps {tools.max_tool_steps} a chain of lookups can "
-                f"run out of steps — use {MIN_TOOL_STEPS_FOR_BACKGROUND} or more",
+                f"spends a tool step. With max_tool_steps {tools.max_tool_steps} a chain of lookups can "
+                f"run out of steps. Use {MIN_TOOL_STEPS_FOR_BACKGROUND} or more",
                 severity="warning",
             )
         )
@@ -1610,7 +1613,7 @@ def tool_execution_issues(ctx: ValidationContext) -> list[Issue]:
                     Issue(
                         path=f"{base}.execution.mode",
                         message=f"'{name}' has silent_reply on, which would swallow its background "
-                        "announcement; turn one of them off",
+                        "announcement. Turn one of them off",
                     )
                 )
             if mode in NON_BLOCKING_MODES and never_background(name):
@@ -1636,7 +1639,7 @@ def tool_execution_issues(ctx: ValidationContext) -> list[Issue]:
                     Issue(
                         path=f"{path}.report_progress",
                         message=f"'{tool_name}' runs in the background but forwards no progress "
-                        "messages: the model will not announce this tool",
+                        "messages, so the model will not announce this tool",
                         severity="warning",
                     )
                 )
@@ -1679,7 +1682,7 @@ def _binding_target_issue(to: str, blocks: Mapping[str, str], path: str, name: s
             return Issue(
                 path=path,
                 message=f"'{name}' fills block '{target.block_id}' as a {target.kind} block, but it is a "
-                f"{block_type} block; bindings write only details and table blocks"
+                f"{block_type} block. Bindings write only details and table blocks"
                 + (never if block_type in FORBIDDEN_BINDING_BLOCK_TYPES else ""),
             )
         return None
@@ -1763,7 +1766,7 @@ def tool_context_issues(ctx: ValidationContext) -> list[Issue]:
                         Issue(
                             path=path,
                             message=f"'{name}' needs the variable '{variable}', which no flow variable or "
-                            "binding sets; the tool will refuse until something sets it",
+                            "binding sets. The tool will refuse until something sets it",
                             severity="warning",
                         )
                     )
@@ -1866,7 +1869,7 @@ _LOCAL_SUFFIXES: Final[tuple[str, ...]] = (".localhost", ".local", ".internal", 
 #: The warning for `send_sms` on an agent that looks web-only and has no saved contacts.
 SMS_NOWHERE_MESSAGE: Final[str] = (
     "text messages go to the caller only on phone calls, and this agent has no saved contacts to "
-    "text; add one under Telephony, or the tool will only work on phone calls"
+    "text. Add one under Telephony, or the tool will only work on phone calls"
 )
 
 
@@ -1901,7 +1904,7 @@ def agent_test_issues(ctx: ValidationContext) -> list[Issue]:
         issues.append(
             Issue(
                 path="publish_gate.require_tests",
-                message="publishing needs passing tests, but the agent has no test cases yet: publishing "
+                message="publishing needs passing tests, but the agent has no test cases yet. Publishing "
                 "will be refused until you add some and run them",
                 severity="warning",
             )
@@ -1927,7 +1930,7 @@ def agent_test_issues(ctx: ValidationContext) -> list[Issue]:
                         f"'{name}' is not one of this agent's HTTP tools or app actions, so it cannot be "
                         "mocked"
                         + (
-                            "; if it is a tool of an attached MCP server, it will run for real"
+                            ". If it is a tool of an attached MCP server, it will run for real"
                             if has_mcp
                             else ""
                         )
@@ -2091,19 +2094,19 @@ MODERATION_KEY_PROVIDER: Final[str] = "openai-llm"
 #: An unbounded repeat inside a group: ``+``, ``*`` or ``{n,}``.
 
 CLASSIFIER_NEEDS_MODEL_MESSAGE = (
-    "A rule judged by a language model needs a model: choose one for the guardrails, or set the "
+    "A rule judged by a language model needs a model. Choose one for the guardrails, or set the "
     "agent's workflow model."
 )
 MODERATION_NEEDS_KEY_MESSAGE = (
-    "The moderation service needs an OpenAI key: pick one on the rule, or give the agent an OpenAI model."
+    "The moderation service needs an OpenAI key. Pick one on the rule, or give the agent an OpenAI model."
 )
 ESCALATE_DISABLED_MESSAGE = (
-    "Guardrails escalate to a person, but 'escalate_to_human' is switched off; a trip will only stop "
+    "Guardrails escalate to a person, but 'escalate_to_human' is switched off. A trip will only stop "
     "the agent and say the safe reply."
 )
 SLOW_PATTERN_MESSAGE = (
-    "This pattern repeats a group that already repeats, which can take very long on long text; "
-    "simplify it (for example, drop the outer repeat)."
+    "This pattern repeats a group that already repeats, which can take very long on long text. "
+    "Simplify it (for example, drop the outer repeat)."
 )
 _STAGES: Final[tuple[GuardrailStage, ...]] = ("input", "output", "tool_output")
 
@@ -2204,7 +2207,7 @@ def guardrails_issues(ctx: ValidationContext) -> list[Issue]:
         findings.add(
             "error",
             "guardrails",
-            "every moderation rule must use the same OpenAI key; pick one key for all of them",
+            "every moderation rule must use the same OpenAI key. Pick one key for all of them",
         )
     if moderation_paths and _moderation_key(config, ctx.credential_providers) is None:
         for path in moderation_paths:
@@ -2365,14 +2368,14 @@ def apps_issues(ctx: ValidationContext) -> list[Issue]:
             issues.append(
                 Issue(
                     path="tools.apps.mode",
-                    message="connected apps need a Composio key: add one under Tools, Apps, Enable Composio",
+                    message="connected apps need a Composio key. Add one under Tools, Apps, Enable Composio",
                 )
             )
         elif COMPOSIO_PROVIDER_ID in ctx.disabled_provider_ids:
             issues.append(
                 Issue(
                     path="tools.apps.mode",
-                    message="Apps are turned off for this workspace; enable Composio again under Tools, Apps",
+                    message="Apps are turned off for this workspace. Enable Composio again under Tools, Apps",
                 )
             )
     if apps.mode == "router" and apps.router.manage_connections:
@@ -2381,7 +2384,7 @@ def apps_issues(ctx: ValidationContext) -> list[Issue]:
         issues.append(
             Issue(
                 path="tools.apps.router.manage_connections",
-                message="letting the agent connect apps for callers is not available yet: turn it off "
+                message="letting the agent connect apps for callers is not available yet. Turn it off "
                 "(connect apps under Tools, Apps instead)",
             )
         )
@@ -2407,7 +2410,7 @@ def apps_issues(ctx: ValidationContext) -> list[Issue]:
             issues.append(
                 Issue(
                     path=f"{base}.connection_id",
-                    message=f"the '{app}' app needs to be reconnected (status {status}); reconnect it "
+                    message=f"the '{app}' app needs to be reconnected (status {status}). Reconnect it "
                     "under Tools, Apps",
                 )
             )
@@ -2441,15 +2444,15 @@ def _chosen_account_issues(ctx: ValidationContext) -> list[Issue]:
                 issues.append(
                     Issue(
                         path=f"tools.apps.accounts.{toolkit}",
-                        message=f"the chosen '{toolkit}' account is no longer connected; choose another",
+                        message=f"the chosen '{toolkit}' account is no longer connected. Choose another",
                     )
                 )
             elif status in BROKEN_CONNECTION_STATUSES:
                 issues.append(
                     Issue(
                         path=f"tools.apps.accounts.{toolkit}",
-                        message=f"a chosen '{toolkit}' account needs to be reconnected (status {status}); "
-                        "reconnect it under Tools, Apps or choose another",
+                        message=f"a chosen '{toolkit}' account needs to be reconnected (status {status}). "
+                        "Reconnect it under Tools, Apps or choose another",
                     )
                 )
     return issues
@@ -2509,7 +2512,7 @@ def connection_flag_issues(ctx: ValidationContext) -> list[Issue]:
     caps = connection.capabilities
     where = _connection_label(connection)
     no_inference_reason = (
-        "self-hosted connections cannot use LiveKit Inference — use your own STT/LLM/TTS keys"
+        "self-hosted connections cannot use LiveKit Inference, so use your own STT/LLM/TTS keys"
         if connection.deployment_type == "self_hosted"
         else "its 'Use LiveKit Inference' setting is off"
     )
@@ -2534,7 +2537,7 @@ def connection_flag_issues(ctx: ValidationContext) -> list[Issue]:
             issues.append(
                 Issue(
                     path=_slot_path(slot),
-                    message=f"'{spec.id}' needs a LiveKit Cloud connection; {where} is self-hosted",
+                    message=f"'{spec.id}' needs a LiveKit Cloud connection, but {where} is self-hosted",
                 )
             )
 
@@ -2543,8 +2546,8 @@ def connection_flag_issues(ctx: ValidationContext) -> list[Issue]:
         issues.append(
             Issue(
                 path="pipeline.workflow_llm",
-                message=f"defaults to LiveKit Inference, which {where} does not offer; "
-                "set a workflow LLM with your own key or tools that need it will fail",
+                message=f"defaults to LiveKit Inference, which {where} does not offer. "
+                "Set a workflow LLM with your own key or tools that need it will fail",
                 severity="warning",
             )
         )
@@ -2556,8 +2559,8 @@ def connection_flag_issues(ctx: ValidationContext) -> list[Issue]:
         issues.append(
             Issue(
                 path="recording.enabled",
-                message=f"recording needs Egress, which is not reachable on {where}; "
-                "sessions will not be recorded",
+                message=f"recording needs Egress, which is not reachable on {where}. "
+                "Sessions will not be recorded",
                 severity="warning",
             )
         )

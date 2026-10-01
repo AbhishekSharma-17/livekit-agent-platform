@@ -1185,14 +1185,14 @@ async def fetch_import_source(client: httpx.AsyncClient, url: str, *, max_bytes:
         async with client.stream("GET", url, timeout=IMPORT_TIMEOUT_S) as response:
             if not 200 <= response.status_code < 300:
                 raise UnprocessableEntityError(
-                    f"the url answered HTTP {response.status_code}; redirects are not followed",
+                    f"the url answered HTTP {response.status_code}. Redirects are not followed",
                     details={"field": "url", "reason": "fetch_failed", "status_code": response.status_code},
                 )
             mime = media_type(response.headers.get("content-type"))
             if not import_media_type_allowed(mime):
                 raise UnsupportedMediaTypeError(
-                    f"cannot ingest content type {mime or 'unknown'!r}; "
-                    "text, markdown, JSON and PDF documents are accepted",
+                    f"cannot ingest content type {mime or 'unknown'!r}. "
+                    "Text, markdown, JSON and PDF documents are accepted",
                     details={"content_type": mime or None},
                 )
             declared = response.headers.get("content-length", "")
@@ -1209,7 +1209,7 @@ async def fetch_import_source(client: httpx.AsyncClient, url: str, *, max_bytes:
         blocked = net_guard.blocked_cause(exc)
         if blocked is not None:
             raise UnprocessableEntityError(
-                f"{blocked}; outbound requests to private or local networks are refused",
+                f"{blocked}. Outbound requests to private or local networks are refused",
                 details={"field": "url", "reason": "blocked_destination"},
             ) from exc
         raise UnprocessableEntityError(

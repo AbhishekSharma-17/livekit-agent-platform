@@ -2,7 +2,7 @@
   "id": "phone_agent",
   "name": "Phone agent",
   "tagline": "Answers a phone number with a keypad menu, takes messages and scores every call.",
-  "description": "A telephony starter: a keypad menu, answers from a small FAQ, takes a message, transfers to a person once you add a destination, and scores every call with QA. Attach a number and a dispatch rule to put it on the phone; until then, try it in the browser or a text chat.",
+  "description": "A telephony starter: a keypad menu, answers from a small FAQ, takes a message, transfers to a person once you add a destination, and scores every call with QA. Attach a number and a dispatch rule to put it on the phone. Until then, try it in the browser or a text chat.",
   "category": "phone",
   "chips": [
     "telephony",

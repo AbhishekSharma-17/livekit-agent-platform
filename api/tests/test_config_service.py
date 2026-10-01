@@ -190,7 +190,7 @@ def test_the_vision_suggestion_never_names_the_configured_model(
         ctx = dataclasses.replace(ctx, catalog_items={provider_id: ctx.catalog_items["openrouter-llm"]})
 
     for warning in _vision_warnings(ctx):
-        suggestion = warning.split("—", 1)[-1]
+        suggestion = warning.split("are disabled.", 1)[-1]
         assert model not in suggestion
 
 
@@ -200,8 +200,8 @@ def test_an_openrouter_text_only_catalog_item_warns_and_suggests_a_flagged_model
     )
 
     assert "cannot see images (per its catalog capabilities)" in warning
-    suggestion = warning.split("—", 1)[-1]
-    assert "pick a model marked 'supports video' (e.g. openai/gpt-4.1-mini, openai/gpt-4.1)" in suggestion
+    suggestion = warning.split("are disabled.", 1)[-1]
+    assert "Pick a model marked 'supports video' (e.g. openai/gpt-4.1-mini, openai/gpt-4.1)" in suggestion
     assert "google/gemini-3.5-flash" not in suggestion
 
 
@@ -334,7 +334,7 @@ def test_an_untested_custom_model_is_one_warning_without_the_id() -> None:
     assert errors == []
     assert len(warnings) == 1
     assert "not in the suggestion list or the live catalog for 'openai-llm'" in warnings[0]
-    assert "run Test model" in warnings[0]
+    assert "Run Test model" in warnings[0]
     assert "nano" not in warnings[0]
 
 
@@ -860,7 +860,7 @@ def test_telephony_preset_warns_while_no_phone_noise_filter_is_offered() -> None
     result = validate(ValidationContext(config=_telephony_config(), connection=_connection("krisp")))
 
     (issue,) = _preset_issues(result)
-    assert "no noise filter for phone calls is available on this platform yet" in issue.message
+    assert "No noise filter for phone calls is available on this platform yet" in issue.message
     assert "tunes turn-taking only" in issue.message
 
 

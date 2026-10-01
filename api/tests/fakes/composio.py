@@ -78,6 +78,10 @@ class ComposioWorld:
     session_info_error: ToolProviderError | None = None
     #: Live Tool Router sessions (V5-47): ``session id -> {subject, options}``.
     sessions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: ``action slug -> answer`` (or a callable of the connected account id) for ``execute`` (V6-35).
+    action_results: dict[str, Any] = field(default_factory=dict)
+    #: ``endpoint -> answer`` (or a callable of the connected account id) for ``proxy`` (V6-35).
+    proxy_results: dict[str, Any] = field(default_factory=dict)
     #: Where session MCP urls point (a test sets another host to exercise the pin).
     session_url_base: str = "https://backend.composio.dev/tool_router"
     _ids: itertools.count[int] = field(default_factory=lambda: itertools.count(1))
@@ -363,8 +367,26 @@ class FakeComposio:
         arguments: dict[str, Any],
         version: str | None = None,
     ) -> dict[str, Any]:
-        self._enter("execute", tool_slug=tool_slug, subject=subject, arguments=arguments)
+        self._enter(
+            "execute",
+            tool_slug=tool_slug,
+            subject=subject,
+            arguments=arguments,
+            connected_account_id=connected_account_id,
+        )
+        canned = self.world.action_results.get(tool_slug)
+        if canned is not None:
+            result = canned(connected_account_id) if callable(canned) else canned
+            return dict(copy.deepcopy(result))
         return {"data": {}, "error": None, "successful": True}
+
+    async def proxy(self, *, endpoint: str, method: str, connected_account_id: str) -> dict[str, Any]:
+        self._enter("proxy", endpoint=endpoint, http_method=method, connected_account_id=connected_account_id)
+        canned = self.world.proxy_results.get(endpoint)
+        if canned is None:
+            return {"data": {}, "status": 404, "headers": {}}
+        result = canned(connected_account_id) if callable(canned) else canned
+        return dict(copy.deepcopy(result))
 
     async def create_mcp_server(
         self, *, name: str, auth_config_ids: list[str], allowed_tools: list[str] | None = None

@@ -109,7 +109,7 @@ export function isNonBlocking(mode: ModeDraft): boolean {
 
 /** The api validator's exact wording (`config_service.py::tool_execution_issues`). */
 export function silentReplyConflictMessage(name: string): string {
-  return `'${name || "this tool"}' has silent_reply on, which would swallow its background announcement; turn one of them off`;
+  return `'${name || "this tool"}' has silent_reply on, which would swallow its background announcement. Turn one of them off`;
 }
 
 /**
@@ -149,7 +149,7 @@ export function RunsField({
           ? "This action can't be undone, so it always blocks and can't be cancelled."
           : isRead
             ? 'Left at "Agent default", this follows the agent\'s "Read tools run" setting (Instructions & voice → Conversation).'
-            : 'This tool changes something, so "Agent default" always blocks; choose a mode below to change that.'
+            : 'This tool changes something, so "Agent default" always blocks. Choose a mode below to change that.'
       }
     >
       <Select value={mode} onValueChange={(v) => onChange(v as ModeDraft)}>
@@ -192,11 +192,11 @@ export function ExecutionFields({
     <>
       <p className="text-label text-text-secondary">
         How this tool behaves while it runs. &quot;Blocking&quot; waits for the result before the agent
-        replies; the other modes let the agent keep talking.
+        replies. The other modes let the agent keep talking.
       </p>
       {!isRead ? (
         <p className="text-label text-text-secondary">
-          This tool changes something; the agent asks before running it twice.
+          This tool changes something. The agent asks before running it twice.
         </p>
       ) : null}
       {isNonBlocking(draft.mode) ? (
@@ -205,7 +205,7 @@ export function ExecutionFields({
             label="What the agent says first"
             htmlFor={`${uid}-execution-announce`}
             optional
-            hint='Its own words; default "Working on <name>."'
+            hint='Its own words. Default: "Working on <name>."'
           >
             <Input
               id={`${uid}-execution-announce`}
@@ -232,7 +232,7 @@ export function ExecutionFields({
           <Field
             label="Can be cancelled"
             htmlFor={`${uid}-execution-cancellable`}
-            hint="Default: read tools can be cancelled; tools that change something can't."
+            hint="Default: read tools can be cancelled and tools that change something can't."
           >
             <Select
               value={draft.cancellable}
@@ -251,7 +251,7 @@ export function ExecutionFields({
           <Field
             label="Repeated calls"
             htmlFor={`${uid}-execution-duplicate`}
-            hint="Default: reject a repeat of a read tool already running; ask again before repeating anything that changes something."
+            hint="Default: reject a repeat of a read tool already running, and ask again before repeating anything that changes something."
           >
             <Select
               value={draft.on_duplicate}
@@ -286,7 +286,7 @@ export function ExecutionFields({
             label="Fillers while waiting"
             htmlFor={`${uid}-execution-fillers`}
             optional
-            hint="One phrase per line, up to five. Spoken as written; needs a voice."
+            hint="One phrase per line, up to five. Spoken as written. Needs a voice."
           >
             <Textarea
               id={`${uid}-execution-fillers`}

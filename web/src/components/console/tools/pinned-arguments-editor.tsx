@@ -52,7 +52,7 @@ export function PinnedArgumentsEditor({
   onChange,
   variableNames,
   title = "Fixed values",
-  description = "Set once here and hidden from the model — it never sees these arguments or chooses them.",
+  description = "Set once here and hidden from the model. It never sees these arguments or chooses them.",
   emptyLabel = "No fixed values yet.",
   issuesOf = pinnedArgumentIssues,
 }: {
@@ -212,7 +212,7 @@ function PinnedRow({
       <TableCell>
         <PhoneLabel>Type</PhoneLabel>
         <Select value={type} onValueChange={(v) => onTypeChange(v as PinnedType)}>
-          <SelectTrigger className="w-28 max-sm:w-full" aria-label={`${name} — type`}>
+          <SelectTrigger className="w-28 max-sm:w-full" aria-label={`${name}: type`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -234,7 +234,7 @@ function PinnedRow({
               onSelect={field.trackCaret}
               onClick={field.trackCaret}
               onKeyUp={field.trackCaret}
-              aria-label={`${name} — value`}
+              aria-label={`${name}: value`}
               className="w-40 max-sm:w-full font-mono text-caption"
             />
             <InsertValueMenu variableNames={variableNames} onInsert={field.insert} label="Insert" />
@@ -244,11 +244,11 @@ function PinnedRow({
             type="number"
             value={typeof value === "number" ? value : 0}
             onChange={(e) => onValueChange(Number(e.target.value))}
-            aria-label={`${name} — value`}
+            aria-label={`${name}: value`}
             className="w-32 max-sm:w-full"
           />
         ) : type === "boolean" ? (
-          <Switch checked={value === true} onCheckedChange={(checked) => onValueChange(checked)} aria-label={`${name} — value`} />
+          <Switch checked={value === true} onCheckedChange={(checked) => onValueChange(checked)} aria-label={`${name}: value`} />
         ) : (
           <span className="text-caption text-text-secondary">Empty</span>
         )}

@@ -149,7 +149,7 @@ describe("AppCard — several accounts of one app (R-V5-13)", () => {
     fireEvent.click(addAccountButton);
     const dialog = await screen.findByRole("dialog", { name: "Add another GitHub account" });
     expect(within(dialog).getByText(/sign out of GitHub/)).toBeTruthy();
-    await within(dialog).findByText("Managed — one click");
+    await within(dialog).findByText("Managed (one click)");
     fireEvent.change(within(dialog).getByLabelText("Name this account"), { target: { value: "Personal" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Connect" }));
 

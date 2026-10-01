@@ -144,7 +144,7 @@ export function BindingsEditor({
       <div>
         <h3 className="text-body font-medium text-foreground">Put the result on the panel</h3>
         <p className="text-label text-pretty text-text-secondary">
-          After a successful call, copy part of the result onto the panel or into a variable — before the model
+          After a successful call, copy part of the result onto the panel or into a variable, before the model
           replies, with no extra turn.
         </p>
       </div>
@@ -167,7 +167,7 @@ export function BindingsEditor({
                     value={row.path}
                     onChange={(e) => patchRow(index, { path: e.target.value })}
                     placeholder="/policy/holder"
-                    aria-label={`Binding ${index + 1} — which part of the result`}
+                    aria-label={`Binding ${index + 1}: which part of the result`}
                     aria-invalid={bindingPathIssue(row.path) !== null}
                     className="w-40 max-sm:w-full font-mono text-caption"
                   />
@@ -181,7 +181,7 @@ export function BindingsEditor({
                     value={row.kind}
                     onValueChange={(value) => patchRow(index, { kind: value as BindingKind, rawTo: undefined, blockId: "", key: "" })}
                   >
-                    <SelectTrigger className="w-40 max-sm:w-full" aria-label={`Binding ${index + 1} — goes to`}>
+                    <SelectTrigger className="w-40 max-sm:w-full" aria-label={`Binding ${index + 1}: goes to`}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -251,7 +251,7 @@ function BindingWhere({
       <div className="flex flex-col gap-1.5 sm:flex-row">
         {detailsBlocks.length > 0 ? (
           <Select value={row.blockId} onValueChange={(value) => onChange({ blockId: value })}>
-            <SelectTrigger className="w-36 max-sm:w-full" aria-label={`Binding ${rowIndex + 1} — card`}>
+            <SelectTrigger className="w-36 max-sm:w-full" aria-label={`Binding ${rowIndex + 1}: card`}>
               <SelectValue placeholder="Card…" />
             </SelectTrigger>
             <SelectContent>
@@ -267,7 +267,7 @@ function BindingWhere({
             value={row.blockId}
             onChange={(e) => onChange({ blockId: e.target.value })}
             placeholder="card"
-            aria-label={`Binding ${rowIndex + 1} — card`}
+            aria-label={`Binding ${rowIndex + 1}: card`}
             className="w-28 max-sm:w-full font-mono text-caption"
           />
         )}
@@ -276,7 +276,7 @@ function BindingWhere({
           onChange={(e) => onChange({ key: e.target.value })}
           placeholder="field key"
           list={block && block.fieldKeys.length > 0 ? `${uid}-binding-${rowIndex}-details-keys` : undefined}
-          aria-label={`Binding ${rowIndex + 1} — field key`}
+          aria-label={`Binding ${rowIndex + 1}: field key`}
           className="w-28 max-sm:w-full font-mono text-caption"
         />
         {block && block.fieldKeys.length > 0 ? (
@@ -292,7 +292,7 @@ function BindingWhere({
   if (row.kind === "table") {
     return tableBlocks.length > 0 ? (
       <Select value={row.blockId} onValueChange={(value) => onChange({ blockId: value })}>
-        <SelectTrigger className="w-40 max-sm:w-full" aria-label={`Binding ${rowIndex + 1} — table`}>
+        <SelectTrigger className="w-40 max-sm:w-full" aria-label={`Binding ${rowIndex + 1}: table`}>
           <SelectValue placeholder="Table…" />
         </SelectTrigger>
         <SelectContent>
@@ -308,7 +308,7 @@ function BindingWhere({
         value={row.blockId}
         onChange={(e) => onChange({ blockId: e.target.value })}
         placeholder="table"
-        aria-label={`Binding ${rowIndex + 1} — table`}
+        aria-label={`Binding ${rowIndex + 1}: table`}
         className="w-32 max-sm:w-full font-mono text-caption"
       />
     );
@@ -319,7 +319,7 @@ function BindingWhere({
         value={row.key}
         onChange={(e) => onChange({ key: e.target.value })}
         placeholder="item id"
-        aria-label={`Binding ${rowIndex + 1} — checklist item id`}
+        aria-label={`Binding ${rowIndex + 1}: checklist item id`}
         className="w-32 max-sm:w-full font-mono text-caption"
       />
     );
@@ -332,7 +332,7 @@ function BindingWhere({
           value={row.key}
           onChange={(e) => onChange({ key: e.target.value })}
           placeholder="variable_name"
-          aria-label={`Binding ${rowIndex + 1} — variable name`}
+          aria-label={`Binding ${rowIndex + 1}: variable name`}
           className="w-32 max-sm:w-full font-mono text-caption"
         />
         {invalid ? <span className="text-caption text-destructive-text">Lower case, digits, _.</span> : null}

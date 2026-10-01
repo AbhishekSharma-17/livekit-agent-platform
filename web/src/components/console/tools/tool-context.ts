@@ -158,7 +158,7 @@ export function placeholderFieldIssues(text: string | null | undefined): string[
     if (seen.has(key)) continue;
     seen.add(key);
     if (namespace === "ctx" && !(CTX_PLACEHOLDERS as readonly string[]).includes(name)) {
-      issues.push(`'{{ ctx.${name} }}' is not a session value; use one of: ${CTX_PLACEHOLDERS.join(", ")}`);
+      issues.push(`'{{ ctx.${name} }}' is not a session value. Use one of: ${CTX_PLACEHOLDERS.join(", ")}`);
     } else if (namespace === "var" && !VARIABLE_NAME_PATTERN.test(name)) {
       issues.push(`'{{ var.${name} }}': a variable name is lower case letters, digits and _`);
     }
@@ -176,7 +176,7 @@ export function neverHereIssue(text: string | null | undefined, where: string): 
 
 /** The exact message for a placeholder in a URL's scheme, host or port. */
 export const URL_AUTHORITY_MESSAGE =
-  "session values and variables may not be placed in the url's scheme, host or port; use the path or the query";
+  "session values and variables may not be placed in the url's scheme, host or port. Use the path or the query";
 
 /**
  * The index in `url` up to which a caret counts as "in the scheme or authority" — mirrors
@@ -239,7 +239,7 @@ export function readbackIssues(
     seen.add(name);
   }
   if (names.length > 0 && properties?.has(CONFIRMED_PARAMETER)) {
-    issues.push(`the tool already has an argument named '${CONFIRMED_PARAMETER}'; read-back needs that name`);
+    issues.push(`the tool already has an argument named '${CONFIRMED_PARAMETER}'. Read-back needs that name`);
   }
   return issues;
 }

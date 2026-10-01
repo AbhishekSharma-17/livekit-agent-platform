@@ -146,7 +146,7 @@ function AppsTurnedOff({ onEnabled }: { onEnabled: () => void }) {
       title="Apps are turned off"
       description={
         gate.show
-          ? "Your Composio key and every connection are kept — turn Apps back on to use them again."
+          ? "Your Composio key and every connection are kept. Turn Apps back on to use them again."
           : readOnlyCopy("builder", "turn Apps back on")
       }
       action={

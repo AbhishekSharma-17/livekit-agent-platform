@@ -96,9 +96,9 @@ describe("McpToolEditorDialog", () => {
     fireEvent.change(getByLabelText("Allowed tools"), { target: { value: "a, b" } });
 
     // Only row "a" gets an override: mode → background, announce progress on.
-    fireEvent.click(await screen.findByLabelText("a — runs"));
+    fireEvent.click(await screen.findByLabelText("a: runs"));
     await pickOption("In the background");
-    fireEvent.click(screen.getByLabelText("a — announce progress"));
+    fireEvent.click(screen.getByLabelText("a: announce progress"));
 
     fireEvent.click(getByText("Save server"));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
@@ -130,7 +130,7 @@ describe("McpToolEditorDialog", () => {
     fireEvent.change(getByPlaceholderText("tool_name"), { target: { value: "stale_tool" } });
     fireEvent.click(getByText("Add"));
     expect(await screen.findByText("stale_tool")).toBeTruthy();
-    fireEvent.click(await screen.findByLabelText("stale_tool — announce progress"));
+    fireEvent.click(await screen.findByLabelText("stale_tool: announce progress"));
 
     // Narrowing allowed_tools now hides the row from the table.
     fireEvent.change(getByLabelText("Allowed tools"), { target: { value: "a" } });

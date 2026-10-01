@@ -88,7 +88,7 @@ export function RenameAccountDialog({
         <form onSubmit={(event) => void submit(event)} noValidate>
           <DialogHeader>
             <DialogTitle>Rename this {toolkitName} account</DialogTitle>
-            <DialogDescription>Only your team sees this name — it doesn&apos;t change anything at {toolkitName}.</DialogDescription>
+            <DialogDescription>Only your team sees this name. It doesn&apos;t change anything at {toolkitName}.</DialogDescription>
           </DialogHeader>
           <DialogBody>
             <Field label="Name" htmlFor="rename-account-label" required>

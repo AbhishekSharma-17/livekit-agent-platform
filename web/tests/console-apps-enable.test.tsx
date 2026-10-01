@@ -145,7 +145,7 @@ describe("AppsTab — Enable Composio", () => {
     await waitFor(() =>
       expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/key/test") && bodyField(c, ["api_key"]) === "sk_live_abc123")).toBe(true),
     );
-    expect(await within(dialog).findByText("Connected to Acme Workspace — 512 apps available")).toBeTruthy();
+    expect(await within(dialog).findByText("Connected to Acme Workspace · 512 apps available")).toBeTruthy();
   });
 
   it("renders the vendor's error on a failed test and never sends the key to any other route", async () => {

@@ -179,7 +179,7 @@ export function ToolTemplateDialog({ agentId, secretBagSpec, businessTimezone, o
           <DialogHeader>
             <DialogTitle>Add tools from a template</DialogTitle>
             <DialogDescription>
-              Ready-made tools for a service you already use. Pick the ones you want; each becomes its own tool you can
+              Ready-made tools for a service you already use. Pick the ones you want. Each becomes its own tool you can
               edit or remove later.
             </DialogDescription>
           </DialogHeader>

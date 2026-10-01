@@ -41,6 +41,7 @@ describe("Styleguide", () => {
     render(<Styleguide />);
     expect(screen.getByRole("heading", { level: 1, name: "Styleguide" })).toBeTruthy();
     for (const name of [
+      "LKAP logo",
       "Colour tokens",
       "Type scale",
       "Buttons",

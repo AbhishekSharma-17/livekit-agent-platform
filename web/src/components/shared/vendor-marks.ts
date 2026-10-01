@@ -28,12 +28,16 @@ import {
   ofDid,
   ofHume,
   ofInworld,
+  ofOutlook,
   ofPinecone,
   ofRagie,
   ofRime,
+  ofSalesforce,
+  ofSlack,
   ofSpeechify,
   ofSpeechmatics,
   ofTavus,
+  ofTwilio,
   ofWeaviate,
   ofZilliz,
   siAirtable,
@@ -130,12 +134,14 @@ export type { VendorMarkIcon };
  * 3. **Official** marks (`scripts/vendor-marks-official/`), each taken from the
  *    company's own site or brand kit, for vendors neither package has.
  *    docs/ui/VENDOR-MARKS.md records every source and the usage policy.
- * 4. Otherwise the monogram in `VendorMark`. That includes brands whose
- *    guidelines require a licence for logo use (Slack, Twilio, Salesforce,
- *    Microsoft Outlook). Never draw a mark by hand, and never borrow a
- *    different company's mark that shares the name (Simple Icons' "Rime" is an
- *    input method, so Rime's mark is the official one from rime.ai; Simple
- *    Icons' "X" is not xAI).
+ *    Slack, Twilio, Salesforce and Microsoft Outlook need a licence for logo
+ *    use, and the workspace owner approved showing them to identify the
+ *    service. Outlook is the one mark in its own colours, since Microsoft
+ *    offers no one-colour version.
+ * 4. Otherwise the monogram in `VendorMark`. Never draw a mark by hand, and
+ *    never borrow a different company's mark that shares the name (Simple
+ *    Icons' "Rime" is an input method, so Rime's mark is the official one from
+ *    rime.ai; Simple Icons' "X" is not xAI).
  *
  * Keys are `vendorKey(name)`: lower case, letters and digits only, so
  * "Mistral AI", "mistral-ai" and "mistralai" are one key.
@@ -297,8 +303,14 @@ const OFFICIAL_MARKS: Readonly<Record<string, VendorMarkIcon>> = {
   hume: ofHume,
   humeai: ofHume,
   speechify: ofSpeechify,
-  // Tools
+  // Tools and apps
   composio: ofComposio,
+  slack: ofSlack,
+  salesforce: ofSalesforce,
+  outlook: ofOutlook,
+  microsoftoutlook: ofOutlook,
+  // Telephony
+  twilio: ofTwilio,
   // Avatars
   beyondpresence: ofBeyondPresence,
   bey: ofBeyondPresence,
@@ -311,11 +323,12 @@ export const VENDOR_MARKS: Readonly<Record<string, VendorMarkIcon>> = { ...OFFIC
 
 /**
  * Keys that always get the monogram, even where a leading word would match
- * another mark. Each brand's guidelines require a licence or written
- * permission to show its logo (docs/ui/VENDOR-MARKS.md), and Outlook must not
- * borrow the Microsoft corporate mark through its "microsoft" prefix.
+ * another mark (docs/ui/VENDOR-MARKS.md). Empty since the workspace owner
+ * approved the last four licensed marks. Outlook now has its own mark, so
+ * "microsoft-outlook" resolves to it by its exact key and never walks to the
+ * Microsoft corporate mark.
  */
-export const MONOGRAM_ONLY: ReadonlySet<string> = new Set(["microsoftoutlook", "outlook", "slack", "twilio", "salesforce"]);
+export const MONOGRAM_ONLY: ReadonlySet<string> = new Set<string>();
 
 /** "Mistral AI" / "mistral-ai" / "Cal.com" → "mistralai" / "mistralai" / "calcom". */
 export function vendorKey(vendor: string): string {

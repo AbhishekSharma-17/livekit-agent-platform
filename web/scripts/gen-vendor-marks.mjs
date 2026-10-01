@@ -8,7 +8,9 @@
  *   the AI vendors Simple Icons lacks (its monochrome `currentColor` files only);
  * - `scripts/vendor-marks-official/`, for the vendors neither package has. Each
  *   file is the company's own mark, taken from its site or brand kit and
- *   normalised to a 24 x 24 `currentColor` file. `manifest.json` there records
+ *   normalised to a 24 x 24 `currentColor` file (or, for a brand that offers
+ *   no one-colour version, a file with its own hex fills, marked
+ *   `"ink": "colour"` in the manifest). `manifest.json` there records
  *   each file's source URL, brand guideline note, fetch date and hash, and
  *   docs/ui/VENDOR-MARKS.md holds the policy.
  *
@@ -147,7 +149,7 @@ const OFFICIAL_DIR = path.join(root, "scripts/vendor-marks-official");
  */
 export const OFFICIAL_MARKS = Object.fromEntries(
   Object.entries(JSON.parse(readFileSync(path.join(OFFICIAL_DIR, "manifest.json"), "utf8")).marks).map(
-    ([name, { file, title }]) => [name, { file, title }],
+    ([name, { file, title, ink }]) => [name, ink === "colour" ? { file, title, ink } : { file, title }],
   ),
 );
 const OUT = path.join(root, "src/components/shared/vendor-mark-data.ts");
@@ -173,31 +175,50 @@ export function parseLobeIcon(svg, file) {
 }
 
 /**
- * `{ d, fillRule? }[]` from one normalised official SVG. Stricter than the Lobe
- * parser because these files are collected by hand. The root may carry only
- * `xmlns`, `viewBox="0 0 24 24"` and `fill="currentColor"`, then one `<title>`
- * and `<path>` elements with nothing but `d` and `fill-rule`. A script, link,
- * image, style, paint or transform throws.
+ * `{ d, fillRule?, fill?, opacity? }[]` from one normalised official SVG.
+ * Stricter than the Lobe parser because these files are collected by hand.
+ *
+ * - One ink (the default): the root may carry only `xmlns`,
+ *   `viewBox="0 0 24 24"` and `fill="currentColor"`, then one `<title>` and
+ *   `<path>` elements with nothing but `d` and `fill-rule`.
+ * - `{ colour: true }`, for a brand that offers no one-colour version
+ *   (manifest `"ink": "colour"`): the root carries only `xmlns` and the
+ *   viewBox, and every path must also carry `fill="#rrggbb"`, plus an optional
+ *   `opacity` between 0 and 1. Nothing else is unlocked.
+ *
+ * A script, link, image, style, gradient, transform or any other paint throws.
  */
-export function parseOfficialIcon(svg, file) {
+export function parseOfficialIcon(svg, file, { colour = false } = {}) {
   const open = svg.match(/^\s*<svg\b([^>]*)>/);
   if (!open) throw new Error(`${file}: not an <svg> document`);
   const rootAttrs = [...open[1].matchAll(/\s([\w:-]+)="([^"]*)"/g)].map(([, k, v]) => `${k}=${v}`).sort();
-  const expected = ["fill=currentColor", "viewBox=0 0 24 24", "xmlns=http://www.w3.org/2000/svg"];
+  const expected = colour
+    ? ["viewBox=0 0 24 24", "xmlns=http://www.w3.org/2000/svg"]
+    : ["fill=currentColor", "viewBox=0 0 24 24", "xmlns=http://www.w3.org/2000/svg"];
   if (rootAttrs.join("|") !== expected.join("|")) throw new Error(`${file}: the root may carry only ${expected.join(", ")}`);
-  if (/<script|<image|<foreignObject|<use\b|<style|href=|url\(|style=|\son\w+=/i.test(svg)) throw new Error(`${file}: unsafe markup`);
+  if (/<script|<image|<foreignObject|<use\b|<style|<defs|Gradient|href=|url\(|style=|\son\w+=/i.test(svg))
+    throw new Error(`${file}: unsafe markup`);
   const body = svg
     .slice(open[0].length)
     .replace(/<\/svg>\s*$/, "")
     .replace(/<title>[^<]*<\/title>/, "");
   const leftover = body.replace(/<path\b[^>]*?\/>/g, "").trim();
   if (leftover) throw new Error(`${file}: unsupported markup ${leftover.slice(0, 60)}`);
+  const allowed = colour ? ["d", "fill-rule", "fill", "opacity"] : ["d", "fill-rule"];
   const paths = [...body.matchAll(/<path\b([^>]*?)\/>/g)].map(([, attrs]) => {
     const names = [...attrs.matchAll(/\s([\w:-]+)=/g)].map(([, k]) => k);
-    if (names.some((k) => k !== "d" && k !== "fill-rule")) throw new Error(`${file}: a path carries ${names.join(", ")}`);
+    if (names.some((k) => !allowed.includes(k))) throw new Error(`${file}: a path carries ${names.join(", ")}`);
     const d = attrs.match(/\sd="([^"]+)"/)?.[1];
     if (!d || !/^[MLHVCSQTAZmlhvcsqtaz0-9.,\s-]+$/.test(d)) throw new Error(`${file}: a path without plain path data`);
-    return /\sfill-rule="evenodd"/.test(attrs) ? { d, fillRule: "evenodd" } : { d };
+    const path = /\sfill-rule="evenodd"/.test(attrs) ? { d, fillRule: "evenodd" } : { d };
+    if (!colour) return path;
+    const fill = attrs.match(/\sfill="(#[0-9a-f]{6})"/)?.[1];
+    if (!fill) throw new Error(`${file}: a colour mark's path needs fill="#rrggbb"`);
+    const rawOpacity = attrs.match(/\sopacity="([^"]*)"/)?.[1];
+    if (rawOpacity === undefined) return { ...path, fill };
+    const opacity = Number(rawOpacity);
+    if (!/^(?:0|1|0?\.\d+)$/.test(rawOpacity) || !(opacity >= 0 && opacity <= 1)) throw new Error(`${file}: opacity ${rawOpacity}`);
+    return { ...path, fill, opacity };
   });
   if (paths.length === 0) throw new Error(`${file}: no paths`);
   return paths;
@@ -218,9 +239,12 @@ export async function render() {
     const mark = { slug: file, title, source: "lobehub", paths: parseLobeIcon(svg, `${file}.svg`) };
     return `export const ${name}: VendorMarkIcon = ${JSON.stringify(mark)};`;
   });
-  const official = Object.entries(OFFICIAL_MARKS).map(([name, { file, title }]) => {
+  const official = Object.entries(OFFICIAL_MARKS).map(([name, { file, title, ink }]) => {
     const svg = readFileSync(path.join(OFFICIAL_DIR, file), "utf8");
-    const mark = { slug: file.replace(/\.svg$/, ""), title, source: "official", paths: parseOfficialIcon(svg, file) };
+    const colour = ink === "colour";
+    const slug = file.replace(/\.svg$/, "");
+    const paths = parseOfficialIcon(svg, file, { colour });
+    const mark = colour ? { slug, title, source: "official", ink: "colour", paths } : { slug, title, source: "official", paths };
     return `export const ${name}: VendorMarkIcon = ${JSON.stringify(mark)};`;
   });
   return `${[
@@ -229,13 +253,17 @@ export async function render() {
     "// https://simpleicons.org), @lobehub/icons-static-svg (MIT, https://github.com/lobehub/lobe-icons)",
     "// and the vendors' own sites (scripts/vendor-marks-official/manifest.json, docs/ui/VENDOR-MARKS.md).",
     "",
-    "/** One mark, whichever source it came from: 24 x 24 path data drawn in `currentColor`. */",
+    "/**",
+    " * One mark, whichever source it came from: 24 x 24 path data drawn in `currentColor`, or, for a",
+    ' * brand that offers no one-colour version (`ink: "colour"`), in its own per-path fills.',
+    " */",
     "export interface VendorMarkIcon {",
     "  slug: string;",
     '  /** The brand\'s own name ("Google Sheets", "OpenAI"), for a label beside the mark. */',
     "  title: string;",
     '  source: "simple-icons" | "lobehub" | "official";',
-    '  paths: readonly { d: string; fillRule?: "evenodd" }[];',
+    '  ink?: "colour";',
+    '  paths: readonly { d: string; fillRule?: "evenodd"; fill?: string; opacity?: number }[];',
     "}",
     "",
     ...simple,

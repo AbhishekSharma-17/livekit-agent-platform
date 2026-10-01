@@ -186,13 +186,20 @@ describe("ToolsList rows", () => {
     }
   });
 
-  it("shows the app's real mark with “App” in the Kind column, named for assistive tech", async () => {
+  it("shows the app's mark once, leading the row, and plain “App” in the Kind column, named for assistive tech", async () => {
     stubApi([GMAIL]);
     renderList();
     await waitFor(() => expect(table().getByText("Send email")).toBeTruthy());
-    const kind = within(rowOf("Send email")).getByRole("img", { name: "Gmail" });
-    expect(kind.getAttribute("data-mark")).toBe("gmail");
-    expect(kind.parentElement?.textContent).toContain("App");
+    const row = rowOf("Send email");
+    // One mark per row: the leading one in the name column.
+    expect(row.querySelectorAll('[data-mark="gmail"]')).toHaveLength(1);
+    expect(row.querySelector("td")!.querySelector('[data-mark="gmail"]')).not.toBeNull();
+    const kindCell = row.querySelectorAll("td")[1];
+    expect(kindCell.querySelector('[data-slot="vendor-mark"], [data-slot="tool-mark"], [data-mark]')).toBeNull();
+    expect(within(kindCell).getByText("App")).toBeTruthy();
+    // The leading mark is decorative, so the Kind cell names the app for assistive tech.
+    const named = within(kindCell).getByText(", Gmail");
+    expect(named.className).toContain("sr-only");
   });
 
   it("lets the name column give way so every other column shows in full", async () => {

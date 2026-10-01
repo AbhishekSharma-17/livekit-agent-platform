@@ -11,8 +11,6 @@ import { ReadOnlyNote } from "@/components/shared/read-only-note";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { LifecycleBadge } from "@/components/shared/status-chip";
-import { Tag } from "@/components/shared/tag";
-import { VendorMark } from "@/components/shared/vendor-mark";
 import { Button } from "@/components/ui/button";
 import { useAgents, useDeleteTool, useProviders, useToolProviderConnections, useTools } from "@/components/console/lib/api-hooks";
 import { ConfirmDialog } from "@/components/console/shared/confirm-dialog";
@@ -240,15 +238,16 @@ export function ToolsList() {
     );
   };
 
+  // Plain text for every kind: an app row already leads with the app's mark in the name
+  // column (ToolMark), so the Kind column says "App" without repeating it. That mark is
+  // decorative, so assistive tech still hears which app it is from here.
   const kindCell = (tool: ToolOut) => {
     const app = appNameFor(tool, connectionsById);
-    return isProviderTool(tool) ? (
-      <Tag>
-        <VendorMark vendor={app ?? "App"} size="sm" labelled />
-        App
-      </Tag>
-    ) : (
-      <span className="text-text-secondary">{kindLabel(tool)}</span>
+    return (
+      <span className="text-text-secondary">
+        {kindLabel(tool)}
+        {app ? <span className="sr-only">{`, ${app}`}</span> : null}
+      </span>
     );
   };
 

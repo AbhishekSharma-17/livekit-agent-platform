@@ -30,7 +30,7 @@ names spelled with the kit's default prefix.
 ```
 `changes` lists every tool, block, instruction snippet, extraction field,
 rule, flow step and test case it would add (or keep, when the agent already
-has it); `tools` shows the tools as they would be stored and `validation`
+has it). `tools` shows the tools as they would be stored and `validation`
 the agent's check afterwards. Nothing changes.
 
 ## 3. Add it

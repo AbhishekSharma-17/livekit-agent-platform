@@ -28,7 +28,7 @@ same caller has a different id in another workspace.
   instructions (400 by default, about four characters a token).
 - `verbatim`: store the caller's own lines without a model picking out the
   facts. Off: after the call, the agent's language model (OpenAI or
-  OpenRouter with a key) extracts short facts; `agent_validate` warns when
+  OpenRouter with a key) extracts short facts. `agent_validate` warns when
   there is no such model.
 
 When the agent's `privacy.storage_tier` is `redacted` or `basic`, emails,
@@ -37,7 +37,7 @@ card numbers and long numbers are masked before anything is stored.
 ## Reading and forgetting
 
 `session_memory(session_id)` shows what a session recalled and stored (the
-memories are `Untrusted`: they come from what callers said), the caller's
+memories are `Untrusted`. They come from what callers said), the caller's
 `subject_id`, and when they were forgotten. Recalled memories reach the
 agent inside the untrusted-content fence, as data, never as instructions.
 

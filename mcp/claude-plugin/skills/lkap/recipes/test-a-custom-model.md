@@ -48,7 +48,7 @@ to run it again. A `rate_limited` error carries `retry_after`.
 { "provider_id": "openrouter-llm", "model": "google/gemini-3.8-flash", "capabilities": { "vision": true } }
 ```
 Declared values win over the probe, the catalog and the registry, and reach
-the worker: a model declared text-only stops receiving camera frames.
+the worker. A model declared text-only stops receiving camera frames.
 `lkap_describe("model", "openrouter-llm/google/gemini-3.8-flash")` shows the
 merged view.
 

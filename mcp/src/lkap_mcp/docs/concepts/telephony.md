@@ -17,7 +17,7 @@ dialing and no transfer at all), `allowed_sip_hosts` (hosts a non-numeric
 
 ## LiveKit-hosted numbers
 
-A number bought from LiveKit itself has no trunk: it appears in the overview
+A number bought from LiveKit itself has no trunk. It appears in the overview
 with `source` `livekit`, its `lk_status` and a derived `attach_state`
 (`routed`, `detached`, `not_routed`, `pending`, `offline` or `released`).
 `livekit_numbers` counts them, and every one that is not `routed` adds a
@@ -62,7 +62,7 @@ is on. `CallOut.amd_result` is the verdict (human, machine-vm,
 machine-unavailable, machine-ivr or uncertain), a machine also records a
 `voicemail` session event, and the workspace webhook `call.voicemail`
 fires. It needs a speech-to-text plus language-model pipeline and an
-outbound phone line; `agent_validate` warns otherwise.
+outbound phone line. `agent_validate` warns otherwise.
 
 ## Dialing out
 
@@ -73,7 +73,7 @@ the API key has `calls:write`, the MCP process was started with
 `LKAP_MCP_ALLOW_DIAL=1`, and the call itself passes `confirm=true`. If
 either tool is missing, that is the platform refusing dialing by default,
 not a bug. Ask the operator to enable it rather than looking for a
-workaround (there is none; `api_request` also refuses `/v1/calls` writes
+workaround (there is none. `api_request` also refuses `/v1/calls` writes
 and every `/v1/telephony` write). A destination outside `allowed_prefixes`
 comes back as a policy refusal with `details.allowed_prefixes` listing what
 would be accepted.

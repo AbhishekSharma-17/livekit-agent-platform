@@ -1,9 +1,9 @@
 # LKAP platform guide
 
 Call `lkap_guide()` once per session. You are reading its output now. Then call
-`me` before your first write: it tells you your workspace, your key's scopes
+`me` before your first write. It tells you your workspace, your key's scopes
 (which tools you can even see), and whether a worker is ready
-(`health.workers.ready`; `health.connections.ok` only counts connections whose
+(`health.workers.ready`. `health.connections.ok` only counts connections whose
 credentials test passed).
 
 ## What this is
@@ -16,13 +16,13 @@ admin token (`me`'s `key.scopes` is the only privilege you have).
 ## Object model
 
 `workspace` (one per API key) → **connections** (a LiveKit Cloud project or a
-self-hosted server; `connection_create`, `connection_list`) → **agents**
+self-hosted server. `connection_create`, `connection_list`) → **agents**
 (`agent_create`, usually from a starter template on the `generic` pack) → each
 agent has a **pipeline** (`cascaded`, `realtime` or `half_cascade`:
 `lkap_explain("pipeline-modes")`), **providers and keys** (`provider_list`,
 `provider_key_create`), **tools** (`tool_create_http`, `tool_create_mcp`,
 `tool_test`, lookup tables `dataset_create`, **kits** `kit_add`. A use case
-in one step; Composio **apps**: `apps_connect`, `agent_apps_mode`),
+in one step. Composio **apps**: `apps_connect`, `agent_apps_mode`),
 **knowledge bases** (`kb_create`, `kb_add_document`), a **panel** (composite
 blocks: notes, checklist, notebook, drawing board, layout, signature, chart,
 timer, code, cart and more, each brings its tools: `lkap_explain("panels-and-blocks")`)
@@ -40,19 +40,19 @@ score, cost lines, recording.
    OpenAI, Google, an avatar vendor, …). LiveKit Inference needs none.
 3. **Build.** `agent_create(template_id=...)` seeds a full config from a
    starter (`lkap://templates`: `blank`, `knowledge_assistant`,
-   `claims_intake`, …); `agent_update(patch={...})` merges changes;
+   `claims_intake`, …). `agent_update(patch={...})` merges changes.
    `agent_attach` wires knowledge bases and tools.
 4. **Validate.** `agent_validate` before every save that matters. A flow gets
    `agent_flow_validate` first.
 5. **Test.** `chat_start` / `chat_send` / `chat_end` run a real text session
    against your worker, no browser needed. Save test cases, then
-   `agent_tests_run` (a simulated caller and judges; `agent_tests_result`).
+   `agent_tests_run` (a simulated caller and judges. `agent_tests_result`).
 6. **Publish.** `agent_publish` makes the session URL live. The publish gate
    can require passing tests.
 
 Start with `lkap_explain("agents")` and `lkap_describe("recipe",
 "start-from-template")` for a worked example. `lkap_search_docs(query)` finds
-anything by keyword; `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|"template"|
+anything by keyword. `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|"template"|
 "builtin_tool"|"route", id)` looks up one exact spec.
 
 ## Safety rules: follow these on every call
@@ -85,7 +85,7 @@ anything by keyword; `lkap_describe("schema"|"provider"|"block"|"node"|"pack"|"t
   `call_control` only appear in your tool list when the key has `calls:write`
   and the process was started with dialing enabled. If they're missing,
   that's the platform working as intended, not an error to route around.
-- **Re-read before you patch.** `agent_get`/`session_get` first: another
+- **Re-read before you patch.** `agent_get`/`session_get` first. Another
   editor (the console, another agent) may have changed it.
 
 ## Recipes

@@ -1,6 +1,6 @@
 # Tools: built-ins and templates
 
-Every agent gets a set of built-in tools the platform runs itself; HTTP
+Every agent gets a set of built-in tools the platform runs itself. HTTP
 tools (`tools-http`) and MCP servers (`tools-mcp`) come on top. Built-ins are
 switched off by name in `tools.builtin_disabled`
 (`agent_update(patch={"tools": {"builtin_disabled": ["calculate"]}})`).
@@ -46,9 +46,9 @@ execution mode unless `tools.builtin_execution` sets one:
   conversation is included only with `include_transcript`. With
   `on_escalation` (default on) `escalate_to_human` posts too.
 
-`send_sms` and `notify_team` change the world: a second call while one runs
+`send_sms` and `notify_team` change the world. A second call while one runs
 asks first. A configured tool whose key is missing answers "not set up"
-when called; `agent_validate` reports the missing key as an error first.
+when called. `agent_validate` reports the missing key as an error first.
 
 Keys are stored like any provider key:
 `provider_key_create(provider_id="tavily-search", secrets={...})`, then
@@ -82,7 +82,7 @@ catalogue: `record_lookup`, `case_ticket`, `structured_intake`,
 the panel only). `kit_add(kit_id=..., agent_id=..., settings={...},
 dry_run=true)` previews every change. Without `dry_run` it adds them in one
 configuration version, and again with the same `block_prefix` adds nothing.
-No key is needed: without `secret_key_id` the HTTP tools carry no key
+No key is needed. Without `secret_key_id` the HTTP tools carry no key
 header. Routes: `GET /v1/tool-kits`, `POST /v1/tool-kits/{kit_id}/instantiate`.
 Recipes `add-kit` and `record-lookup-from-a-spreadsheet`.
 

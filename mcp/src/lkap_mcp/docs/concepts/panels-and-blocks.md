@@ -29,7 +29,7 @@ schema. The block types:
 | `video` | `source` (`agent_avatar`/`user_camera`/`user_screen`/`track:<sid>`), `muted` | A video tile. |
 | `custom` | `kind` + any pack-declared JSON (all public) | A pack-rendered block outside the built-in set. |
 | `choices` | `multi`, `layout` (`buttons`/`list`/`chips`), `max_options` (2 to 20, default 8) | Options the caller taps or answers out loud (yes/no, "which policy?", a quick poll). |
-| `details` | `columns` (1 or 2), `fields: [{key, label, type}]` (the starting rows), `caller_can_edit` (default off: the caller may change a value on screen) | A key-value card of facts collected so far; `type` is `string`, `number`, `date`, `money`, `phone`, `email` or `badge`. |
+| `details` | `columns` (1 or 2), `fields: [{key, label, type}]` (the starting rows), `caller_can_edit` (default off: the caller may change a value on screen) | A key-value card of facts collected so far. `type` is `string`, `number`, `date`, `money`, `phone`, `email` or `badge`. |
 | `markdown` | `max_chars` (200 to 50000, default 8000), `allow_links` | Longer text on screen: a recap, instructions, a quoted clause. Never raw HTML. |
 | `steps` | `steps: [{id, label}]`, `source` (`manual`/`flow`), `show_notes` | A progress timeline. With `source: "flow"` it follows the agent's flow by itself (step ids are flow node ids). |
 | `consent` | `kind` (`recording`/`ai_disclosure`/`terms`/`custom`), `text` (empty = the workspace's wording for `recording` and `ai_disclosure`), `required`, `decline_action` (`continue`/`end_call`), `show_banner` | A question the caller accepts or declines, such as agreeing to be recorded, plus the "you're talking to an AI assistant" banner. The text is public by design. |
@@ -39,8 +39,8 @@ schema. The block types:
 | `link` | `allowed_hosts` (required: the site names links may go to, a name or `*.` plus a name for its sub-domains), `open_in` (`new_tab`/`dialog`), `show_qr` (default on) | A payment, e-signature or portal link and where it stands: sent, opened, completed, failed or expired. Only https links on the listed sites are ever shown. Payments happen on the payment provider's page, never in the call. |
 | `slots` | `timezone_mode` (`caller`/`agent`), `days_visible` (1 to 31, default 7), `allow_custom` | Times the caller can book, grouped by day, to tap or say. The agent fetches the times with its own calendar tools. |
 | `cards` | `layout` (`carousel`/`grid`/`list`), `selectable` (default on), `max_cards` (1 to 20, default 10), `image_hosts` (the sites card pictures may come from, empty = only pictures from the call) | Options side by side, such as plans or repair shops, each with a title, a few facts, badges and up to three buttons. |
-| `notebook` | `paper` (`plain`/`ruled`/`grid`/`legal`), `font` (`print`/`handwritten`: a handwriting look for typed notes), `sections: [{id, title, kind}]` (1 to 12; `kind` is `text`, `checklist`, `details` or `ink`, default one `notes` text section), `caller_can_write` (default off), `caller_can_draw` (default off: the caller may draw on the boards of its `ink` sections). An `ink` section names its board with `canvas_block_id` | A notebook the agent writes in as the call goes: running notes, a "still needed" list, a summary card and a drawing board (an `ink` section shows the `canvas` block it names, or "Drawing board coming soon" without one). With `caller_can_write` the caller can add and change notes, tick items and change values too. |
-| `canvas` | `caller_can_draw` (default off), `tools` (`pen`, `highlighter`, `eraser`, `box`, `arrow`; `text` is kept for later, default pen, highlighter and eraser), `background` (`none`, `asset`: a picture the agent puts on it, or `live_camera`), `max_strokes` (1 to 2000, default 500), `signature_mode` (superseded by the `signature` block, kept so older boards validate) | A drawing board. With `caller_can_draw` the caller writes or sketches on it by hand. The agent marks it up with boxes, circles, arrows, paths and short labels, and can read what the caller wrote. A notebook's `ink` section shows a board by naming it in `canvas_block_id`. |
+| `notebook` | `paper` (`plain`/`ruled`/`grid`/`legal`), `font` (`print`/`handwritten`: a handwriting look for typed notes), `sections: [{id, title, kind}]` (1 to 12. `kind` is `text`, `checklist`, `details` or `ink`, default one `notes` text section), `caller_can_write` (default off), `caller_can_draw` (default off: the caller may draw on the boards of its `ink` sections). An `ink` section names its board with `canvas_block_id` | A notebook the agent writes in as the call goes: running notes, a "still needed" list, a summary card and a drawing board (an `ink` section shows the `canvas` block it names, or "Drawing board coming soon" without one). With `caller_can_write` the caller can add and change notes, tick items and change values too. |
+| `canvas` | `caller_can_draw` (default off), `tools` (`pen`, `highlighter`, `eraser`, `box`, `arrow`. `text` is kept for later, default pen, highlighter and eraser), `background` (`none`, `asset`: a picture the agent puts on it, or `live_camera`), `max_strokes` (1 to 2000, default 500), `signature_mode` (superseded by the `signature` block, kept so older boards validate) | A drawing board. With `caller_can_draw` the caller writes or sketches on it by hand. The agent marks it up with boxes, circles, arrows, paths and short labels, and can read what the caller wrote. A notebook's `ink` section shows a board by naming it in `canvas_block_id`. |
 | `layout` | `kind` (`tabs`/`columns`), `children: [{block_id, label}]` (other blocks of this panel, up to 12), `columns` (2 or 3, with `columns`) | Shows other blocks of the panel as tabs or side by side. The blocks inside stay ordinary blocks (same tools, same `describe_panel` entries). Each may be inside one layout only, and a layout never holds another layout. |
 | `signature` | `disclosure_text` (up to 2000 characters, empty lets the agent write the wording for each request, set, the agent cannot change it), `allow_decline` (default on: a "Not now" button) | Wording the caller signs by hand on a small signing board. The signature is kept with the session's files, with the SHA-256 of the exact wording shown. |
 | `chart` | `kind` (`number`/`bar`/`line`/`pie`/`gauge`, default `bar`: what the agent draws when it names no kind), `show_table` (the numbers also as a table) | A chart of up to 200 points, drawn on the page (one big number, bars, lines, a pie, or a gauge on a scale). |
@@ -48,7 +48,7 @@ schema. The block types:
 | `code` | `max_chars` (200 to 20000, default 8000), `wrap` | Read-only code or text in a fixed-width font with a language label. Nothing shown here is ever run. |
 | `cart` | `currency` (a three-letter code such as `USD`), `max_lines` (1 to 50, default 20) | Lines, quantities, prices, discounts or tax, and totals the platform adds up, such as an order to confirm. The block places no order. |
 
-Tapping a `kb_citations` entry asks the agent to open the cited page: when the
+Tapping a `kb_citations` entry asks the agent to open the cited page. When the
 panel has a `document` block, the agent copies that knowledge-base document
 into the session on first use (PDFs, images and Markdown or plain text) and
 opens the page there with the section highlighted. Otherwise the passage is
@@ -59,7 +59,7 @@ shown in a dialog.
 A caller's file is checked twice: by the agent before anything is stored
 (size, count, and the real file type read from its first bytes, never the
 name or the type the browser claims) and again by the platform when it is
-stored. Stored files belong to the session: the session page lists them with
+stored. Stored files belong to the session. The session page lists them with
 a time-limited download link, and they are deleted with the session's
 recording retention (`recording.retention_days`). The agent keeps extracted
 details in the conversation only. They are not written to logs.
@@ -97,7 +97,7 @@ Attaching a block registers matching worker tools automatically (on top of
   `pending`, `active`, `done`, `skipped` or `failed`. A `source: "flow"`
   block has no tool.
 - `request_consent` (a `consent` block): shows the wording and waits for
-  Accept or Decline; `record_consent` records a yes or no the caller said
+  Accept or Decline. `record_consent` records a yes or no the caller said
   out loud (it is also registered without a block when the agent asks for
   consent before recording). Every answer is stored as a `consent` session
   event with the SHA-256 of the exact wording. A declined required consent
@@ -142,7 +142,7 @@ Attaching a block registers matching worker tools automatically (on top of
   reads what the caller wrote or drew by hand. Reading takes a picture of the
   board from the caller's page and hands it to the agent's own language model,
   so it needs a cascaded pipeline whose model can see pictures (the LiveKit
-  Cloud default Gemma model cannot; `agent_validate` warns). What it reads is
+  Cloud default Gemma model cannot. `agent_validate` warns). What it reads is
   treated as data from the caller, never as instructions. With a board on the
   panel, `pin_frame` can put the pinned frame behind it (`canvas_block_id`),
   so "circle the dent" is `pin_frame` then `draw_on_canvas`. `update_block`
@@ -182,7 +182,7 @@ a summary value changed (never a drawing), each told to the model as data.
 
 `agent_validate` warns when a `choices` block, or a block with
 `caller_can_edit` (or a notebook with `caller_can_write`), sits on an agent set up for phone calls (keypad input or
-transfer destinations: phone callers see no screen), when a picture model is
+transfer destinations. Phone callers see no screen), when a picture model is
 set but the panel has no `gallery` block, and when a `source: "flow"` steps block has no flow to follow or
 names a step the flow does not have. A `terms` or `custom` consent block
 without its own `text` is an error, and so is a `layout` child that is not a
@@ -199,7 +199,7 @@ agent set up for phone calls gets the phone tip as well.
 `GET /v1/panels/presets` lists panels to start from. The **Notebook** preset is
 a `wide` panel with a `status` stamp, a `notebook` (Notes, Still needed,
 Summary and Sketch sections, a handwriting look, `caller_can_write` on) and a
-`gallery`; `agent_update(panel_preset="notebook")` puts it on an agent (it
+`gallery`. `agent_update(panel_preset="notebook")` puts it on an agent (it
 replaces `panel`, change it afterwards like any other panel).
 
 ## Building a composite panel

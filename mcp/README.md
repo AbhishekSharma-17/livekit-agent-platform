@@ -4,7 +4,7 @@ The MCP server a coding agent (Claude Code, Codex CLI, Cursor or any MCP
 client) uses to understand and configure an LKAP workspace. It connects
 LiveKit projects, stores provider keys, builds agents from packs, adds
 knowledge bases and HTTP/MCP tools, validates, test-chats and publishes an
-agent. It is the only agent-facing surface: there is no CLI (R-V3-1).
+agent. It is the only agent-facing surface. There is no CLI (R-V3-1).
 
 - **Transport:** stdio by default. The coding agent spawns `lkap-mcp` as a
   child process. The remote streamable-HTTP mode is covered in
@@ -50,7 +50,7 @@ your api origin and key already filled in.
   need `agents:write`, `sessions:write` and `connections:read`, so they need
   the **Builder preset or higher** (R-V3-20).
 - Keys expire after 30 days by default (365 at most). Revoke a key in the
-  console at any time; the next tool call then fails with `unauthorized`.
+  console at any time. The next tool call then fails with `unauthorized`.
 - Key management is never an MCP tool (R-V3-9).
 
 Keep the key in your **user-level** agent config, never in a project file that
@@ -126,7 +126,7 @@ This prints `lkap-mcp <version>`. Then ask your agent:
 agents that exist.
 
 If `lkap-mcp` exits at once with `LKAP_API_KEY is not set`, the client did not
-pass the env block. Logs go to stderr (stdout is the MCP wire); most clients
+pass the env block. Logs go to stderr (stdout is the MCP wire). Most clients
 show them in their MCP log view.
 
 ### After the package is published
@@ -144,13 +144,13 @@ No `.env` file is read.
 | Variable | Default | Meaning |
 |---|---|---|
 | `LKAP_API_URL` | `http://127.0.0.1:8080` | The api origin. |
-| `LKAP_API_KEY` | — (required) | The agent key (`lkap_…`). |
-| `LKAP_WORKSPACE` | — | Sent as `X-Workspace`. It is only needed when the key's user belongs to several workspaces. |
+| `LKAP_API_KEY` | none (required) | The agent key (`lkap_…`). |
+| `LKAP_WORKSPACE` | none | Sent as `X-Workspace`. It is only needed when the key's user belongs to several workspaces. |
 | `LKAP_MCP_READ_ONLY` | `0` | `1` exposes only read tools, whatever the key's scopes are. |
 | `LKAP_MCP_INLINE_SECRETS` | `on` | `off` refuses pasted secret values and requires `env:`/`file:` references. |
 | `LKAP_MCP_ALLOW_DIAL` | `0` | `1` is the process half of the dial gate. |
 | `LKAP_MCP_CLIENT` | the client's `clientInfo.name` | Overrides the client name used for attribution. |
-| `LKAP_MCP_MAX_CHATS` | `3` | The number of test chats open at once (1–20). |
+| `LKAP_MCP_MAX_CHATS` | `3` | The number of test chats open at once (1 to 20). |
 | `LKAP_MCP_LOG_LEVEL` | `INFO` | The stderr log level. |
 | `LKAP_MCP_WEBHOOK_SECRET_DIR` | `~/.config/lkap/webhooks` | Where `webhook_create` writes the one-time signing secret (a 0600 file). |
 | `LKAP_MCP_MAX_IN_FLIGHT` | `4` | The number of concurrent api requests. |
@@ -162,7 +162,7 @@ limits belong to the remote mode.
 
 ### Read-only mode
 
-A key with only read scopes already sees read tools only: write tools are not
+A key with only read scopes already sees read tools only. Write tools are not
 registered, so the client cannot call them. `LKAP_MCP_READ_ONLY=1` applies the
 same restriction to a key that holds write scopes, which is useful for letting
 an agent look around with a key that could do more. A few read tools have an
@@ -178,7 +178,7 @@ accepts either:
 
 - the value itself (inline). The value goes straight to the api's vault and
   never appears in a result, plan, error or log line. A `plan` shows
-  `<inline secret>` in its place; or
+  `<inline secret>` in its place, or
 - a reference: `env:NAME`, `file:/abs/path`, `file:~/.config/lkap/dev.env#NAME`,
   or `raw:<value>` to pass a value that starts with `env:` or `file:`.
 
@@ -192,8 +192,8 @@ Prefer references when the values already live in an env file (R-V3-3).
 `call_place` and `call_control` exist only when all three gates are open
 (R-V3-7):
 
-1. the key has `calls:write` (the console checkbox);
-2. the process runs with `LKAP_MCP_ALLOW_DIAL=1`;
+1. the key has `calls:write` (the console checkbox).
+2. the process runs with `LKAP_MCP_ALLOW_DIAL=1`.
 3. each call passes `confirm=true`.
 
 The workspace dialing policy stays console-only.
@@ -218,7 +218,7 @@ would send without sending them.
 
 The `chat_*` tools join the agent's LiveKit room from this process, using the
 `livekit` rtc wheel that the project already depends on. They need a ready
-worker on the agent's connection; `chat_start` answers `no_worker` with next
+worker on the agent's connection. `chat_start` answers `no_worker` with next
 steps when there is none. If the wheel cannot load on your machine, the tools
 answer `chat_unavailable`, and the console's Test chat is the fallback.
 
@@ -279,7 +279,7 @@ codex mcp add lkap --url <LKAP_MCP_PUBLIC_URL> --bearer-token-env-var LKAP_API_K
 ```
 
 `codex mcp list` shows `Auth = Bearer token` for either form. Codex rejects a
-literal `bearer_token = "…"` for streamable-HTTP servers; use one of the two
+literal `bearer_token = "…"` for streamable-HTTP servers. Use one of the two
 forms above. `env_http_headers` (header name → env var name) also works.
 
 **Cursor and other clients** (generic `mcpServers` JSON):
@@ -292,13 +292,13 @@ forms above. `env_http_headers` (header name → env var name) also works.
 
 | | stdio | remote |
 |---|---|---|
-| Key | `LKAP_API_KEY` in the spawn env | the request's bearer; the service refuses to start if `LKAP_API_KEY` is set |
+| Key | `LKAP_API_KEY` in the spawn env | the request's bearer. The service refuses to start if `LKAP_API_KEY` is set |
 | Inline secrets | allowed unless `LKAP_MCP_INLINE_SECRETS=off` | the same (they travel inside the TLS request to the api vault) |
 | `file:` references | allowed | refused: `ref_unavailable_in_http_mode` |
 | `env:` references | your environment | the **service's** environment (operator-provisioned) |
-| `kb_add_document(file_path=)` | allowed (25 MB) | refused; use `text` or `url` |
-| `dataset_create(file_path=)` | allowed (5 MiB) | refused; use `text` |
-| `webhook_create` | writes the secret to a 0600 file | unavailable; create webhooks in the console |
+| `kb_add_document(file_path=)` | allowed (25 MB) | refused. Use `text` or `url` |
+| `dataset_create(file_path=)` | allowed (5 MiB) | refused. Use `text` |
+| `webhook_create` | writes the secret to a 0600 file | unavailable. Create webhooks in the console |
 | Test chats | 3 per process | 3 per session, 20 per service |
 | Dialing | `LKAP_MCP_ALLOW_DIAL=1` on your process | `LKAP_MCP_ALLOW_DIAL=1` on the service (an operator decision) |
 
@@ -312,7 +312,7 @@ forms above. `env_http_headers` (header name → env var name) also works.
 | `413` | A request body over 1 MB. |
 | `429` + `retry_after_s`, `Retry-After` | A 6th session for one key (at `initialize`, before any session exists). |
 | tool result `rate_limited` | A 121st `tools/call` in a minute on one session, or an 11th tool call in flight on one session. Sent with HTTP 200 and the session stays open: `status` is `429`, `details.retry_after_s` says how long to wait, and `details.scope` is `calls_per_min` or `in_flight`. Wait, then retry the call. |
-| tool result `unauthorized` | The key was revoked or expired mid-session. The session is closed after that call; reconnect with a new key. |
+| tool result `unauthorized` | The key was revoked or expired mid-session. The session is closed after that call. Reconnect with a new key. |
 | tool result `call_timeout` | A call ran over 60 s, or over its own `timeout_s` plus 15 s. |
 | tool result `no_session` | A chat call that cannot be tied to a live session. Reconnect. |
 | tool result `unknown_chat` | A `chat_id` that is ended, idle-closed, never started, or owned by another session (of this key or another). Start a new chat. |
@@ -334,14 +334,14 @@ This serves `http://127.0.0.1:8090/mcp`, the defaults of
 `LKAP_MCP_HTTP_HOST` and `LKAP_MCP_HTTP_PORT`. In dev, loopback hosts are
 accepted without `LKAP_MCP_PUBLIC_URL`. With `LKAP_ENV=prod`, the service
 refuses to start unless `LKAP_MCP_PUBLIC_URL` is an `https://` url. The
-compose files run it as the `mcp` service; see `docs/RUNBOOK.md`.
+compose files run it as the `mcp` service. See `docs/RUNBOOK.md`.
 
 To run the service under a process manager (launchd, systemd, supervisord, or
 a script that stops it with a signal), start the venv's binary directly:
 `<checkout>/mcp/.venv/bin/lkap-mcp --http`, after `uv sync` in `mcp/`. When
 `uv run` runs in its own session, it does not forward a `SIGINT` sent to its
 own pid. The python child keeps serving on `:8090` with its old settings
-after the `uv` parent is killed. This was seen live in V3-07; see ask
+after the `uv` parent is killed. This was seen live in V3-07. See ask
 V3-07-1. The other fix is to signal the whole process group. In the
 foreground, Ctrl-C reaches the whole group, so the `uv run` line above is
 fine there.
@@ -351,12 +351,12 @@ fine there.
 `mcp/claude-plugin/` packages the platform guide as a Claude Code skill
 (`skills/lkap/SKILL.md`, plus copies of the recipes above it, kept in sync by
 `scripts/export_contracts.sh`) and, together with `.mcp.json`, as a full
-plugin that also declares the `lkap` MCP server itself — so a fresh
+plugin that also declares the `lkap` MCP server itself, so a fresh
 checkout gives Claude Code both the server and the guide in one step,
 without hand-editing any config file. `.mcp.json` names the server as
 `uv run --project ${LKAP_CHECKOUT}/mcp lkap-mcp` with `LKAP_API_URL` and
 `LKAP_API_KEY` expanded from your shell environment (`${VAR}` expansion,
-per Claude Code's plugin config); export `LKAP_CHECKOUT`, `LKAP_API_URL` and
+per Claude Code's plugin config). Export `LKAP_CHECKOUT`, `LKAP_API_URL` and
 `LKAP_API_KEY` before loading the plugin, the same three values the stdio
 snippet above uses. No key is ever written into a repo file.
 
@@ -374,10 +374,10 @@ to refresh the recipes.
 The skill's description carries trigger phrases (voice/phone agent,
 first-notice-of-loss, intake agent, starter template, knowledge base, HTTP
 tool, test in chat, publish), but auto-invocation from a plain prompt is
-best-effort — it depends on the model noticing them (R-V3-41). Type `/lkap`
+best-effort. It depends on the model noticing them (R-V3-41). Type `/lkap`
 before your first request, or name LKAP in it, for the deterministic form.
 
-To load the whole plugin — the skill and the MCP server together — for one
+To load the whole plugin (the skill and the MCP server together) for one
 session:
 
 ```bash
@@ -399,7 +399,7 @@ claude plugin marketplace add <checkout>/mcp/claude-plugin
 claude plugin install lkap@lkap
 ```
 
-Verified against Claude Code 2.1.226, 2026-09-24: `claude plugin validate
+Verified against Claude Code 2.1.226, 2026-09-24. `claude plugin validate
 mcp/claude-plugin` (and its `marketplace.json`) both pass with no errors,
 and `claude --plugin-dir <checkout>/mcp/claude-plugin plugin details lkap`
 reports the plugin with one skill (`lkap`) and one MCP server (`lkap`)
@@ -422,19 +422,19 @@ above was run end to end (against a temporary `HOME`, never the real one)
 and produces `lkap@lkap` as an enabled, `user`-scope plugin in
 `claude plugin list`.
 
-Codex CLI and other non-Claude-Code agents do not read a Claude Code plugin;
-they read `AGENTS.md` at the repository root instead — see
+Codex CLI and other non-Claude-Code agents do not read a Claude Code plugin.
+They read `AGENTS.md` at the repository root instead. See
 [Codex CLI](#codex-cli) above and `AGENTS.md` itself.
 
 ### Headless (`claude -p`)
 
-Every scripted invocation — `claude -p "..."` with `--mcp-config <file>
---strict-mcp-config`, the shape V3-07's live run used — should also pass
+Every scripted invocation (`claude -p "..."` with `--mcp-config <file>
+--strict-mcp-config`, the shape V3-07's live run used) should also pass
 `--permission-mode default --allowedTools mcp__lkap`. Reason: a user's own
 global settings can set `permissionMode: auto`, which approves every MCP
 call regardless of `--allowedTools`, so a script that only sets
 `--allowedTools` may pass locally while relying on a setting it doesn't
-control; `--permission-mode default` makes the allowlist the thing actually
+control. `--permission-mode default` makes the allowlist the thing actually
 deciding. Under `default`, the *server* form `mcp__lkap` pre-approves every
 tool of the `lkap` server, while `Skill ToolSearch` alone still denies
 `mcp__lkap__me` (three discriminating runs, `docs/v3/LIVE-RESULTS-V3.md`
@@ -453,8 +453,8 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy src/ --strict
   (`lkap_api.main.create_app` over `httpx.ASGITransport`, a temp SQLite file,
   `FakeEmbedder`) and drive the tools through the real `mcp.ClientSession`
   over memory streams. Only external boundaries are faked:
-  - LiveKit, with the api tests' in-process Twirp server;
-  - vendor and tool hosts, with `respx`;
+  - LiveKit, with the api tests' in-process Twirp server.
+  - vendor and tool hosts, with `respx`.
   - the room, with `FakeRoomTransport`.
 
   `tests/conftest.py` imports helpers from `api/tests`, so the tests need the

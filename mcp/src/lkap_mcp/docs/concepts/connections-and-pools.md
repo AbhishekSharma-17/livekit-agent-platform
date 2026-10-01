@@ -37,7 +37,7 @@ platform's own network.
   include_worker_env=true, env_format="env"|"compose"|"lk")` returns a
   redacted template for the command you'll run.
 - `supervised`: the platform's own supervisor runs the worker as a
-  subprocess or container; `connection_fleet(id, action="start"|"stop"|
+  subprocess or container. `connection_fleet(id, action="start"|"stop"|
   "restart", replicas=, confirm=)` controls it (`stop`/`restart` need
   `confirm=true`) and returns a `FleetStatus` with each `WorkerInstanceOut`'s
   readiness.

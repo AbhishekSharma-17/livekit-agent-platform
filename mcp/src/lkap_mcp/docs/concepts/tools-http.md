@@ -1,6 +1,6 @@
 # Tools: HTTP
 
-`tool_list(agent_id=, kind=)` lists every tool; `tool_get(tool_id)` reads
+`tool_list(agent_id=, kind=)` lists every tool. `tool_get(tool_id)` reads
 one back (placeholders unsubstituted). An HTTP tool (`HttpToolDefinition`)
 is a raw-JSON-schema function the model can call, backed by one templated
 HTTP request. The way to give an agent a weather lookup, a CRM update, a
@@ -31,12 +31,12 @@ agent_id=None, dry_run_args={...})`:
 
 `agent_id=None` makes the tool shared across every agent in the workspace.
 Set it to scope the tool to one agent. `tool_dry_run(tool_id, arguments)`
-re-runs the same probe later; `tool_update(tool_id, patch={...})` merge-
+re-runs the same probe later. `tool_update(tool_id, patch={...})` merge-
 patches the definition (and `name`/`enabled`/`agent_id`).
 
 ## Redirects and the User-Agent
 
-The tool client never follows redirects, by design: a `301` or `302` comes
+The tool client never follows redirects, by design. A `301` or `302` comes
 back as the result, so check a dry run's `status_code` is `200`, not only
 `ok` (which is true below 400). Point `url` at the
 final address (for example `api.frankfurter.dev/v1/…`, not the old
@@ -46,7 +46,7 @@ Every request carries a `User-Agent`. By default it is the platform's
 (`LKAP_HTTP_TOOL_USER_AGENT` on the worker and on the api for dry runs, the
 default is `LKAP/0.1` followed by the project's repository URL). A
 `User-Agent` in the tool's own `headers` wins. Some public APIs refuse clients
-without contact info: Wikimedia's REST API answers `403` ("Please respect our
+without contact info. Wikimedia's REST API answers `403` ("Please respect our
 robot policy") unless the User-Agent names a URL or an email. A descriptive
 name alone is not enough there. Never invent a contact, and never put a
 person's email in a tool without their consent.
@@ -83,7 +83,7 @@ answer "I need … first" without calling out.
 
 - `requires_vars=["policy_no"]` refuses the call until those variables are
   set, naming the missing ones so the model asks the caller.
-- `confirm_readback=["email"]` adds a `confirmed` argument: the tool refuses,
+- `confirm_readback=["email"]` adds a `confirmed` argument. The tool refuses,
   tells the model what to read back, and runs only when called again with
   `confirmed=true`.
 - `bindings=[{"path": "/holder", "to": "details:card.holder"}]` copy parts of

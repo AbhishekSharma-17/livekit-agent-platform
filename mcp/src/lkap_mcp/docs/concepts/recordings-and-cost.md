@@ -20,7 +20,7 @@ LiveKit's own call, participant, phone and recording minutes) rolled up into a
 `SessionCost` on `session_get`. Each line carries its `price_source`
 (`workspace`, `live` or `table`). A line with no known price says
 `note: "no price"`, never `$0`. `activity()` lists configuration changes, not
-cost. `session_list` rows carry `cost_usd` and `estimated_usd`;
+cost. `session_list` rows carry `cost_usd` and `estimated_usd`.
 `cost_summary(...)` is the workspace rollup (`AnalyticsSummary`: totals, by
 day, by agent, `accuracy_pct`, `top_drivers`).
 
@@ -30,8 +30,8 @@ browser session. The tools' `cost_hint` says so up front.
 
 ## Estimates
 
-`cost_estimate(...)` answers "what will this cost per minute?" before a call:
-an estimate at list prices, never a bill. It takes one of an agent, a starter
+`cost_estimate(...)` answers "what will this cost per minute?" before a call
+(an estimate at list prices, never a bill). It takes one of an agent, a starter
 `template_id` or an unsaved `config`, and multiplies each price by a usage
 model of named assumptions (call length, how much each side talks, replies per
 minute, prompt size measured from the config, tool calls). Each assumption has
@@ -61,7 +61,7 @@ sheet, which wins over the table. The estimate-agent-cost recipe walks through a
 ## Reconciliation
 
 Actual cost is computed at list prices. For OpenRouter an admin can also have
-LKAP read what OpenRouter itself charged: opt in with
+LKAP read what OpenRouter itself charged. Opt in with
 `api_request(method="PUT", path="/v1/workspaces/{workspace}", body={"settings": {"cost": {"reconcile": ["openrouter"]}}})`
 (the prices stored beside it are kept). From the next session on, the worker
 reports the id of every LLM request (ids only, never the conversation), and
@@ -70,7 +70,7 @@ OpenRouter key. `session_get` then shows `reconciled_usd` (what OpenRouter
 charged) and, on the LLM's input line, `vendor_usd` with `vendor_ref`
 ("12 generations", the charge covers input and output together). A request
 OpenRouter has not recorded yet is retried once 30 seconds later. No other
-vendor is reconciled: OpenAI and Anthropic report cost only to admin keys and
+vendor is reconciled. OpenAI and Anthropic report cost only to admin keys and
 only per day, and Deepgram's per-request charge needs a project id the
 credential form does not ask for yet. Vendor invoices may still differ
 (included minutes, volume tiers, taxes).

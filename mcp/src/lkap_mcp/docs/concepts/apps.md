@@ -12,14 +12,14 @@ One Composio API key per workspace, stored like any provider key:
 `provider_key_create(provider_id="composio", label="Composio", secrets=
 {"api_key": "env:COMPOSIO_KEY"})`. Or through the console's **Tools, Apps,
 Enable Composio** dialog, which tests a pasted key before saving it. Both write
-the same key row; `provider_key_test(key_id)` re-checks it. Turning Apps off
+the same key row. `provider_key_test(key_id)` re-checks it. Turning Apps off
 (the console's Disable) keeps the key and every connection but switches off
 the tools that use them.
 
 ## Browsing
 
 `apps_list(query="calendar")` pages through Composio's apps (most used
-first) and marks the ones this workspace has connected;
+first) and marks the ones this workspace has connected.
 `apps_actions(toolkit="googlecalendar")` lists one app's actions, each with
 its input schema and a risk label: `read` (lookups), `write` (creates or
 changes something) or `destructive` (deletes, removes, refunds or moves
@@ -31,7 +31,7 @@ money). App names and descriptions are vendor text and come back as
 `apps_connect(toolkit, method)` with one of four methods:
 
 - `managed`: Composio's shared sign-in. The result's `redirect_url` is a
-  consent page **for the human**: give it to the user to open in their
+  consent page **for the human**. Give it to the user to open in their
   browser. Never open it yourself. It expires in about ten minutes. After
   signing in, the browser lands back in the console.
 - `custom_oauth`: the same, with the workspace's own OAuth app (`fields`:
@@ -48,7 +48,7 @@ until it reports `active`.
 ## Status and disconnecting
 
 A connection is `initiated` (sign-in in progress), `active`, `expired`,
-`failed`, `inactive` or `unknown`; `needs_reconnect` means a person must sign
+`failed`, `inactive` or `unknown`. `needs_reconnect` means a person must sign
 in again (the console's Reconnect). An unfinished sign-in expires after ten
 minutes. `apps_disconnect(id, confirm=true)` removes it at Composio and
 switches off the tools that use it. The entry stays so Reconnect restores
@@ -60,19 +60,19 @@ everything (`purge=true` deletes the entry too).
 actions agents may use and turns each into an agent tool of kind `provider`
 (named `<app>_<action>`, inputs pinned, one per action and reused when picked
 again). With `agent_id` the tools are attached to that agent. A destructive
-action needs `allow_destructive=true`: ask the user first, and it always
+action needs `allow_destructive=true`. Ask the user first, and it always
 waits for its result.
 
 ## More than one account
 
 An app can be connected more than once. Two Gmail inboxes, a work and a
 personal calendar. `apps_connect(toolkit, alias="Work")` on an app that is
-already connected adds another account of it, reusing the same sign-in setup;
+already connected adds another account of it, reusing the same sign-in setup.
 `alias` becomes the account's label (default: the name the app reports after
 sign-in, such as the address). If the app's sign-in page preselects the wrong
 account, the user signs out of the app in that browser or uses a private
 window. `apps_connections` lists every account with its `label` and
-`is_default`: exactly one account per app is the default (the first one that
+`is_default`. Exactly one account per app is the default (the first one that
 finished signing in). `apps_connection_rename(id, label)` renames one (two
 accounts of one app cannot share a name) and `apps_connection_set_default(id)`
 moves the default.
@@ -81,13 +81,13 @@ Each account also has an `identity`: who it is signed in as, as the app
 itself reports it (an address such as `sam@example.com`, a user name such as
 `@sam`, or a workspace name), with `identity_kind` saying which. It comes back
 as untrusted text. It is learnt when the account finishes signing in and on a
-check; an account that has not been identified yet has an empty `identity`,
+check. An account that has not been identified yet has an empty `identity`,
 and `apps_connection_status(id, identify=true)` asks the app again (one
 metered Composio call). Use the identity to tell two accounts of one app
 apart before you pick actions for one of them.
 
-Picked actions are per account: `apps_add_tools(connection_id=...)` with the
-account's id. The default account's tools keep plain names
+Picked actions are per account (`apps_add_tools(connection_id=...)` with the
+account's id). The default account's tools keep plain names
 (`gmail_send_email`). Another account's end with its label
 (`gmail_send_email__work`). While an app has more than one account, every
 tool description starts with the account's label, e.g. `(Work)`, so the agent
@@ -108,7 +108,7 @@ An agent's `tools.apps.mode` (set with `agent_apps_mode`) chooses:
   while the conversation continues. Writes wait for their result.
 - `server`: one managed app server offering the picked actions of the
   allowed apps.
-- `router`: a tool finder: the agent searches Composio's actions and runs
+- `router`: a tool finder. The agent searches Composio's actions and runs
   them during the conversation. Replies are slower. Letting the agent start
   a sign-in (`router.manage_connections`) is refused at save for now (it may
   share one caller's account with the next). Connect apps under Tools, Apps.
@@ -117,7 +117,7 @@ An agent's `tools.apps.mode` (set with `agent_apps_mode`) chooses:
 - `off`: the default. Nothing is provisioned.
 
 In `server` and `router` modes a destructive action (delete, remove, send
-money) stays blocked until the user reviews it: list it in
+money) stays blocked until the user reviews it. List it in
 `reviewed_actions` (`agent_apps_mode(reviewed_actions=[...])`, or tick it in
 the console's Connected apps card) to allow it, and add it to
 `denied_actions` as well to keep it blocked. Ask the user before reviewing

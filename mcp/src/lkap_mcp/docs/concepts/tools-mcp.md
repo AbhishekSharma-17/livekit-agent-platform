@@ -4,7 +4,7 @@ An agent can attach its own downstream MCP server (`McpServerDefinition`):
 a streamable-HTTP MCP endpoint the *worker* connects to at session time, so
 the agent's model can call whatever tools that server exposes. This is a
 different MCP connection than the one you are using right now to configure
-the platform: that one is you ↔ LKAP. This one is the running agent ↔ some
+the platform. That one is you ↔ LKAP. This one is the running agent ↔ some
 other MCP server, at conversation time.
 
 ## Creating one
@@ -13,7 +13,7 @@ other MCP server, at conversation time.
 agent_id=None, tool_options=None)`. `allowed_tools` restricts which of the
 downstream server's tools the model may see. Omit it to expose all of them.
 `auth` says how the worker authenticates, by `kind`:
-`{"kind": "none"}` (the default); `{"kind": "header", "headers": {...},
+`{"kind": "none"}` (the default), `{"kind": "header", "headers": {...},
 "credential_id": ...}`, where header values may use `{{ secret.NAME }}` from
 an `http-tool-secret` key, or `{"kind": "oauth", ...}` for a server that
 signs in with the vendor (below). The older spelling (top-level `headers`
@@ -26,7 +26,7 @@ After saving, `tool_test(tool_id)` connects once, lists the server's tools
 and stores that list for the console (`McpTestResult`: `ok`, `tool_names`,
 or a `reason` such as `needs_auth` or `unreachable` and an `error`). Tool names and errors come from the other server, so
 they come back as untrusted content. Then attach the tool and run a
-`chat_start`/`chat_send` pass: if the worker cannot reach the server during
+`chat_start`/`chat_send` pass. If the worker cannot reach the server during
 a session, the tools simply do not appear to the model that session, and
 `session_events` (or the chat's own events) say why.
 
@@ -39,12 +39,12 @@ browser, so it cannot be done through this MCP server. Once connected:
 
 - the platform keeps the vendor's long-lived grant and renews access by
   itself. The running agent only ever holds access that expires within
-  minutes, and gets fresh access from the platform when it runs out;
+  minutes, and gets fresh access from the platform when it runs out.
 - if the vendor withdraws the grant, or the server asks for permissions the
   sign-in did not include, the agent's next call to that server fails with a
   plain sentence ("This integration needs to be re-authorised by an admin"),
   the session records a `tool_needs_reauth` event, and the console shows the
-  server as needing a new sign-in;
+  server as needing a new sign-in.
 - disconnecting the server in the console, or deleting the tool, withdraws
   the grant at the vendor as well (when the vendor supports it) and forgets
   it here.

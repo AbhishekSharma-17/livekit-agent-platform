@@ -21,7 +21,7 @@ skill deterministically every time (R-V3-41).
 2. Call `me` before your first write. It returns your workspace, your key's
    scopes (the tools you can even see are shaped by them. A tool that is
    not registered does not exist for you, that is intentional least
-   privilege, not a bug) and whether a worker is ready: `health.workers.ready`
+   privilege, not a bug) and whether a worker is ready. `health.workers.ready`
    counts ready worker processes, while `health.connections.ok` only counts
    connections whose credentials test passed (an `unverified` connection can
    still have a ready worker).
@@ -47,13 +47,13 @@ skill deterministically every time (R-V3-41).
    touches your own transcript at all, and your own hooks or plugins cannot
    copy it into their logs either). Accept an inline paste without
    hesitation otherwise. That choice belongs to the user, not to you.
-2. **Build the agent.** Start from a starter template: read
+2. **Build the agent.** Start from a starter template. Read
    `lkap://templates` for the catalogue, then
    `agent_create(template_id="receptionist")` (or `blank`,
    `knowledge_assistant`, …) seeds a complete config with its knowledge
    bases and tools. `lkap_describe("recipe", "start-from-template")`.
    An insurance claim intake is `agent_create(template_id="claims_intake")`
-   (the older `insurance_claim` pack loads only where the operator lists it);
+   (the older `insurance_claim` pack loads only where the operator lists it).
    `agent_create(pack_id="generic")` plus `agent_update(patch={...})`
    builds one from scratch. `lkap_describe("recipe", "insurance-intake-agent"
    )` and `lkap_describe("recipe", "generic-assistant")` are full worked
@@ -79,9 +79,9 @@ skill deterministically every time (R-V3-41).
    A flow gets `agent_flow_validate` first, since it never saves.
 7. **Test in chat, before you tell the user it's done.** `chat_start` opens a
    real text session against the agent's worker (no browser needed) and
-   returns the greeting; `chat_send(chat_id, text)` sends a turn and waits
-   for the final reply plus any tool-call events; `chat_rewind(chat_id,
-   turn_index)` regenerates from an earlier turn if a reply went wrong;
+   returns the greeting. `chat_send(chat_id, text)` sends a turn and waits
+   for the final reply plus any tool-call events. `chat_rewind(chat_id,
+   turn_index)` regenerates from an earlier turn if a reply went wrong.
    `chat_end(chat_id)` closes it. `lkap_describe("recipe", "test-and-publish"
    )` chains this straight into publishing. If `chat_start` comes back
    `no_worker`, follow its `next_steps`. The agent's connection has no
@@ -89,7 +89,7 @@ skill deterministically every time (R-V3-41).
 8. **Publish.** `agent_publish(id_or_slug)` makes the session URL live. Don't
    publish a config `agent_validate` still flags.
 
-A model the registry does not list? `lkap_describe("recipe", "test-a-custom-model")`: find it with `provider_catalog(query=...)`, test it with `provider_test_model` (one capped vendor call), declare what it can do with `provider_model_declare`.
+A model the registry does not list? `lkap_describe("recipe", "test-a-custom-model")`. Find it with `provider_catalog(query=...)`, test it with `provider_test_model` (one capped vendor call), declare what it can do with `provider_model_declare`.
 
 Something already broken? `lkap_describe("recipe", "diagnose-a-session")`
 walks `session_get`/`session_events` against a session id.
@@ -129,7 +129,7 @@ walks `session_get`/`session_events` against a session id.
 
 ## Reference
 
-- Recipes (`recipes/`, copied from this checkout's own MCP docs): each is a
+- Recipes (`recipes/`, copied from this checkout's own MCP docs). Each is a
   numbered, copy-pasteable tool sequence. `connect-livekit`,
   `insurance-intake-agent`, `generic-assistant`, `add-http-tool`,
   `attach-mcp-server`, `knowledge-from-text`, `switch-to-flow`,

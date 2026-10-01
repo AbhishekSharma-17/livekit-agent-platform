@@ -12,7 +12,7 @@ database and run in `agent_validate`/`agent_flow_validate`.
 
 ## Node kinds
 
-- `start`: the entry point; `greeting` (`greeting_mode: "say"|"generate"`)
+- `start`: the entry point. `greeting` (`greeting_mode: "say"|"generate"`)
   plays before the first handoff.
 - `agent`: one conversational step: `instructions`, `tools`, `kb_ids`,
   `extract` (variable names to pull from this step), `max_turns`, and
@@ -65,7 +65,7 @@ to a prompt agent.
 ## Variables and state
 
 `FlowState{current_node, path, variables, disposition}` is the runtime
-position, visible on `session_get`; `variables` (`VariableSpec{name, type,
+position, visible on `session_get`. `variables` (`VariableSpec{name, type,
 description, options, required}`) declare what an `extract` step pulls out
 of the conversation, referenced from instructions as `{{ name }}`.
 

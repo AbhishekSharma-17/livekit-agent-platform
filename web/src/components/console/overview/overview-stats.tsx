@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { BotIcon, CircleAlertIcon, MessagesSquareIcon, RadioIcon, type LucideIcon } from "lucide-react";
+import { CircleAlertIcon, MessagesSquareIcon, RadioIcon, type LucideIcon } from "lucide-react";
 
+import { AGENTS_ICON } from "@/components/console/shell/nav-config";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard, StatGrid } from "@/components/shared/data-display";
 import { LoadingRegion } from "@/components/shared/loading-state";
@@ -126,7 +127,7 @@ export function OverviewStats() {
         <StatLink
           href="/console/agents"
           label="Agents"
-          icon={BotIcon}
+          icon={AGENTS_ICON}
           value={active.length.toLocaleString()}
           hint={archived > 0 ? `${pluralize(archived, "archived agent", "archived agents")} not counted` : "In this workspace"}
         />

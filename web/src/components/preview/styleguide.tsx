@@ -3,7 +3,6 @@
 import * as React from "react";
 import {
   ArrowRightIcon,
-  BotIcon,
   ClockIcon,
   CoinsIcon,
   DownloadIcon,
@@ -15,6 +14,7 @@ import {
   Trash2Icon,
   UsersIcon,
 } from "lucide-react";
+import { AGENTS_ICON } from "@/components/console/shell/nav-config";
 import { toast } from "sonner";
 
 import { ConfirmDialog, TypedConfirmDialog } from "@/components/console/shared/confirm-dialog";
@@ -506,7 +506,7 @@ export function Styleguide() {
 
             <Specimen id="data" title="Stats, cards, list cards and tables">
               <StatGrid>
-                <StatCard label="Agents" value="12" icon={BotIcon} hint="3 published this week" />
+                <StatCard label="Agents" value="12" icon={AGENTS_ICON} hint="3 published this week" />
                 <StatCard label="Live now" value="3" icon={PhoneIcon} hint="Across 2 connections" />
                 <StatCard label="Sessions, 7 days" value="1,204" icon={ClockIcon} hint="Up 12 % on last week" />
                 <StatCard label="Spend, 7 days" value="$48.20" icon={CoinsIcon} hint="Estimate" />

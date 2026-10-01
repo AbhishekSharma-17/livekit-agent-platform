@@ -10,10 +10,10 @@
 import * as React from "react";
 import {
   BellIcon,
-  BotIcon,
   KeyRoundIcon,
   RadioIcon,
 } from "lucide-react";
+import { AGENTS_ICON } from "@/components/console/shell/nav-config";
 
 import type { AgentUiState, MeterState } from "@/components/shared/agent-state";
 import { AGENT_UI_STATES, METER_STATES } from "@/components/shared/agent-state";
@@ -622,7 +622,7 @@ function PrimitivesScene() {
       <Section id="empty-state" title="EmptyState">
         <SectionRow>
           <EmptyState
-            icon={BotIcon}
+            icon={AGENTS_ICON}
             title="No agents yet"
             description="Start from a starter template — blank, knowledge, receptionist and more."
             action={<Button variant="brand">New agent</Button>}

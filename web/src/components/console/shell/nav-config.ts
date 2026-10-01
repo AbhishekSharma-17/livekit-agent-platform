@@ -3,7 +3,7 @@ import {
   Activity,
   BarChart3,
   BookOpen,
-  Bot,
+  Headset,
   History,
   LayoutDashboard,
   Phone,
@@ -29,6 +29,16 @@ import {
  * `hidden` lets a stretch destination (Telephony: V2-17, wave 3) be flipped
  * on without touching the group shape once its pages exist.
  */
+/**
+ * The one icon for "Agents" (voice and video agents) everywhere: the sidebar, the Menu dialog,
+ * the phone tab bar, the Overview stat and the agents list's empty states. `Headset` rather than
+ * `AudioLines`: in the 17 px nav, AudioLines' vertical strokes sit two rows above Analytics'
+ * bar chart and repeat the product mark's bars, while a headset reads as "an agent on a call"
+ * for voice and video alike and stays distinct from Telephony's handset. The Settings "AI agents"
+ * tab keeps `Bot`, because that is coding agents over MCP, a different thing.
+ */
+export const AGENTS_ICON: LucideIcon = Headset;
+
 export interface NavItem {
   label: string;
   href: string;
@@ -59,9 +69,9 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Build",
-    icon: Bot,
+    icon: AGENTS_ICON,
     items: [
-      { label: "Agents", href: "/console/agents", icon: Bot },
+      { label: "Agents", href: "/console/agents", icon: AGENTS_ICON },
       { label: "Knowledge", href: "/console/knowledge", icon: BookOpen },
       { label: "Tools", href: "/console/tools", icon: Wrench },
       // V6-19: lookup tables (`datasets` in code and paths; "lookup table" everywhere the caller sees it).

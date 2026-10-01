@@ -4,8 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArchiveRestoreIcon, BotIcon, CopyIcon, ExternalLinkIcon, Trash2Icon } from "lucide-react";
+import { ArchiveRestoreIcon, CopyIcon, ExternalLinkIcon, Trash2Icon } from "lucide-react";
 
+import { AGENTS_ICON } from "@/components/console/shell/nav-config";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -278,7 +279,7 @@ export function AgentsTable() {
   if (agents.length === 0) {
     return (
       <EmptyState
-        icon={BotIcon}
+        icon={AGENTS_ICON}
         title="No agents yet"
         description="An agent is a voice or video assistant with its own providers, instructions and tools."
         action={<NewAgentButton variant="secondary" />}
@@ -410,7 +411,7 @@ export function AgentsTable() {
         empty={
           onlyArchived ? (
             <EmptyState
-              icon={BotIcon}
+              icon={AGENTS_ICON}
               title="No active agents"
               description="Every agent here is archived. Open Archived to see them or restore one."
               action={

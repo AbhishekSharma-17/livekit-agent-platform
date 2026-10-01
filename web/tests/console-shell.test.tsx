@@ -6,7 +6,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { ThemeProvider } from "@/components/console/shell/theme-provider";
 import { ConsoleShell } from "@/components/console/shell/console-shell";
 import { HideBottomTabBar } from "@/components/console/shell/bottom-tab-bar";
-import { NAV_GROUPS, NAV_ITEMS, formatNavCount, tabBarItems } from "@/components/console/shell/nav-config";
+import { Headset } from "lucide-react";
+
+import { AGENTS_ICON, NAV_GROUPS, NAV_ITEMS, formatNavCount, tabBarItems } from "@/components/console/shell/nav-config";
 
 // jsdom has no matchMedia (next-themes and `use-mobile` subscribe to it) and
 // no ResizeObserver (Radix popper positioning) — same pattern as
@@ -149,6 +151,13 @@ describe("ConsoleShell", () => {
     for (const item of NAV_ITEMS) {
       expect(within(sidebar).getAllByRole("link", { name: item.label })).toHaveLength(1);
     }
+  });
+
+  it("uses the one Agents icon (Headset) for the nav item, its group and the builder tab bar", () => {
+    expect(AGENTS_ICON).toBe(Headset);
+    expect(NAV_ITEMS.find((item) => item.label === "Agents")?.icon).toBe(AGENTS_ICON);
+    expect(NAV_GROUPS.find((group) => group.label === "Build")?.icon).toBe(AGENTS_ICON);
+    expect(tabBarItems("builder").find((item) => item.href === "/console/agents")?.icon).toBe(AGENTS_ICON);
   });
 
   it("groups the nav under Build, Connect, Observe and Settings labels", () => {

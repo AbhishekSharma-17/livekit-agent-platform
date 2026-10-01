@@ -401,7 +401,7 @@ describe("permissions (decision D12)", () => {
     expect(await header().findByText("You can view this. Ask a builder or admin to make changes.")).toBeTruthy();
     expect(header().queryByRole("button", { name: "Save" })).toBeNull();
     expect(header().queryByRole("button", { name: "Publish" })).toBeNull();
-    expect(header().queryByRole("button", { name: "Delete agent" })).toBeNull();
+    expect(header().queryByRole("button", { name: "More agent actions" })).toBeNull();
     expect(header().queryByRole("button", { name: "Edit name" })).toBeNull();
     // Reading stays available: the back link, Refresh and the test call.
     expect(header().getByRole("link", { name: "Back to agents" })).toBeTruthy();
@@ -418,7 +418,8 @@ describe("permissions (decision D12)", () => {
     expect(primaries[0].textContent).toBe("Save");
     const buttons = Array.from(actions.querySelectorAll("button, a"));
     expect(buttons.at(-1)).toBe(primaries[0]);
-    expect(header().getByRole("button", { name: "Delete agent" }).getAttribute("data-variant")).toBe("danger-outline");
+    // Delete lives in the "More agent actions" menu so Save stays on the actions row.
+    expect(header().getByRole("button", { name: "More agent actions" })).toBeTruthy();
   });
 });
 
@@ -426,7 +427,8 @@ describe("delete", () => {
   it("deletes the agent after confirmation and returns to the list", async () => {
     const { server } = renderEditor();
     await ready();
-    fireEvent.click(header().getByRole("button", { name: "Delete agent" }));
+    fireEvent.keyDown(header().getByRole("button", { name: "More agent actions" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete agent" }));
 
     const dialog = await findDialog(/Delete/);
     expect(dialog.getAttribute("role")).toBe("alertdialog");

@@ -15,6 +15,7 @@ import {
 
 import { CopyButton } from "@/components/shared/copy-button";
 import { Icon } from "@/components/shared/icon";
+import { RowMenu } from "@/components/shared/row-menu";
 import { LifecycleBadge } from "@/components/shared/status-chip";
 import { Alert } from "@/components/ui/alert";
 import { Button, IconButton } from "@/components/ui/button";
@@ -173,7 +174,7 @@ export function EditorShell({
               ) : null}
             </div>
           </div>
-          <div ref={actionsRef} data-slot="page-actions" className="flex flex-wrap items-center gap-2">
+          <div ref={actionsRef} data-slot="page-actions" className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:flex-nowrap">
             <IconButton
               type="button"
               label={refreshing ? "Refreshing agent" : "Refresh agent"}
@@ -182,12 +183,6 @@ export function EditorShell({
             >
               <RefreshCwIcon className={cn(refreshing && "animate-spin")} />
             </IconButton>
-            <IfCan>
-              <Button type="button" variant="danger-outline" onClick={() => setConfirmDelete(true)}>
-                <Icon as={Trash2Icon} size="md" />
-                Delete agent
-              </Button>
-            </IfCan>
             {slots.headerActions.map((Action, index) => (
               <Action key={index} agent={agent} />
             ))}
@@ -199,6 +194,12 @@ export function EditorShell({
                 saveNow={saveNow}
                 onValidated={onValidated}
                 goToFirstIssue={goToFirstIssue}
+              />
+            </IfCan>
+            <IfCan>
+              <RowMenu
+                label="More agent actions"
+                destructive={{ label: "Delete agent", icon: Trash2Icon, onSelect: () => setConfirmDelete(true) }}
               />
             </IfCan>
             <IfCan

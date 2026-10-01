@@ -9,7 +9,7 @@ The console, the sign-in and public pages, and the caller page (`web/`) now foll
 **Tokens**
 - All tokens live in `web/src/app/globals.css`, with a Tailwind bridge.
 - Two themes, class-based; the default follows the system.
-- The accent is teal (hue 188–190), separate from the status colours.
+- The accent is indigo (hue 280, UI-R1; teal before), separate from the status colours.
 - Inter at 14 px / 1.5, with one type, radius, shadow and duration scale.
 - Reduced motion is honoured everywhere; one global icon rule sets size and stroke.
 
@@ -112,7 +112,7 @@ The console, the sign-in and public pages, and the caller page (`web/`) now foll
 
 | # | Decision | Outcome |
 |---|---|---|
-| D1 | Accent hue | Adopted: teal |
+| D1 | Accent hue | Adopted: indigo (hue 280), replacing teal in UI-R1 |
 | D2 | Theme default | Adopted: follows the system |
 | D3 | Caller page | Adopted: always dark, 16 px body, bottom sheet; in the styleguide |
 | D4 | Font | Adopted: Inter |

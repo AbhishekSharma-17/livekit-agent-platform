@@ -8,8 +8,8 @@
  * tests/browser-colors.test.ts fails if they drift from the tokens.
  */
 export const BROWSER_COLORS = {
-  light: { background: "#f9fafc", brand: "#156864" },
-  dark: { background: "#0e1114", brand: "#5ac6bd" },
+  light: { background: "#f9fafc", brand: "#504cb4" },
+  dark: { background: "#0e1114", brand: "#9fa5f9" },
 } as const;
 
 /** `viewport.themeColor` for the root layout: the page background per colour scheme. */

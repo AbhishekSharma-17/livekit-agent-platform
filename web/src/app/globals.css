@@ -201,14 +201,14 @@
   --overlay: oklch(18% 0.015 260 / 0.42);
   --scrim: oklch(98.6% 0.002 250 / 0.92);
 
-  /* accent: deep teal */
-  --brand: oklch(47% 0.075 190);
-  --brand-hover: oklch(42% 0.07 190);
-  --brand-active: oklch(38% 0.062 190);
+  /* accent: indigo (hue 280), kept apart from the info blue (hue 250) */
+  --brand: oklch(48% 0.16 280);
+  --brand-hover: oklch(43% 0.15 280);
+  --brand-active: oklch(38% 0.135 280);
   --brand-foreground: oklch(100% 0 0);
-  --brand-subtle: oklch(96% 0.02 190);
-  --brand-border: oklch(86% 0.05 190);
-  --ring: oklch(56% 0.09 190);
+  --brand-subtle: oklch(96% 0.018 280);
+  --brand-border: oklch(86% 0.06 280);
+  --ring: oklch(56% 0.15 280);
 
   /* status scales */
   --success-solid: oklch(52% 0.14 150);
@@ -276,14 +276,14 @@
   --overlay: oklch(4% 0 0 / 0.66);
   --scrim: oklch(17.5% 0.008 260 / 0.95);
 
-  /* accent */
-  --brand: oklch(76% 0.1 188);
-  --brand-hover: oklch(71% 0.1 188);
-  --brand-active: oklch(66% 0.1 188);
-  --brand-foreground: oklch(19% 0.03 195);
-  --brand-subtle: oklch(27% 0.04 195);
-  --brand-border: oklch(42% 0.07 195);
-  --ring: oklch(72% 0.1 190);
+  /* accent: indigo, raised for dark with a near-black foreground */
+  --brand: oklch(75% 0.12 280);
+  --brand-hover: oklch(70% 0.12 280);
+  --brand-active: oklch(65% 0.12 280);
+  --brand-foreground: oklch(19% 0.035 280);
+  --brand-subtle: oklch(27% 0.05 280);
+  --brand-border: oklch(42% 0.09 280);
+  --ring: oklch(72% 0.12 280);
 
   /* status scales: light solids take near-black text in dark mode (white fails) */
   --success-solid: oklch(74% 0.15 150);

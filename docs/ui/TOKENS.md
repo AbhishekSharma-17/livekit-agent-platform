@@ -46,6 +46,46 @@ is configured with this type scale, `shadow-raised|overlay|modal|focus` and `rou
   grey). Each series is at least 3:1 on card and on background in both themes.
 - **Dark elevation.** These are the spec's shadows in black at 30–75% opacity.
 
+## Accent: indigo (UI-R1)
+
+The accent moved from teal (hue 188–190) to indigo (hue 280), following the spec's own recipe (section 2.2):
+a 48% fill under white text, hover and active 5 points darker on the same hue, a 96% subtle and an 86% border,
+and a 75% accent with a near-black foreground in dark mode. Chroma steps down slightly as lightness drops, as the
+teal scale did. The light subtle stays at `.018` chroma, the most that hue 280 holds in sRGB at 96% L.
+
+| Token | Light | Dark |
+|---|---|---|
+| `--brand` | `oklch(48% .16 280)` (`#504cb4`) | `oklch(75% .12 280)` (`#9fa5f9`) |
+| `--brand-hover` | `oklch(43% .15 280)` | `oklch(70% .12 280)` |
+| `--brand-active` | `oklch(38% .135 280)` | `oklch(65% .12 280)` |
+| `--brand-foreground` | `oklch(100% 0 0)` | `oklch(19% .035 280)` |
+| `--brand-subtle` | `oklch(96% .018 280)` | `oklch(27% .05 280)` |
+| `--brand-border` | `oklch(86% .06 280)` | `oklch(42% .09 280)` |
+| `--ring` | `oklch(56% .15 280)` | `oklch(72% .12 280)` |
+
+Ratios from `pnpm check:contrast` (212/212 pairs pass):
+
+| Pair | Light | Dark | Target |
+|---|---|---|---|
+| `--brand-foreground` on `--brand` / `-hover` / `-active` | 6.91 / 8.54 / 10.48 | 8.14 / 6.77 / 5.58 | 4.5 |
+| `--brand` (link, active icon) on card / background / popover | 6.91 / 6.63 / 6.91 | 7.86 / 8.33 / 7.41 | 4.5 |
+| `--brand` on muted / sidebar / sidebar-hover / sidebar-active | 6.26 / 6.30 / 5.73 / 6.91 | 7.12 / 8.69 / 7.78 / 7.12 | 4.5 |
+| `--brand` on `--brand-subtle` | 6.14 | 6.68 | 4.5 |
+| `--foreground` on `--brand-subtle` (list-search highlight) | 15.92 | 13.54 | 4.5 |
+| `--ring` on card / background / popover / muted / sidebar | 4.86 / 4.67 / 4.86 / 4.41 / 4.43 | 7.05 / 7.46 / 6.64 / 6.38 / 7.79 | 3 |
+
+**Apart from the status colours.** Info stays at hue 250 and success stays green; neither scale changed.
+`tests/design-tokens.test.ts` holds the accent to one hue and to a CIEDE2000 distance of at least 10 from
+`--info-solid`, `--info-text`, `--success-solid` and `--success-text` in both themes (the closest pair today is
+the light accent against the info text, at 11.2; the rest read 12.1 to 17.2 against info and 45 or more against success).
+
+**Charts.** `--chart-4` stays teal. It was never read as the accent, and the categorical set still needs a hue
+between blue (`--chart-2`, 255) and green (`--chart-6`, 150); an indigo series would sit between `--chart-2` and
+`--chart-5` (violet, 295) and blur both.
+
+**Browser chrome.** `src/lib/browser-colors.ts` mirrors the new `--brand` as `#504cb4` (light) and `#9fa5f9`
+(dark); `--background` is unchanged.
+
 ## Deviations from the spec's literal values
 
 Every fix moves lightness only; chroma, hue and targets are unchanged. `pnpm check:contrast` checks 212

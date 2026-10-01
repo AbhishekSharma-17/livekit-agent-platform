@@ -106,17 +106,18 @@ In dark mode, surfaces get lighter as they come forward: sidebar, then backgroun
 
 ### 2.2 Accent
 
-This is a deep teal. If the project has its own brand, keep the recipe and change the hue.
+This is indigo (hue 280), chosen so the accent never reads as green or as the info blue (hue 250). If the project
+has its own brand, keep the recipe and change the hue.
 
 | Token | Light | Dark |
 |---|---|---|
-| `--brand` | `oklch(47% .075 190)` | `oklch(76% .1 188)` |
-| `--brand-hover` | `oklch(42% .07 190)` | `oklch(71% .1 188)` |
-| `--brand-active` | `oklch(38% .062 190)` | `oklch(66% .1 188)` |
-| `--brand-foreground` | `oklch(100% 0 0)` (white on accent) | `oklch(19% .03 195)` (dark text on a light accent) |
-| `--brand-subtle` | `oklch(96% .02 190)` | `oklch(27% .04 195)` |
-| `--brand-border` | `oklch(86% .05 190)` | `oklch(42% .07 195)` |
-| `--ring` | `oklch(56% .09 190)` | `oklch(72% .1 190)` |
+| `--brand` | `oklch(48% .16 280)` | `oklch(75% .12 280)` |
+| `--brand-hover` | `oklch(43% .15 280)` | `oklch(70% .12 280)` |
+| `--brand-active` | `oklch(38% .135 280)` | `oklch(65% .12 280)` |
+| `--brand-foreground` | `oklch(100% 0 0)` (white on accent) | `oklch(19% .035 280)` (dark text on a light accent) |
+| `--brand-subtle` | `oklch(96% .018 280)` | `oklch(27% .05 280)` |
+| `--brand-border` | `oklch(86% .06 280)` | `oklch(42% .09 280)` |
+| `--ring` | `oklch(56% .15 280)` | `oklch(72% .12 280)` |
 
 **Recipe for another brand.**
 1. Choose an accent lightness that works as a **button fill with white text** (about 45–50% L).

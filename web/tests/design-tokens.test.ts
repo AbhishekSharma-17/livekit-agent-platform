@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import { differenceCiede2000, parse } from "culori";
 import { describe, expect, it } from "vitest";
 
 import { declarations, extractBlock, extractBridge, extractRules, resolveVar, themes } from "../scripts/check-contrast.mjs";
@@ -162,6 +163,28 @@ describe("design tokens (globals.css)", () => {
     expect(light["--layout-topbar"]).toBe("56px");
     expect(light["--layout-panel-inset"]).toBe("8px");
     expect(light["--layout-bottombar"]).toBe("60px");
+  });
+});
+
+describe("accent (globals.css, docs/ui/TOKENS.md)", () => {
+  const de = differenceCiede2000();
+  const { light: lightTheme, dark: darkTheme } = themes(css) as Record<"light" | "dark", Record<string, string>>;
+  const hueOf = (vars: Record<string, string>, token: string) => (parse(resolveVar(vars, token)) as { h: number }).h;
+
+  it.each(["light", "dark"] as const)("keeps one indigo hue across the %s accent scale", (theme) => {
+    const vars = theme === "light" ? lightTheme : darkTheme;
+    for (const token of ["--brand", "--brand-hover", "--brand-active", "--brand-subtle", "--brand-border", "--ring"]) {
+      expect(hueOf(vars, token), token).toBe(280);
+    }
+  });
+
+  // The accent must never read as a status colour: indigo, not the info blue, and never green.
+  it.each(["light", "dark"] as const)("reads clearly apart from the info and success scales in %s", (theme) => {
+    const vars = theme === "light" ? lightTheme : darkTheme;
+    const brand = parse(resolveVar(vars, "--brand"));
+    for (const token of ["--info-solid", "--info-text", "--success-solid", "--success-text"]) {
+      expect(de(brand!, parse(resolveVar(vars, token))!), `--brand vs ${token}`).toBeGreaterThanOrEqual(10);
+    }
   });
 });
 

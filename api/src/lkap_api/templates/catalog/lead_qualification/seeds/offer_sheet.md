@@ -1,4 +1,4 @@
-# Acme — offer sheet
+# Acme offer sheet
 
 Acme is a fictional software company used by the Lead qualification starter. Replace this document with your own offer.
 

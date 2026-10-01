@@ -122,7 +122,7 @@ def build_cart_set_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
         except ValidationError:
             config = CartBlockConfig()
         if len(lines) > config.max_lines:
-            raise ToolError(f"That is {len(lines)} lines; this cart shows at most {config.max_lines}.")
+            raise ToolError(f"That is {len(lines)} lines. This cart shows at most {config.max_lines}.")
         code = currency.strip().upper() or config.currency
         if _CURRENCY_RE.match(code) is None:
             raise ToolError("currency is a three-letter code such as USD, EUR or INR.")

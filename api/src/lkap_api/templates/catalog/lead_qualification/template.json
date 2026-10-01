@@ -141,7 +141,7 @@
         "id": "qualified",
         "kind": "end",
         "label": "Qualified",
-        "farewell": "Perfect — a specialist will email you within one business day to confirm the demo.",
+        "farewell": "Perfect. A specialist will email you within one business day to confirm the demo.",
         "disposition": "qualified",
         "position": [
           0,
@@ -152,7 +152,7 @@
         "id": "nurture",
         "kind": "end",
         "label": "Nurture",
-        "farewell": "Thanks — I'll send over some material and we can pick this up when the timing is right.",
+        "farewell": "Thanks. I'll send over some material and we can pick this up when the timing is right.",
         "disposition": "nurture",
         "position": [
           0,
@@ -163,7 +163,7 @@
         "id": "qa",
         "kind": "qa",
         "label": "QA",
-        "rubric_prompt": "Score 1–5: were all qualification questions asked, was the routing decision consistent with the answers, was the tone consultative, did the agent avoid pressure.",
+        "rubric_prompt": "Score 1 to 5. Were all qualification questions asked, was the routing decision consistent with the answers, was the tone consultative, did the agent avoid pressure.",
         "position": [
           0,
           1120

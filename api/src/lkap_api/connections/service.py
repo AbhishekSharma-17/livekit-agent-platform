@@ -603,7 +603,7 @@ async def set_desired_replicas(
     """
     if row.deployment_mode != "supervised":
         raise ConflictError(
-            f"connection '{row.slug}' is {row.deployment_mode}; only supervised pools are managed here"
+            f"connection '{row.slug}' is {row.deployment_mode}. Only supervised pools are managed here"
         )
     if not 0 <= replicas <= 32:
         raise UnprocessableEntityError("replicas must be between 0 and 32", details={"field": "replicas"})
@@ -857,12 +857,12 @@ async def delete_connection(db: AsyncSession, workspace_id: str, connection_id: 
     )
     if bound:
         raise ConflictError(
-            f"connection '{row.slug}' has {bound} bound agent(s); rebind them first",
+            f"connection '{row.slug}' has {bound} bound agent(s). Rebind them first",
             details={"agents_bound": int(bound)},
         )
     if row.is_default:
         raise ConflictError(
-            f"connection '{row.slug}' is the workspace default; make another connection the default first"
+            f"connection '{row.slug}' is the workspace default. Make another connection the default first"
         )
     await db.delete(row)
     await db.flush()

@@ -117,7 +117,7 @@ def lookup_keys(
     if not keys:
         wanted = [variable_label(column) for column in definition.key_columns]
         raise ToolError(
-            f"Give the {' or the '.join(wanted)} to look up first; ask the caller for it. "
+            f"Give the {' or the '.join(wanted)} to look up first. Ask the caller for it. "
             "Nothing was looked up."
         )
     return keys
@@ -149,11 +149,11 @@ async def _post_lookup(
                 f"/internal/v1/datasets/{definition.dataset_id}/lookup", json=payload
             )
     except httpx.TimeoutException as exc:
-        raise ToolError("the lookup table did not answer in time; try once more") from exc
+        raise ToolError("the lookup table did not answer in time. Try once more") from exc
     except httpx.HTTPError as exc:
         raise ToolError(f"could not reach the lookup table ({type(exc).__name__})") from exc
     if response.status_code == httpx.codes.NOT_FOUND:
-        raise ToolError("this lookup table is not available; tell the caller you cannot check that right now")
+        raise ToolError("this lookup table is not available. Tell the caller you cannot check that right now")
     if response.status_code in (httpx.codes.CONFLICT, httpx.codes.UNPROCESSABLE_ENTITY):
         raise ToolError(_api_message(response) or "the lookup could not run")
     if response.status_code >= 400:

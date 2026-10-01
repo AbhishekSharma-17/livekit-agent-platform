@@ -5,10 +5,10 @@
 `config.recording` (`RecordingConfig{enabled, audio_only, storage_config_id,
 retention_days}`) turns on LiveKit Egress for an agent's sessions. A
 `storage_config_id` picks where recordings land (an operator-configured
-storage backend); leaving it unset uses the workspace default, when one
+storage backend). Leaving it unset uses the workspace default, when one
 exists. `session_get(session_id, include_recording_url=true)` returns a
-freshly signed playback url when the recording is `ready` (`RecordingOut`);
-the api's `GET /v1/sessions/{session_id}/recording` route is what the
+freshly signed playback url when the recording is `ready` (`RecordingOut`).
+The api's `GET /v1/sessions/{session_id}/recording` route is what the
 console's play button calls, and 404s until it is ready.
 
 ## Cost
@@ -26,7 +26,7 @@ day, by agent, `accuracy_pct`, `top_drivers`).
 
 Test chats (`chat_start`/`chat_send`) spend real Inference or vendor credit
 and count against the agent's `max_concurrent_sessions` exactly like a
-browser session — the tools' `cost_hint` says so up front.
+browser session. The tools' `cost_hint` says so up front.
 
 ## Estimates
 
@@ -68,7 +68,7 @@ reports the id of every LLM request (ids only, never the conversation), and
 shortly after the call ends LKAP looks each one up with the workspace's
 OpenRouter key. `session_get` then shows `reconciled_usd` (what OpenRouter
 charged) and, on the LLM's input line, `vendor_usd` with `vendor_ref`
-("12 generations"; the charge covers input and output together). A request
+("12 generations", the charge covers input and output together). A request
 OpenRouter has not recorded yet is retried once 30 seconds later. No other
 vendor is reconciled: OpenAI and Anthropic report cost only to admin keys and
 only per day, and Deepgram's per-request charge needs a project id the

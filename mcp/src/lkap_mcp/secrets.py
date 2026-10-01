@@ -233,7 +233,7 @@ def _resolve_file(secret: SecretInput) -> ResolvedSecret:
         ) from None
     warnings: tuple[str, ...] = ()
     if mode & (stat.S_IRWXG | stat.S_IRWXO):
-        warnings = (f"{secret.field_name}: {path} is readable by group or others; chmod 600 it",)
+        warnings = (f"{secret.field_name}: {path} is readable by group or others, so chmod 600 it",)
     if secret.key is None:
         value = content.strip()
     else:

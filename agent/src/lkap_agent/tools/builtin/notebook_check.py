@@ -47,7 +47,7 @@ def build_notebook_check_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
         """
         target, section, state = resolve_notebook_section(ctx, block_id, section_id)
         if section.kind != "checklist":
-            raise ToolError(f"Section {section.id} is not a checklist; use notebook_write for it.")
+            raise ToolError(f"Section {section.id} is not a checklist. Use notebook_write for it.")
         content = notebook_section_state(state, section)
         items = [i for i in content.get("items") or [] if isinstance(i, dict)]
         item = next((i for i in items if i.get("id") == item_id), None)
@@ -56,7 +56,7 @@ def build_notebook_check_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
                 ", ".join(str(i.get("id")) for i in items)
                 or "none (write the items with notebook_write first)"
             )
-            raise ToolError(f"Unknown item {item_id!r} in {section.id}; the items are: {ids}.")
+            raise ToolError(f"Unknown item {item_id!r} in {section.id}. The items are: {ids}.")
         updated = {k: v for k, v in item.items() if k != "edited_by"}
         updated["done"] = done
         cleaned = " ".join(hint.split())[:MAX_HINT_CHARS]

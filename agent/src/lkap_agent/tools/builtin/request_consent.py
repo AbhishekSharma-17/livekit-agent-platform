@@ -106,7 +106,7 @@ def build_request_consent_tool(ctx: PackSessionContext) -> FunctionTool[..., Any
         spec = next(s for s in specs if s.id == target)
         text = consent_block_text(ctx, spec)
         if not text.strip():
-            raise ToolError(f"The {target} block has no wording to show; ask out loud instead.")
+            raise ToolError(f"The {target} block has no wording to show. Ask out loud instead.")
         call_id = context.function_call.call_id
         ledger = consent_ledger(ctx)
         # S5-3: agreement is what this session recorded (a `consent` event), never the

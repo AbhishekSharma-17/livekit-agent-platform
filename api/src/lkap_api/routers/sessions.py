@@ -552,7 +552,7 @@ async def scrub_session_now(
     config = await config_for_session(db, row)
     if not privacy.scrub_due(config):
         raise ConflictError(
-            "this agent keeps sessions in full; choose 'redacted' or 'basic' in its privacy settings first",
+            "this agent keeps sessions in full. Choose 'redacted' or 'basic' in its privacy settings first",
             details={"session_id": session_id, "reason": "storage_tier_full"},
         )
     if row.status not in ("ended", "failed"):

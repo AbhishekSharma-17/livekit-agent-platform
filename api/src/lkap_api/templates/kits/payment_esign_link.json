@@ -16,7 +16,7 @@
     {
       "name": "link_host",
       "label": "Where links go",
-      "help": "The site your payment or signing pages are on; a link to any other site is refused.",
+      "help": "The site your payment or signing pages are on. A link to any other site is refused.",
       "kind": "host",
       "required": true,
       "example": "pay.example.com"
@@ -52,7 +52,7 @@
     {
       "id": "rest",
       "label": "Your billing or signing system",
-      "summary": "Your system creates the checkout or signing page and reports when it is done (a key is optional; without one the call carries no key).",
+      "summary": "Your system creates the checkout or signing page and reports when it is done (a key is optional, and without one the call carries no key).",
       "source": "http",
       "requires": {"secret_names": ["API_KEY"]},
       "tools": [

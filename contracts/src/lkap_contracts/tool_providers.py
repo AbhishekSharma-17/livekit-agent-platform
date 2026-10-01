@@ -235,7 +235,7 @@ class ConnectionRenameIn(BaseModel):
         if self.label is None and self.is_default is None:
             raise ValueError("give a new label, is_default=true, or both")
         if self.is_default is False:
-            raise ValueError("is_default=false is not a change: make another account the default instead")
+            raise ValueError("is_default=false is not a change. Make another account the default instead")
         if self.label is not None and not self.label.strip():
             raise ValueError("label must not be blank")
         return self

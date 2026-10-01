@@ -40,13 +40,13 @@ def _without_nulls(value: Any) -> Any:
 def _loads(text: str, *, shape: str, example: str) -> Any:
     if len(text) > MAX_JSON_ARGUMENT_CHARS:
         raise ValueError(
-            f"that text is too long ({len(text)} characters, at most {MAX_JSON_ARGUMENT_CHARS}); "
-            f"pass {shape} like {example}"
+            f"that text is too long ({len(text)} characters, at most {MAX_JSON_ARGUMENT_CHARS}). "
+            f"Pass {shape} like {example}"
         )
     try:
         decoded = json.loads(text)
     except (ValueError, RecursionError):
-        raise ValueError(f"pass {shape} like {example}; that text is not valid JSON") from None
+        raise ValueError(f"pass {shape} like {example}. That text is not valid JSON") from None
     return _without_nulls(decoded)
 
 

@@ -4,14 +4,14 @@
 session page shows next to (or below, per `layout: "side"|"wide"`) the
 call controls. `panel_id="composite"` is the no-code panel built from a list
 of `BlockSpec{id, type, config}`. New agents use it (the `claims_intake`
-starter is the Notebook preset plus kits); the legacy `insurance_claim` pack
+starter is the Notebook preset plus kits). The legacy `insurance_claim` pack
 keeps its own "insurance_notebook" panel, filled by pack code only and loaded
 only when the operator lists that pack.
 
 ## Block catalog
 
 Every `BlockSpec.config` is validated against its type's own strict schema
-(unknown keys are rejected) — `lkap_describe("block", type)` returns that
+(unknown keys are rejected). `lkap_describe("block", type)` returns that
 schema. The block types:
 
 | Type | Config | What it shows |
@@ -28,30 +28,30 @@ schema. The block types:
 | `transcript` | `show_tools` | The live transcript, optionally interleaved with tool calls. |
 | `video` | `source` (`agent_avatar`/`user_camera`/`user_screen`/`track:<sid>`), `muted` | A video tile. |
 | `custom` | `kind` + any pack-declared JSON (all public) | A pack-rendered block outside the built-in set. |
-| `choices` | `multi`, `layout` (`buttons`/`list`/`chips`), `max_options` (2–20, default 8) | Options the caller taps or answers out loud (yes/no, "which policy?", a quick poll). |
+| `choices` | `multi`, `layout` (`buttons`/`list`/`chips`), `max_options` (2 to 20, default 8) | Options the caller taps or answers out loud (yes/no, "which policy?", a quick poll). |
 | `details` | `columns` (1 or 2), `fields: [{key, label, type}]` (the starting rows), `caller_can_edit` (default off: the caller may change a value on screen) | A key-value card of facts collected so far; `type` is `string`, `number`, `date`, `money`, `phone`, `email` or `badge`. |
-| `markdown` | `max_chars` (200–50000, default 8000), `allow_links` | Longer text on screen: a recap, instructions, a quoted clause. Never raw HTML. |
+| `markdown` | `max_chars` (200 to 50000, default 8000), `allow_links` | Longer text on screen: a recap, instructions, a quoted clause. Never raw HTML. |
 | `steps` | `steps: [{id, label}]`, `source` (`manual`/`flow`), `show_notes` | A progress timeline. With `source: "flow"` it follows the agent's flow by itself (step ids are flow node ids). |
 | `consent` | `kind` (`recording`/`ai_disclosure`/`terms`/`custom`), `text` (empty = the workspace's wording for `recording` and `ai_disclosure`), `required`, `decline_action` (`continue`/`end_call`), `show_banner` | A question the caller accepts or declines, such as agreeing to be recorded, plus the "you're talking to an AI assistant" banner. The text is public by design. |
-| `upload` | `accept` (`image/*` or exact types: JPEG, PNG, WebP, GIF, HEIC/HEIF, PDF; default photos and PDFs), `max_files` (1–10, default 3), `max_bytes` (up to 25 MB, default 10 MB), `camera_capture` | A file picker (and the phone camera) for the caller to send photos or documents, such as a damage photo or a driving licence. HTML, SVG and other types are never accepted. |
-| `captions` | `show_user`, `show_agent` (default both on), `position` (`block`, or `bottom` to overlay the video on avatar layouts), `target_language` (kept for translated captions, not used yet) | Large live captions of what the caller and the agent are saying, with the language of each line. The words stream on their own channel while the call runs; nothing is stored in the block but the current language. |
-| `handoff` | `show_queue`, `show_agent_name` (default both on) | Where the hand-off of the caller to a person stands: asked for, connecting, connected, nobody answered, or handed over. The agent fills it while `transfer_call` runs; on a warm transfer it shows the person joining. |
+| `upload` | `accept` (`image/*` or exact types: JPEG, PNG, WebP, GIF, HEIC/HEIF, PDF, default photos and PDFs), `max_files` (1 to 10, default 3), `max_bytes` (up to 25 MB, default 10 MB), `camera_capture` | A file picker (and the phone camera) for the caller to send photos or documents, such as a damage photo or a driving licence. HTML, SVG and other types are never accepted. |
+| `captions` | `show_user`, `show_agent` (default both on), `position` (`block`, or `bottom` to overlay the video on avatar layouts), `target_language` (kept for translated captions, not used yet) | Large live captions of what the caller and the agent are saying, with the language of each line. The words stream on their own channel while the call runs. Nothing is stored in the block but the current language. |
+| `handoff` | `show_queue`, `show_agent_name` (default both on) | Where the hand-off of the caller to a person stands: asked for, connecting, connected, nobody answered, or handed over. The agent fills it while `transfer_call` runs. On a warm transfer it shows the person joining. |
 | `link` | `allowed_hosts` (required: the site names links may go to, a name or `*.` plus a name for its sub-domains), `open_in` (`new_tab`/`dialog`), `show_qr` (default on) | A payment, e-signature or portal link and where it stands: sent, opened, completed, failed or expired. Only https links on the listed sites are ever shown. Payments happen on the payment provider's page, never in the call. |
-| `slots` | `timezone_mode` (`caller`/`agent`), `days_visible` (1–31, default 7), `allow_custom` | Times the caller can book, grouped by day, to tap or say. The agent fetches the times with its own calendar tools. |
-| `cards` | `layout` (`carousel`/`grid`/`list`), `selectable` (default on), `max_cards` (1–20, default 10), `image_hosts` (the sites card pictures may come from; empty = only pictures from the call) | Options side by side, such as plans or repair shops, each with a title, a few facts, badges and up to three buttons. |
-| `notebook` | `paper` (`plain`/`ruled`/`grid`/`legal`), `font` (`print`/`handwritten`: a handwriting look for typed notes), `sections: [{id, title, kind}]` (1–12; `kind` is `text`, `checklist`, `details` or `ink`; default one `notes` text section), `caller_can_write` (default off), `caller_can_draw` (default off: the caller may draw on the boards of its `ink` sections); an `ink` section names its board with `canvas_block_id` | A notebook the agent writes in as the call goes: running notes, a "still needed" list, a summary card and a drawing board (an `ink` section shows the `canvas` block it names, or "Drawing board coming soon" without one). With `caller_can_write` the caller can add and change notes, tick items and change values too. |
-| `canvas` | `caller_can_draw` (default off), `tools` (`pen`, `highlighter`, `eraser`, `box`, `arrow`; `text` is kept for later; default pen, highlighter and eraser), `background` (`none`, `asset`: a picture the agent puts on it, or `live_camera`), `max_strokes` (1–2000, default 500), `signature_mode` (superseded by the `signature` block; kept so older boards validate) | A drawing board. With `caller_can_draw` the caller writes or sketches on it by hand; the agent marks it up with boxes, circles, arrows, paths and short labels, and can read what the caller wrote. A notebook's `ink` section shows a board by naming it in `canvas_block_id`. |
-| `layout` | `kind` (`tabs`/`columns`), `children: [{block_id, label}]` (other blocks of this panel, up to 12), `columns` (2 or 3, with `columns`) | Shows other blocks of the panel as tabs or side by side. The blocks inside stay ordinary blocks (same tools, same `describe_panel` entries); each may be inside one layout only, and a layout never holds another layout. |
-| `signature` | `disclosure_text` (up to 2000 characters; empty lets the agent write the wording for each request; set, the agent cannot change it), `allow_decline` (default on: a "Not now" button) | Wording the caller signs by hand on a small signing board. The signature is kept with the session's files, with the SHA-256 of the exact wording shown. |
+| `slots` | `timezone_mode` (`caller`/`agent`), `days_visible` (1 to 31, default 7), `allow_custom` | Times the caller can book, grouped by day, to tap or say. The agent fetches the times with its own calendar tools. |
+| `cards` | `layout` (`carousel`/`grid`/`list`), `selectable` (default on), `max_cards` (1 to 20, default 10), `image_hosts` (the sites card pictures may come from, empty = only pictures from the call) | Options side by side, such as plans or repair shops, each with a title, a few facts, badges and up to three buttons. |
+| `notebook` | `paper` (`plain`/`ruled`/`grid`/`legal`), `font` (`print`/`handwritten`: a handwriting look for typed notes), `sections: [{id, title, kind}]` (1 to 12; `kind` is `text`, `checklist`, `details` or `ink`, default one `notes` text section), `caller_can_write` (default off), `caller_can_draw` (default off: the caller may draw on the boards of its `ink` sections). An `ink` section names its board with `canvas_block_id` | A notebook the agent writes in as the call goes: running notes, a "still needed" list, a summary card and a drawing board (an `ink` section shows the `canvas` block it names, or "Drawing board coming soon" without one). With `caller_can_write` the caller can add and change notes, tick items and change values too. |
+| `canvas` | `caller_can_draw` (default off), `tools` (`pen`, `highlighter`, `eraser`, `box`, `arrow`; `text` is kept for later, default pen, highlighter and eraser), `background` (`none`, `asset`: a picture the agent puts on it, or `live_camera`), `max_strokes` (1 to 2000, default 500), `signature_mode` (superseded by the `signature` block, kept so older boards validate) | A drawing board. With `caller_can_draw` the caller writes or sketches on it by hand. The agent marks it up with boxes, circles, arrows, paths and short labels, and can read what the caller wrote. A notebook's `ink` section shows a board by naming it in `canvas_block_id`. |
+| `layout` | `kind` (`tabs`/`columns`), `children: [{block_id, label}]` (other blocks of this panel, up to 12), `columns` (2 or 3, with `columns`) | Shows other blocks of the panel as tabs or side by side. The blocks inside stay ordinary blocks (same tools, same `describe_panel` entries). Each may be inside one layout only, and a layout never holds another layout. |
+| `signature` | `disclosure_text` (up to 2000 characters, empty lets the agent write the wording for each request, set, the agent cannot change it), `allow_decline` (default on: a "Not now" button) | Wording the caller signs by hand on a small signing board. The signature is kept with the session's files, with the SHA-256 of the exact wording shown. |
 | `chart` | `kind` (`number`/`bar`/`line`/`pie`/`gauge`, default `bar`: what the agent draws when it names no kind), `show_table` (the numbers also as a table) | A chart of up to 200 points, drawn on the page (one big number, bars, lines, a pie, or a gauge on a scale). |
-| `timer` | `mode` (`countdown`/`elapsed`, default `countdown`), `max_seconds` (1–14400, default 3600: the longest timer the agent may start) | A countdown or a stopwatch the agent starts; when it runs out the agent is told. |
-| `code` | `max_chars` (200–20000, default 8000), `wrap` | Read-only code or text in a fixed-width font with a language label. Nothing shown here is ever run. |
-| `cart` | `currency` (a three-letter code such as `USD`), `max_lines` (1–50, default 20) | Lines, quantities, prices, discounts or tax, and totals the platform adds up, such as an order to confirm. The block places no order. |
+| `timer` | `mode` (`countdown`/`elapsed`, default `countdown`), `max_seconds` (1 to 14400, default 3600: the longest timer the agent may start) | A countdown or a stopwatch the agent starts. When it runs out the agent is told. |
+| `code` | `max_chars` (200 to 20000, default 8000), `wrap` | Read-only code or text in a fixed-width font with a language label. Nothing shown here is ever run. |
+| `cart` | `currency` (a three-letter code such as `USD`), `max_lines` (1 to 50, default 20) | Lines, quantities, prices, discounts or tax, and totals the platform adds up, such as an order to confirm. The block places no order. |
 
 Tapping a `kb_citations` entry asks the agent to open the cited page: when the
 panel has a `document` block, the agent copies that knowledge-base document
 into the session on first use (PDFs, images and Markdown or plain text) and
-opens the page there with the section highlighted; otherwise the passage is
+opens the page there with the section highlighted. Otherwise the passage is
 shown in a dialog.
 
 ## Files callers send
@@ -62,118 +62,118 @@ name or the type the browser claims) and again by the platform when it is
 stored. Stored files belong to the session: the session page lists them with
 a time-limited download link, and they are deleted with the session's
 recording retention (`recording.retention_days`). The agent keeps extracted
-details in the conversation only; they are not written to logs.
+details in the conversation only. They are not written to logs.
 
 ## The tools blocks give the agent
 
 Attaching a block registers matching worker tools automatically (on top of
 `config.tools.builtin_disabled`, which can still turn one off):
 
-- `update_block` — writes state into any of `document`, `gallery`, `table`,
+- `update_block`: writes state into any of `document`, `gallery`, `table`,
   `transcript`, `video`, `kb_citations`, `custom`, `details`, `markdown`,
   `steps`, `cards`, `chart`, `code`, `cart` (a cart's totals are always added up
-  again; a `signature` or a `timer` is never written this way).
-  `show_document` — points a `document` block at a url. `table_append` —
-  appends one row to a `table` block. `request_form` — asks the user to
+  again, a `signature` or a `timer` is never written this way).
+  `show_document` points a `document` block at a url. `table_append`
+  appends one row to a `table` block. `request_form` asks the user to
   fill in a `form` block and returns their answers.
-- `request_choice` (a `choices` block) — shows a question with options and
-  waits for the caller's tap; it returns `{selected}`. If the caller starts
+- `request_choice` (a `choices` block): shows a question with options and
+  waits for the caller's tap. It returns `{selected}`. If the caller starts
   speaking while the options are up, the request is withdrawn (a pending form
   is not). `resolve_choice` records an option the caller said out loud. On a
   phone call nothing is shown and the agent asks out loud.
-- `set_details` (a `details` block) — adds or updates rows by `key`, quietly.
-- `set_checklist` and `check_item` (a `checklist` block) — write the "still
+- `set_details` (a `details` block): adds or updates rows by `key`, quietly.
+- `set_checklist` and `check_item` (a `checklist` block): write the "still
   needed" list and tick items, quietly. With `caller_can_edit` on a `checklist`
-  or `details` block the caller can tick an item or change a value on screen;
-  the agent is told each change as data (never as instructions) and
+  or `details` block the caller can tick an item or change a value on screen.
+  The agent is told each change as data (never as instructions) and
   `describe_panel` marks it "by the caller". Every other block refuses a change
   from the page.
-- `generate_image` (built in; a `gallery` block and a picture model in
-  `pipeline.image_gen`) — makes a picture from a description and shows it in
-  the gallery a few seconds later; the file is kept with the session.
-- `show_text` (a `markdown` block) — replaces the text; the agent speaks a
+- `generate_image` (built in, a `gallery` block and a picture model in
+  `pipeline.image_gen`): makes a picture from a description and shows it in
+  the gallery a few seconds later. The file is kept with the session.
+- `show_text` (a `markdown` block): replaces the text. The agent speaks a
   one-line summary. Raw HTML and text over `max_chars` are refused.
-- `set_steps` (a `steps` block with `source: "manual"`) — marks steps
+- `set_steps` (a `steps` block with `source: "manual"`): marks steps
   `pending`, `active`, `done`, `skipped` or `failed`. A `source: "flow"`
   block has no tool.
-- `request_consent` (a `consent` block) — shows the wording and waits for
+- `request_consent` (a `consent` block): shows the wording and waits for
   Accept or Decline; `record_consent` records a yes or no the caller said
   out loud (it is also registered without a block when the agent asks for
   consent before recording). Every answer is stored as a `consent` session
   event with the SHA-256 of the exact wording. A declined required consent
   with `decline_action: "end_call"` ends the call after a goodbye.
-- `request_upload` (an `upload` block) — asks the caller to send files and
-  waits; it returns the stored files (`asset_id`, name, type, size). On a
+- `request_upload` (an `upload` block): asks the caller to send files and
+  waits. It returns the stored files (`asset_id`, name, type, size). On a
   phone call nothing is shown and the agent explains that files need the web
   page. `request_form` fields may be `string`, `number`, `integer`,
   `boolean`, `date`, `phone`, `email`, `select`, `textarea` or `file` (a
   `file` field sends through the same checks as an upload block).
-- `describe_panel` (any block) — returns what the panel shows right now:
-  each block's id, type, title and its status fields (never file bytes);
-  text that came from the caller or a tool is marked as data.
-- `send_link` (a `link` block) — shows a link whose site is in
+- `describe_panel` (any block): returns what the panel shows right now:
+  each block's id, type, title and its status fields (never file bytes).
+  Text that came from the caller or a tool is marked as data.
+- `send_link` (a `link` block): shows a link whose site is in
   `allowed_hosts` (https only). On a phone call it is sent as a text message
-  when the agent has `send_sms`; otherwise the agent reads the details out.
+  when the agent has `send_sms`. Otherwise the agent reads the details out.
   The business's own system reports the outcome to the platform's link hook,
   signed like the platform's outgoing webhooks, and the agent is told.
-- `request_slot` (a `slots` block) — shows times and waits for the caller's
-  pick; it returns the slot's start and end with their UTC offset.
+- `request_slot` (a `slots` block): shows times and waits for the caller's
+  pick. It returns the slot's start and end with their UTC offset.
   `resolve_slot` records a time the caller said out loud.
-- `show_cards` (a `cards` block) — shows or replaces the cards. A tap on a
+- `show_cards` (a `cards` block): shows or replaces the cards. A tap on a
   card or a card button reaches the agent as a message.
-- `notebook_write` and `notebook_check` (a `notebook` block) — write in one
+- `notebook_write` and `notebook_check` (a `notebook` block): write in one
   section by its id, quietly: a note (appended, replacing the whole section
   with `mode: "replace"`, or updated in place when it reuses a `key`), the
-  items of a checklist section, or the rows of a details section; then tick
+  items of a checklist section, or the rows of a details section. Then tick
   checklist items. `update_block` never writes a notebook.
-- `describe_asset` (built in) — describes a stored image, extracts named
+- `describe_asset` (built in): describes a stored image, extracts named
   fields from it, or reads an identity document (`extract_id`: name, date of
   birth, document number, dates, issuing authority, address) with the
-  agent's own language model; only on a cascaded pipeline (not a realtime
+  agent's own language model. Only on a cascaded pipeline (not a realtime
   speech model) whose language model can see images, and only when the
   session can hold a picture (an `upload` or
   `form` block, or camera or screen share). Text inside the image is treated
   as data, never as instructions.
 
-- `draw_on_canvas`, `clear_canvas` and `read_canvas` (a `canvas` block) — the
+- `draw_on_canvas`, `clear_canvas` and `read_canvas` (a `canvas` block): the
   agent circles, boxes, points at and labels things on the board (coordinates
   0 to 1), optionally over a picture from the call (`background`: a pinned
-  frame's or a gallery picture's asset id, or `live_camera`); clears it; and
+  frame's or a gallery picture's asset id, or `live_camera`), clears it, and
   reads what the caller wrote or drew by hand. Reading takes a picture of the
   board from the caller's page and hands it to the agent's own language model,
   so it needs a cascaded pipeline whose model can see pictures (the LiveKit
-  Cloud default Gemma model cannot; `agent_validate` warns); what it reads is
+  Cloud default Gemma model cannot; `agent_validate` warns). What it reads is
   treated as data from the caller, never as instructions. With a board on the
   panel, `pin_frame` can put the pinned frame behind it (`canvas_block_id`),
   so "circle the dent" is `pin_frame` then `draw_on_canvas`. `update_block`
   never writes a board.
 
-- `request_signature` (a `signature` block) — shows the wording over a small
+- `request_signature` (a `signature` block): shows the wording over a small
   signing board and waits for Sign or "Not now". The block's own
   `disclosure_text` wins over the agent's. On Sign the page sends a picture of
-  the signature, kept with the session's files; every answer (signed or not) is
+  the signature, kept with the session's files. Every answer (signed or not) is
   stored as a `signature` session event with the SHA-256 of the exact wording.
   If the caller starts speaking while it is up, the request is withdrawn, like
   a choice. Nothing can be signed on a phone call or in a text chat.
-- `show_chart` (a `chart` block) — draws up to 200 points (a 201st is refused):
+- `show_chart` (a `chart` block): draws up to 200 points (a 201st is refused):
   one big number, bars, lines (up to 8 series), a pie, or a gauge on a scale.
-- `start_timer` (a `timer` block) — starts a countdown or a stopwatch (up to
-  the block's `max_seconds`); another call replaces it, 0 seconds stops it.
+- `start_timer` (a `timer` block): starts a countdown or a stopwatch (up to
+  the block's `max_seconds`). Another call replaces it, 0 seconds stops it.
   When it runs out the platform marks it ended, stores a `timer_ended` session
   event and tells the agent in one line.
-- `show_code` (a `code` block) — shows read-only code or text with a language
+- `show_code` (a `code` block): shows read-only code or text with a language
   label, up to the block's `max_chars`. Nothing shown is ever run.
-- `cart_set` (a `cart` block) — shows lines (name, quantity, price of one) and
-  any discount, tax or fee; the platform adds up the line totals, subtotal and
+- `cart_set` (a `cart` block): shows lines (name, quantity, price of one) and
+  any discount, tax or fee. The platform adds up the line totals, subtotal and
   total. It orders or charges nothing.
 
-These four write quietly on a realtime model; on a phone call a chart, code or
+These four write quietly on a realtime model. On a phone call a chart, code or
 cart is not shown (the agent says it instead), while a timer still runs.
 `describe_panel` reports each one (a code block by its language and size only).
 
 The caller's strokes travel on their own stream, only from the caller, only to a
 board they may draw on, and within limits (20 messages a second, 2,000 strokes a
-board); a full board says so until it is cleared. A snapshot of the board is kept
+board). A full board says so until it is cleared. A snapshot of the board is kept
 with the session's files.
 
 A caller's change to a `notebook` with `caller_can_write` reaches the agent the
@@ -200,14 +200,14 @@ agent set up for phone calls gets the phone tip as well.
 a `wide` panel with a `status` stamp, a `notebook` (Notes, Still needed,
 Summary and Sketch sections, a handwriting look, `caller_can_write` on) and a
 `gallery`; `agent_update(panel_preset="notebook")` puts it on an agent (it
-replaces `panel`; change it afterwards like any other panel).
+replaces `panel`, change it afterwards like any other panel).
 
 ## Building a composite panel
 
 `agent_update(patch={"panel": {"panel_id": "composite", "layout": "side",
 "blocks": [{"id": "checklist_1", "type": "checklist", "config": {}},
 {"id": "table_1", "type": "table", "config": {"columns": [{"key": "item",
-"label": "Item"}]}}]}})`. Always `agent_validate` afterward — a bad
+"label": "Item"}]}}]}})`. Always `agent_validate` afterward. A bad
 `config` key for a block type is reported at
 `panel.blocks[i].config.<key>`.
 

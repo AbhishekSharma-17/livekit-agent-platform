@@ -119,7 +119,7 @@ def resolve_notebook_section(
     section = next((s for s in sections if s.id == section_id), None)
     if section is None:
         known = ", ".join(f"{s.id} ({_KIND_WORDS[s.kind]})" for s in sections) or "none"
-        raise ToolError(f"The notebook {target} has no section {section_id!r}; its sections are: {known}.")
+        raise ToolError(f"The notebook {target} has no section {section_id!r}. Its sections are: {known}.")
     state = ctx.ui.state.blocks.get(target)
     state = state if isinstance(state, dict) else {}
     return target, section, state
@@ -161,7 +161,7 @@ def _text_ops(
         ], f"Updated the note {key} in {section.id}."
     if len(entries) >= MAX_NOTEBOOK_ENTRIES:
         raise ToolError(
-            f"Section {section.id} is full ({MAX_NOTEBOOK_ENTRIES} notes); write it again with "
+            f"Section {section.id} is full ({MAX_NOTEBOOK_ENTRIES} notes). Write it again with "
             'mode="replace" and a short summary.'
         )
     return [UiPatchOp(op="append", path=base, value=entry)], f"Added a note to {section.id}."
@@ -266,7 +266,7 @@ def build_notebook_write_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
             case "details":
                 ops, answer = _details_ops(section, content, fields or [], mode, now)
             case _:
-                raise ToolError(f"Section {section.id} is a drawing board; it cannot be written in.")
+                raise ToolError(f"Section {section.id} is a drawing board. It cannot be written in.")
         ops = [
             *notebook_section_ops(state, section),
             *ops,

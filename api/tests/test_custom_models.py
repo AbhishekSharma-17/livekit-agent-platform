@@ -422,7 +422,7 @@ async def test_a_32_hex_face_id_is_one_value_free_warning_and_the_agent_publishe
     at_path = [i for i in validated["issues"] if i["path"] == path]
     assert len(at_path) == 1
     assert at_path[0]["severity"] == "warning"
-    assert "looks like an API key; if it is the vendor's id, ignore this" in at_path[0]["message"]
+    assert "looks like an API key. If it is the vendor's id, ignore this" in at_path[0]["message"]
     assert not [i for i in validated["issues"] if i["severity"] == "error"]
     _assert_no_fragment(json.dumps(validated), HEX32)
     assert published.status_code == 200, published.text
@@ -475,7 +475,7 @@ def test_no_new_api_source_path_has_a_credentials_prefixed_segment() -> None:
             {"prompt": "0.0000005", "completion": "0.000009"},
             Usage(chars=6),
             Decimal("0.0000030"),
-            "output audio is priced separately and not counted",
+            "Output audio is priced separately and not counted",
         ),
         # An LLM keeps the per-token path.
         (
@@ -504,4 +504,4 @@ def test_estimate_cost_never_reads_catalog_pricing_as_a_zero_for_unpriced_units(
     estimate, cost_note = estimate_cost(get("openrouter-stt"), "m", Usage(audio_s_in=1.0), item)
 
     assert estimate is None
-    assert cost_note.startswith("no price on file for this model; the probe used 1 s of audio")
+    assert cost_note.startswith("no price on file for this model. The probe used 1 s of audio")

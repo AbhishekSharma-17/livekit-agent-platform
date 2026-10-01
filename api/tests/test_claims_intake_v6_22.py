@@ -1,7 +1,7 @@
 """V6-22 (D-V6-21, D-V6-30): the insurance experience as the ``claims_intake`` starter, and the flip.
 
 The starter is built from the generic pack, blocks and tool kits: the Notebook preset (its
-notebook named for the intake kit), ``record_lookup`` on the seeded ``Demo — Policy directory``
+notebook named for the intake kit), ``record_lookup`` on the seeded ``Demo · Policy directory``
 lookup table, ``structured_intake`` with the claim fields and the rules ported from the legacy
 pack's ``rules.py``, ``notify_escalate``, ``generate_image`` and ``pin_frame`` in the
 instructions, two knowledge bases and the FNOL golden test cases.
@@ -68,7 +68,7 @@ WORKER_FIXTURE = REPO / "agent" / "tests" / "fixtures" / "claims_intake_config.j
 LEGACY_PACKS = "packs.insurance_claim,packs.generic"
 CHAT_URL = "https://api.openai.com/v1/chat/completions"
 AGENT_IDENTITY = "agent-fake"
-POLICY_TABLE = "Demo — Policy directory"
+POLICY_TABLE = "Demo · Policy directory"
 GOLDEN_CASES = ["fnol-golden", "fnol-safety", "fnol-evidence"]
 
 #: D-V6-30's nine behaviours → where the golden cases carry each one (a judge reads the
@@ -135,7 +135,7 @@ async def admin(fresh_app: FastAPI, default_packs: Settings) -> AsyncIterator[ht
         yield client
 
 
-async def _create_claims(admin: httpx.AsyncClient, name: str = "Demo — Claims intake") -> dict[str, Any]:
+async def _create_claims(admin: httpx.AsyncClient, name: str = "Demo · Claims intake") -> dict[str, Any]:
     response = await admin.post("/v1/agents", json={"name": name, "template_id": "claims_intake"})
     assert response.status_code == 201, response.text
     body: dict[str, Any] = response.json()
@@ -237,8 +237,8 @@ async def test_claims_intake_creates_validates_and_seeds_its_table_kits_and_test
 async def test_creating_the_claims_starter_twice_keeps_one_policy_table(
     admin: httpx.AsyncClient, database: Database
 ) -> None:
-    first = await _create_claims(admin, "Demo — Claims one")
-    second = await _create_claims(admin, "Demo — Claims two")
+    first = await _create_claims(admin, "Demo · Claims one")
+    second = await _create_claims(admin, "Demo · Claims two")
 
     async with database.session() as db:
         tables = (await db.execute(select(Dataset).where(Dataset.name == POLICY_TABLE))).scalars().all()
@@ -343,7 +343,7 @@ async def test_an_insurance_pack_agent_with_its_notebook_panel_validates_unchang
         application = await _app(settings, database, monkeypatch)
         async with _client(application, settings) as admin:
             response = await admin.post(
-                "/v1/agents", json={"name": "Demo — Insurance", "pack_id": "insurance_claim"}
+                "/v1/agents", json={"name": "Demo · Insurance", "pack_id": "insurance_claim"}
             )
             assert response.status_code == 201, response.text
             agent = response.json()

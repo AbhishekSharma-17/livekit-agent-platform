@@ -1,4 +1,4 @@
-# Acme — phone FAQ
+# Acme phone FAQ
 
 Acme is a fictional small business used by the Phone agent starter. Replace this document with your own FAQ.
 

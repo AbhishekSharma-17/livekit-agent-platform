@@ -7,7 +7,7 @@ server) so agents have somewhere to run.
 
 If the user says something like "my LiveKit credentials are in
 `~/.config/lkap/dev.env`", use `file:` references rather than asking them to
-paste the values — they never leave a shell history and the platform
+paste the values. They never leave a shell history and the platform
 resolves them itself:
 
 `connection_create(...)`
@@ -28,16 +28,16 @@ resolves them itself:
 ## 2. Or accept an inline paste
 
 If the user pastes the url, key and secret directly into the chat instead,
-that is fine too — pass them as plain strings. The response never echoes
+that is fine too. Pass them as plain strings. The response never echoes
 the values back (a `plan=true` call would show `<inline secret>` in their
-place); only the connection's `fingerprint` comes back.
+place). Only the connection's `fingerprint` comes back.
 
 ## 3. Check the result
 
 `connection_create` returns a `ConnectionOut` with `status` (`"ok"` after a
 successful `test_first`) and `capabilities` (what the project supports:
 `inference_available`, `sip_enabled`, …). If `status` is `"error"`, read
-`last_error` before retrying — a common cause is `agent_name` already
+`last_error` before retrying. A common cause is `agent_name` already
 belonging to another connection on the same LiveKit project.
 
 ## 4. Who runs the worker

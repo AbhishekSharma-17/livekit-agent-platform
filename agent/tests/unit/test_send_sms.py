@@ -121,7 +121,7 @@ async def test_an_unlabelled_number_is_refused_even_on_a_phone_call() -> None:
     tool = build_send_sms_tool(_ctx(targets=[SmsTarget(label="Claims desk", to=DESK)]), _twilio())
 
     for to in ("+15550007777", DESK, CALLER, "Sales"):
-        with pytest.raises(ToolError, match="numbers cannot be typed in. Saved contacts: Claims desk"):
+        with pytest.raises(ToolError, match="Numbers cannot be typed in. Saved contacts: Claims desk"):
             await tool(context=_run(), message="hi", to=to)
     assert not route.called
 

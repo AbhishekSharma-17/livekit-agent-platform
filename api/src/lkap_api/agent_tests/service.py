@@ -42,7 +42,7 @@ RUN_STALE_AFTER: Final = dt.timedelta(hours=2)
 ACTIVE_STATUSES: Final[tuple[AgentTestRunStatus, ...]] = ("queued", "running")
 
 STALE_ERROR: Final = (
-    "the run stopped without finishing (the api or jobs process restarted); run the tests again"
+    "the run stopped without finishing (the api or jobs process restarted). Run the tests again"
 )
 
 
@@ -83,7 +83,7 @@ async def create_run(
     """
     if not config.tests:
         raise UnprocessableEntityError(
-            "this agent has no test cases; add some to `tests` in its configuration first",
+            "this agent has no test cases. Add some to `tests` in its configuration first",
             details={"path": "tests"},
         )
     known = {case.id: case for case in config.tests}
@@ -109,7 +109,7 @@ async def create_run(
     )
     if active is not None:
         raise ConflictError(
-            "a test run of this agent is still in progress; wait for it to finish",
+            "a test run of this agent is still in progress. Wait for it to finish",
             details={"run_id": active},
         )
 
@@ -243,7 +243,7 @@ async def check_publish_gate(
     }
     if out.status in ACTIVE_STATUSES:
         _refuse(
-            "the test run on this version has not finished yet; publish once it has",
+            "the test run on this version has not finished yet. Publish once it has",
             PublishGateRefusal(reason="running", **base),
         )
     ratio = out.pass_ratio
@@ -253,12 +253,12 @@ async def check_publish_gate(
         why = out.error or f"{out.errored} of {len(out.case_ids)} cases could not run"
         _refuse(
             "the tests on this version did not run, so they neither passed nor failed "
-            f"({why}); fix that and {way_out}",
+            f"({why}). Fix that and {way_out}",
             PublishGateRefusal(reason="error", error=why, **base),
         )
     _refuse(
-        f"the latest test run on version {version} passed {out.passed} of {len(out.case_ids)} cases; "
-        f"at least {gate.min_pass_ratio:.0%} must pass. Fix the agent and run the tests again, "
+        f"the latest test run on version {version} passed {out.passed} of {len(out.case_ids)} cases. "
+        f"At least {gate.min_pass_ratio:.0%} must pass. Fix the agent and run the tests again, "
         "or turn off “Require passing tests”",
         PublishGateRefusal(reason="failing", **base),
     )

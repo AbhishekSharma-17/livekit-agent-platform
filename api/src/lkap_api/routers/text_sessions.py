@@ -70,7 +70,7 @@ def _check_metadata(metadata: dict[str, str]) -> None:
     size = len(json.dumps(metadata, separators=(",", ":"), ensure_ascii=False).encode())
     if size > MAX_PARTICIPANT_METADATA_BYTES:
         raise UnprocessableEntityError(
-            f"participant_metadata is {size} bytes; the limit is {MAX_PARTICIPANT_METADATA_BYTES}",
+            f"participant_metadata is {size} bytes. The limit is {MAX_PARTICIPANT_METADATA_BYTES}",
             details={"limit_bytes": MAX_PARTICIPANT_METADATA_BYTES},
         )
 

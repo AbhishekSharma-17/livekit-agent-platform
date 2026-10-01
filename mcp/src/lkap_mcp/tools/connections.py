@@ -17,7 +17,7 @@ SecretArg = Annotated[
     Field(
         description=(
             "The secret: the value itself (pasted by the user), or a reference env:NAME, "
-            "file:/abs/path, file:/abs/path#KEY; raw:<value> for a literal starting with env:/file:"
+            "file:/abs/path, file:/abs/path#KEY. Raw:<value> for a literal starting with env:/file:"
         )
     ),
 ]
@@ -96,7 +96,7 @@ def register(registry: Registry) -> None:
         slug: str | None = None,
         deployment_type: DeploymentType | None = None,
         agent_name: Annotated[
-            str, Field(description="The worker's agent name; unique in the LiveKit project")
+            str, Field(description="The worker's agent name. Unique in the LiveKit project")
         ] = "lkap-agent",
         deployment_mode: DeploymentMode = "external",
         worker_image: Literal["slim", "full"] = "slim",
@@ -105,7 +105,7 @@ def register(registry: Registry) -> None:
         test_first: bool = True,
         plan: Annotated[bool, Field(description="Return the requests without sending them")] = False,
     ) -> ToolResult:
-        """Connect a LiveKit project from its url, API key and secret (tested first); secrets go straight to
+        """Connect a LiveKit project from its url, API key and secret (tested first). Secrets go straight to
         the vault.
         """
         secrets = {
@@ -137,7 +137,7 @@ def register(registry: Registry) -> None:
                     "connection_test_failed",
                     str((test or {}).get("message") or "the connection test failed"),
                     data={"test": test},
-                    hint="Check the url, key and secret; nothing was saved.",
+                    hint="Check the url, key and secret. Nothing was saved.",
                 )
         created = await client.post("/v1/connections", payload)
         return ToolResult.success(
@@ -198,7 +198,7 @@ def register(registry: Registry) -> None:
             return planned(request("POST", path, placeholders(secrets)))
         if not confirm:
             return ToolResult.needs_confirmation(
-                f"replace the LiveKit key and secret of connection {id}; the old ones stop working here"
+                f"replace the LiveKit key and secret of connection {id}. The old ones stop working here"
             )
         values, warnings = resolve_all(secrets)
         rotated = await client.post(path, values)
@@ -206,6 +206,6 @@ def register(registry: Registry) -> None:
             rotated,
             warnings=warnings,
             next_steps=[
-                "Supervised pools restart onto the new credentials; external workers need the new env."
+                "Supervised pools restart onto the new credentials. External workers need the new env."
             ],
         )

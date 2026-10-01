@@ -34,7 +34,7 @@ def test_the_notebook_preset_validates_without_an_issue() -> None:
             "panel.blocks[2]",
             "warning",
             "'google/gemma-4-31b-it' cannot see pictures, so the agent cannot read what the "
-            "caller draws on this board — pick a model marked 'supports video' (e.g. "
+            "caller draws on this board. Pick a model marked 'supports video' (e.g. "
             "google/gemini-3.5-flash)",
         )
     ]
@@ -81,7 +81,7 @@ def test_a_layout_over_existing_blocks_is_fine() -> None:
     [
         ([{"block_id": "missing"}], "there is no block 'missing' on this panel"),
         ([{"block_id": "card"}, {"block_id": "card"}], "'card' is listed twice in this layout"),
-        ([{"block_id": "other"}], "'other' is a layout; a layout cannot hold another layout"),
+        ([{"block_id": "other"}], "'other' is a layout. A layout cannot hold another layout"),
         ([{"block_id": "tabs"}], "a layout cannot hold itself"),
     ],
 )

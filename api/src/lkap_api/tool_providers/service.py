@@ -191,14 +191,14 @@ def api_error(exc: ToolProviderError) -> ApiError:
     match exc:
         case ToolProviderAuthError():
             return ToolProviderKeyRejectedError(
-                "Composio rejected this workspace's key; validate or rotate it under Tools, Apps",
+                "Composio rejected this workspace's key. Validate or rotate it under Tools, Apps",
                 details={"reason": exc.reason},
             )
         case ToolProviderNotFoundError():
             return NotFoundError(f"Composio has no such object: {exc.message}")
         case ToolProviderRateLimitedError():
             return RateLimitedError(
-                "Composio is rate limiting this workspace; try again shortly", details={"reason": exc.reason}
+                "Composio is rate limiting this workspace. Try again shortly", details={"reason": exc.reason}
             )
         case ToolProviderRequestError():
             return UnprocessableEntityError(
@@ -465,7 +465,7 @@ def unique_alias(label: str, taken: Iterable[str | None], *, fallback: str) -> s
         candidate = f"{base[: MAX_ACCOUNT_LABEL - len(suffix)]}{suffix}"
         if candidate not in used:
             return candidate
-    raise ConflictError("too many accounts of this app share a name; rename one")
+    raise ConflictError("too many accounts of this app share a name. Rename one")
 
 
 def _account_display_name(account: dict[str, Any]) -> str | None:
@@ -490,7 +490,7 @@ def _refuse_duplicate_label(label: str, siblings: list[AppConnection]) -> None:
     taken = {s.account_label.strip().casefold() for s in siblings}
     if label.strip().casefold() in taken:
         raise ConflictError(
-            f"another account of this app is already called '{label}'; pick another name",
+            f"another account of this app is already called '{label}'. Pick another name",
             details={"path": "label"},
         )
 
@@ -617,13 +617,13 @@ async def workspace_adapter(
     state = await key_state(db, workspace_id)
     if state.credential is None:
         raise AppsNotEnabledError(
-            "Apps are not set up: add a Composio key first (Tools, Apps, Enable Composio)"
+            "Apps are not set up. Add a Composio key first (Tools, Apps, Enable Composio)"
         )
     if require_enabled and not state.enabled:
-        raise AppsNotEnabledError("Apps are turned off for this workspace; enable Composio again to use them")
+        raise AppsNotEnabledError("Apps are turned off for this workspace. Enable Composio again to use them")
     api_key = vault.decrypt(state.credential.ciphertext).get("api_key", "")
     if not api_key:
-        raise AppsNotEnabledError("the stored Composio key is empty; rotate it")
+        raise AppsNotEnabledError("the stored Composio key is empty. Rotate it")
     return factory(api_key), state.credential
 
 
@@ -665,7 +665,7 @@ async def test_key(adapter: ToolProviderAdapter, *, api_key: str = "") -> AppKey
     where = project_name or account_name
     parts = ["Key works"]
     if where:
-        parts.append(f"connected to {where}")
+        parts.append(f"Connected to {where}")
     if count is not None:
         parts.append(f"{count} apps available")
     return AppKeyTestOut(
@@ -673,7 +673,7 @@ async def test_key(adapter: ToolProviderAdapter, *, api_key: str = "") -> AppKey
         account_name=account_name,
         project_name=project_name,
         toolkits_count=count,
-        message=" — ".join(parts),
+        message=". ".join(parts),
     )
 
 
@@ -1085,7 +1085,7 @@ async def destructive_actions(
         # S5-8 (R-V5-16): fail closed. A tool finder can run any action of its apps, so it
         # is never provisioned with a deny list that may be missing destructive actions.
         raise UnprocessableEntityError(
-            f"the app '{toolkit}' has too many actions to review automatically; pick its actions "
+            f"the app '{toolkit}' has too many actions to review automatically. Pick its actions "
             "and use the app server, or leave it out of tools.apps.allowed_toolkits",
             details={"path": "tools.apps.mode", "toolkit": toolkit, "reason": "too_many_actions"},
         )
@@ -1381,14 +1381,14 @@ async def connect(
             case "none":
                 if "none" not in options:
                     raise UnprocessableEntityError(
-                        f"'{toolkit_slug}' needs sign-in; pick another connect method"
+                        f"'{toolkit_slug}' needs sign-in. Pick another connect method"
                     )
                 conn.status, conn.connected_at = "active", now
                 result: AppConnectOut | None = None
             case "managed":
                 if "oauth_managed" not in options:
                     raise UnprocessableEntityError(
-                        f"Composio has no shared sign-in for '{toolkit_slug}'; use your own OAuth app"
+                        f"Composio has no shared sign-in for '{toolkit_slug}'. Use your own OAuth app"
                     )
                 conn.managed = True
                 conn.auth_config_id = await _reusable_auth_config(
@@ -1510,7 +1510,7 @@ async def reconnect(
             case "managed" | "custom_oauth":
                 if not conn.auth_config_id:
                     raise UnprocessableEntityError(
-                        "this connection has no sign-in to repeat; connect the app again"
+                        "this connection has no sign-in to repeat. Connect the app again"
                     )
                 result = await _start_link(adapter, settings, conn, now)
                 conn.save(vault, checked_at=now)
@@ -1519,7 +1519,7 @@ async def reconnect(
                 return result
             case "api_key":
                 if not conn.auth_config_id or not conn.auth_scheme:
-                    raise UnprocessableEntityError("this connection cannot be renewed; connect the app again")
+                    raise UnprocessableEntityError("this connection cannot be renewed. Connect the app again")
                 if not any(value for value in fields.values()):
                     raise UnprocessableEntityError(
                         "reconnecting a key-based app needs the new key in 'fields'"
@@ -1747,7 +1747,7 @@ async def disconnect(
     tools = await bound_tools(db, ctx.workspace_id, connection_ids=[conn.id])
     if purge and tools:
         raise ConflictError(
-            "tools still use this app; delete them first",
+            "tools still use this app. Delete them first",
             details={"tools": sorted(tool.name for tool in tools)},
         )
     if conn.connected_account_id:
@@ -1797,7 +1797,7 @@ async def pick_actions(
     """
     conn = await load_connection(db, vault, ctx.workspace_id, payload.connection_id)
     if conn.status != "active":
-        raise ConflictError(f"'{conn.toolkit}' is not connected (status {conn.status}); reconnect it first")
+        raise ConflictError(f"'{conn.toolkit}' is not connected (status {conn.status}). Reconnect it first")
     if payload.agent_id is not None:
         found = await db.scalar(
             select(Agent.id).where(Agent.id == payload.agent_id, Agent.workspace_id == ctx.workspace_id)
@@ -1823,7 +1823,7 @@ async def pick_actions(
     destructive = [slug for slug in wanted if known[slug].risk == "destructive"]
     if destructive and not payload.allow_destructive:
         raise UnprocessableEntityError(
-            "these actions delete, remove or move money; confirm with allow_destructive=true: "
+            "these actions delete, remove or move money. Confirm with allow_destructive=true: "
             + ", ".join(destructive),
             details={"destructive": destructive},
         )

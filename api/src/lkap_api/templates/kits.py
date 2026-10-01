@@ -314,7 +314,7 @@ def resolve_settings(
     known = {setting.name: setting for setting in kit.defaults}
     unknown = sorted(set(given) - set(known))
     if unknown:
-        raise KitError(f"the kit has no setting(s) {', '.join(unknown)}; its settings: {', '.join(known)}")
+        raise KitError(f"the kit has no setting(s) {', '.join(unknown)}. Its settings: {', '.join(known)}")
     values: dict[str, str] = {}
     for setting in kit.defaults:
         if setting.variants and variant.id not in setting.variants:

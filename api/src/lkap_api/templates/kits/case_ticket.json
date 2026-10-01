@@ -8,7 +8,7 @@
     {
       "name": "base_url",
       "label": "Cases address",
-      "help": "Where a case is opened (POST, answering {\"id\": …, \"status\": …}); …/<reference> reads one back with GET.",
+      "help": "Where a case is opened (POST, answering {\"id\": …, \"status\": …}). A GET on …/<reference> reads one back.",
       "kind": "url",
       "required": true,
       "example": "https://helpdesk.example.com/api/cases",
@@ -42,7 +42,7 @@
     {
       "id": "rest",
       "label": "Your helpdesk system",
-      "summary": "Opens and checks cases through your own helpdesk's address (a key is optional; without one the calls carry no key).",
+      "summary": "Opens and checks cases through your own helpdesk's address (a key is optional, and without one the calls carry no key).",
       "source": "http",
       "requires": {"secret_names": ["API_KEY"]},
       "instructions_snippet": "When the caller needs something your team has to follow up on, open a case: sum the problem up in one or two sentences, read it back and open it with {{ kit.tool.create }} only once they agree. Tell them the case reference afterwards. If they ask about an existing case, ask for its reference and check it with {{ kit.tool.status }}.",
@@ -158,7 +158,7 @@
     {
       "id": "mcp_linear",
       "label": "Linear (sign in)",
-      "summary": "Adds Linear's own server of tools; sign in to Linear from the tool's page, then choose which of its tools the agent may use.",
+      "summary": "Adds Linear's own server of tools. Sign in to Linear from the tool's page, then choose which of its tools the agent may use.",
       "source": "mcp_preset",
       "instructions_snippet": "When the caller needs something your team has to follow up on, open an issue in Linear: sum the problem up in one or two sentences, read it back and open it only once they agree. Tell them the issue's identifier afterwards.",
       "tools": [
@@ -179,7 +179,7 @@
     {
       "id": "mcp_atlassian",
       "label": "Jira through Atlassian (sign in)",
-      "summary": "Adds Atlassian's own server of tools (Jira and Confluence); sign in from the tool's page, then choose which of its tools the agent may use.",
+      "summary": "Adds Atlassian's own server of tools (Jira and Confluence). Sign in from the tool's page, then choose which of its tools the agent may use.",
       "source": "mcp_preset",
       "instructions_snippet": "When the caller needs something your team has to follow up on, open a Jira issue: sum the problem up in one or two sentences, read it back and open it only once they agree. Tell them the issue key afterwards.",
       "tools": [

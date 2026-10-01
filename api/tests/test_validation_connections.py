@@ -32,7 +32,7 @@ from lkap_api.vault import Vault
 #: The flat `errors` text V2-06's registered validator produces for one disabled slot.
 _DISABLED_TTS = (
     "pipeline.tts: provider 'livekit-inference-tts' is disabled for this workspace "
-    "(providers.disabled) — an admin can re-enable it on the Providers page"
+    "(providers.disabled). An admin can re-enable it on the Providers page"
 )
 
 
@@ -132,7 +132,7 @@ def test_validate_full_image_provider_needs_a_full_connection() -> None:
     without = validate_agent_config(config, credential_providers=credentials)
 
     assert [i.path for i in on_slim.issues if i.severity == "error"] == ["pipeline.llm"]
-    assert "needs the 'full' worker image; connection 'cloud-a' runs 'slim'" in on_slim.errors[0]
+    assert "needs the 'full' worker image, but connection 'cloud-a' runs 'slim'" in on_slim.errors[0]
     assert [i for i in on_full.issues if i.severity == "error"] == []
     assert any("not available yet" in e for e in without.errors)
 

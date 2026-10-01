@@ -1,4 +1,4 @@
-# Support playbook — Acme Meter
+# Support playbook for Acme Meter
 
 Sample content for the Knowledge assistant starter; replace it with your own playbook.
 

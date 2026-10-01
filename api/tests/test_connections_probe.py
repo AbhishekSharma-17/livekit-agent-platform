@@ -102,7 +102,7 @@ async def test_probe_connection_missing_services_only_clear_their_flags(settings
     assert result.ok
     caps = result.capabilities
     assert (caps.sip_enabled, caps.egress_enabled, caps.ingress_enabled) == (False, True, False)
-    assert result.message == "connected; not reachable: SIP, Ingress"
+    assert result.message == "connected. Not reachable: SIP, Ingress"
 
 
 @pytest.mark.parametrize(

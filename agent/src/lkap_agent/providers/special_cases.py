@@ -316,7 +316,7 @@ def apply_pipeline_mode(spec: ProviderSpec, kwargs: dict[str, Any], mode: Pipeli
     if mode != "half_cascade":
         return kwargs
     if not spec.capabilities.text_modality:
-        raise ProviderBuildError(f"{spec.id} has no text_modality; it cannot run in half_cascade mode")
+        raise ProviderBuildError(f"{spec.id} has no text_modality. It cannot run in half_cascade mode")
     result = dict(kwargs)
     if spec.id == "ultravox-realtime":
         result["output_medium"] = "text"

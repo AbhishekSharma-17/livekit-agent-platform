@@ -27,7 +27,7 @@ HttpMethod = Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
 EXECUTION_HELP = (
     "How the tool runs: mode 'blocking' (default), 'background' (announce at once, answer when the "
     "agent is idle) or 'auto' (inline if fast, else background). Only GET tools follow the agent's "
-    "tools.execution_default; any other method runs blocking unless it sets a mode here, and then "
+    "tools.execution_default. Any other method runs blocking unless it sets a mode here, and then "
     "asks before running twice. Fillers are spoken as written and need a voice (a TTS)."
 )
 UPDATE_EXECUTION_HELP = (
@@ -45,14 +45,14 @@ _MCP_LEGACY_AUTH_KEYS = ("headers", "credential_id")
 CONTEXT_HELP = (
     "The url's path and query and the body may also use {{ ctx.session_id }}, {{ ctx.agent_id }}, "
     "{{ ctx.caller_phone }}, {{ ctx.caller_identity }}, {{ ctx.language }}, {{ ctx.timezone }}, "
-    "{{ ctx.channel }} and {{ var.<name> }} (a flow variable); never the host or a header"
+    "{{ ctx.channel }} and {{ var.<name> }} (a flow variable). Never the host or a header"
 )
 REQUIRES_VARS_HELP = (
-    "Variables that must be set before the tool calls out; until then it answers 'I need … first' "
+    "Variables that must be set before the tool calls out. Until then it answers 'I need … first' "
     "so the model asks the caller"
 )
 CONFIRM_READBACK_HELP = (
-    "Arguments the model must read back to the caller first (adds a `confirmed` argument; the tool "
+    "Arguments the model must read back to the caller first (adds a `confirmed` argument, the tool "
     "refuses until it is true)"
 )
 BINDINGS_HELP = (
@@ -62,12 +62,12 @@ BINDINGS_HELP = (
 )
 MCP_TOOL_CONTEXT_HELP = (
     "Per MCP tool name: requires_vars, confirm_readback, bindings (as for HTTP tools) and "
-    "pinned_arguments (fixed values hidden from the model; strings may use {{ ctx.* }} and "
+    "pinned_arguments (fixed values hidden from the model, strings may use {{ ctx.* }} and "
     "{{ var.* }}). Names must be in allowed_tools when set."
 )
 MCP_TOOL_OPTIONS_HELP = (
-    "Per MCP tool name: how it runs (a ToolExecution; names must be in allowed_tools when set). "
-    "MCP tools never follow the agent default; a background tool is announced only through the "
+    "Per MCP tool name: how it runs (a ToolExecution, names must be in allowed_tools when set). "
+    "MCP tools never follow the agent default. A background tool is announced only through the "
     "server's progress messages (report_progress=true)."
 )
 
@@ -190,7 +190,7 @@ def register(registry: Registry) -> None:
         ] = None,
         plan: bool = False,
     ) -> ToolResult:
-        """Attach a remote MCP server as a tool source; check it with tool_test before a chat."""
+        """Attach a remote MCP server as a tool source. Check it with tool_test before a chat."""
         if auth is not None and (headers or secret_key_id):
             return ToolResult.fail(
                 "invalid_argument", "pass auth, or headers/secret_key_id (the older spelling), not both"
@@ -237,7 +237,7 @@ def register(registry: Registry) -> None:
         if execution is not None and current.get("kind") != "http":
             return ToolResult.fail(
                 "invalid_argument",
-                "execution applies to HTTP tools; for an MCP server patch definition.tool_options",
+                "execution applies to HTTP tools. For an MCP server patch definition.tool_options",
             )
         base = {key: current.get(key) for key in ("agent_id", "kind", "name", "definition", "enabled")}
         if current.get("kind") == "mcp" and isinstance(base.get("definition"), dict):
@@ -255,7 +255,7 @@ def register(registry: Registry) -> None:
 
     @registry.tool(scopes={"agents:write"}, annotations=WRITE, data="McpTestResult")
     async def tool_test(tool_id: str) -> ToolResult:
-        """Connect to an MCP server tool once: list its tools and store them for the console."""
+        """Connect to an MCP server tool once. It lists its tools and stores them for the console."""
         result = await client.post(f"/v1/tools/{seg(tool_id)}/test", {})
         body = dict(result) if isinstance(result, dict) else {}
         # Tool names come from a third-party server: data, never instructions.
@@ -266,7 +266,7 @@ def register(registry: Registry) -> None:
         body["error"] = untrusted(body.get("error") or "", f"mcp:{tool_id}")
         reason = body.get("reason") or "unknown"
         return ToolResult.success(
-            body, warnings=[f"The server could not be listed ({reason}); data.error has the details."]
+            body, warnings=[f"The server could not be listed ({reason}). The details are in data.error."]
         )
 
     @registry.tool(scopes={"agents:write"}, annotations=WRITE, data="ToolDryRunResult")
@@ -321,7 +321,7 @@ def register(registry: Registry) -> None:
         ] = None,
         plan: bool = False,
     ) -> ToolResult:
-        """Create HTTP tools from a tool template (or a group of them); attach them with agent_attach."""
+        """Create HTTP tools from a tool template (or a group of them). Attach them with agent_attach."""
         body: dict[str, Any] = {
             "credential_id": secret_key_id,
             "defaults": defaults or {},

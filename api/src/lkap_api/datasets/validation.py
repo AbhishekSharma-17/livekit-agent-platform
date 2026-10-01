@@ -69,7 +69,7 @@ def dataset_tool_issues(ctx: ValidationContext) -> list[Issue]:
             issues.append(
                 Issue(
                     path=f"{base}.dataset_id",
-                    message=f"'{name}' reads a lookup table that is not in this workspace; pick another",
+                    message=f"'{name}' reads a lookup table that is not in this workspace. Pick another",
                 )
             )
             continue
@@ -79,15 +79,15 @@ def dataset_tool_issues(ctx: ValidationContext) -> list[Issue]:
             issues.append(
                 Issue(
                     path=f"{base}.dataset_id",
-                    message=f"the lookup table of '{name}' failed to import; upload it again",
+                    message=f"the lookup table of '{name}' failed to import. Upload it again",
                 )
             )
         elif status == "pending":
             issues.append(
                 Issue(
                     path=f"{base}.dataset_id",
-                    message=f"the lookup table of '{name}' is still being imported; "
-                    "lookups wait until it is ready",
+                    message=f"the lookup table of '{name}' is still being imported. "
+                    "Lookups wait until it is ready",
                     severity="warning",
                 )
             )

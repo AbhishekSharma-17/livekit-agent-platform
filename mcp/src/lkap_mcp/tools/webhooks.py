@@ -48,12 +48,12 @@ def register(registry: Registry) -> None:
     async def webhook_create(
         url: str,
         events: Annotated[
-            list[str] | None, Field(description="Event types, e.g. session.ended; omitted = all")
+            list[str] | None, Field(description="Event types, e.g. session.ended. Omitted = all")
         ] = None,
         description: str = "",
         plan: bool = False,
     ) -> ToolResult:
-        """Create a webhook endpoint; the signing secret is written to a 0600 file, never returned."""
+        """Create a webhook endpoint. The signing secret is written to a 0600 file, never returned."""
         if ctx.settings.http_mode:
             return ToolResult.fail(
                 "unavailable_in_http_mode",
@@ -73,7 +73,7 @@ def register(registry: Registry) -> None:
                 write_secret_file(ctx.settings.webhook_secret_dir, created["id"], secret)
             )
         return ToolResult.success(
-            data, next_steps=["Give the receiver the signing secret from secret_file; it is not shown again."]
+            data, next_steps=["Give the receiver the signing secret from secret_file. It is not shown again."]
         )
 
     @registry.tool(scopes={"webhooks:write"}, annotations=WRITE, data="WebhookDeliveryOut")

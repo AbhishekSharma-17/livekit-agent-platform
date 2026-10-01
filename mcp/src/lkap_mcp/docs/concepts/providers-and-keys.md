@@ -4,20 +4,20 @@ The registry (`providers.json`, 127 entries) is the single source of every
 vendor plugin the worker can construct: `stt`, `llm`, `tts`, `realtime`,
 `avatar`, `image_gen`, `embedding`, `vad`, `turn_detection`,
 `noise_cancellation`, plus one `secret_bag` kind (`http-tool-secret`, for
-HTTP tool headers/URLs/bodies — see `lkap_explain("tools-http")`). Each entry
+HTTP tool headers/URLs/bodies. See `lkap_explain("tools-http")`). Each entry
 (`ProviderSpec`) carries `id`, `label`, `vendor`, `kind`, `models`,
 `capabilities`, `requires_credential`, `secret_fields`, `availability`
 (`available`/preview/deprecated), `verification` and `worker_image`.
 
 `provider_list(kind=, enabled=, installed_on=, query=)` returns compact rows;
 `lkap_describe("provider", id)` returns the full spec. The console's word
-for a stored vendor credential is "key"; the api's path (and the tool
+for a stored vendor credential is "key". The api's path (and the tool
 family) is `credentials`.
 
 ## LiveKit Inference needs no vendor key
 
 `livekit-inference-stt`, `livekit-inference-llm` and `livekit-inference-tts`
-run on the LiveKit connection's own credentials — a cascaded agent can be
+run on the LiveKit connection's own credentials. A cascaded agent can be
 fully built and tested with zero `provider_key_create` calls. Every other
 provider (`deepgram-stt`, `openai-llm`, `elevenlabs-tts`, `google-realtime`,
 `bey-avatar`, …) needs a credential first.
@@ -43,7 +43,7 @@ listed and accepted too). A key of another vendor is always refused.
 | `gnani-stt`, `gradium-stt`, `sarvam-stt`, `slng-stt`, `smallestai-stt`, `speechmatics-stt` | that vendor's `-tts` entry |
 
 One Deepgram key therefore runs Nova or Flux transcription and the Aura
-voice; one OpenRouter key covers the LLM, the workflow and QA judge models,
+voice. One OpenRouter key covers the LLM, the workflow and QA judge models,
 the knowledge-base embedder and image generation. Palabra, Simplismart,
 Soniox, Telnyx, NVIDIA and Azure speech keep one key per entry for now.
 
@@ -60,17 +60,17 @@ and Cartesia keys) for speech and use OpenRouter for the LLM.
 ## Creating a key
 
 `provider_key_create(provider_id, label, secrets={NAME: SecretInput},
-test=true)` — `secrets`' keys must match the provider's `secret_fields`
+test=true)`: `secrets`' keys must match the provider's `secret_fields`
 exactly (`lkap_describe("provider", id)` lists them, e.g. `api_key` for
 `deepgram-stt`, or `api_key`/`project_id` for a Google provider). Each value
 is a `SecretInput`: a reference (`env:NAME`, `file:/path#KEY`) or the value
-pasted inline — either way it goes to the vault and the response
+pasted inline. Either way it goes to the vault and the response
 (`CredentialOut`) carries only a `fingerprint`, never the value.
 `test=true` runs a live probe (`CredentialTestResult`) before you rely on it.
 
 `provider_key_list(provider_id=)` and `provider_key_test(key_id)` manage
 existing keys. Every test is recorded on the key (`last_test_at`,
-`last_test_ok` — `null` when the provider has no automatic test —
+`last_test_ok` (`null` when the provider has no automatic test)
 `last_test_message`), including the one `test=true` runs, and `last_used_at`
 says when a session, a tool call, a catalog read or an embed last used it (to
 within a minute); `provider_settings(provider_id, enabled=, default_key_id=)`
@@ -79,7 +79,7 @@ doesn't pick one explicitly.
 
 ## Catalogs
 
-Some providers have a dynamic catalog beyond their static `models` list —
+Some providers have a dynamic catalog beyond their static `models` list:
 voices, avatar personas, or a larger model list fetched live from the
 vendor. `provider_catalog(provider_id, kind, key_id, query, limit, offset,
 model, search_vendor, refresh)` (`kind` is
@@ -94,8 +94,8 @@ voices; `total` counts the matches before paging.
 
 The registry's `models` list is a suggestion list, never an allowlist: any id
 the vendor accepts can go in a slot. One rule checks every id (the console,
-the api and these tools share it): 1–200 printable characters, no spaces,
-no URL, and nothing that looks like an API key — a key-shaped value is
+the api and these tools share it): 1 to 200 printable characters, no spaces,
+no URL, and nothing that looks like an API key. A key-shaped value is
 refused with a reason that never repeats it. The tools below check the id
 locally and refuse before sending anything. An unknown id is only a warning
 until it is tested.
@@ -108,10 +108,10 @@ the workspace (`ModelTestResult`): an LLM answers one word within 4 tokens
 says "Hello.", a realtime model completes its handshake, an avatar id is
 read. Image models are never generated against. It spends vendor money: at
 most 10 tests per workspace per minute and 2 at once (a `rate_limited` error
-carries `retry_after`); a repeat within 10 minutes with the same key answers
+carries `retry_after`). A repeat within 10 minutes with the same key answers
 `cached=true` unless `force=true`. `sample` and every `message` are
 `Untrusted`. A pass proves the vendor accepts the id with that key, not that
-the LiveKit plugin builds it — the first session still checks that. For
+the LiveKit plugin builds it. The first session still checks that. For
 `livekit-inference-llm`, pass `connection_id` to pick the connection that
 signs the request (default: the workspace's default connection).
 

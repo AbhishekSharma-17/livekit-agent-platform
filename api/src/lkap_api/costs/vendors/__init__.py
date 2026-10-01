@@ -88,13 +88,13 @@ def validate_reconcile(value: Any) -> list[str]:
     unknown = sorted(set(value) - RECONCILE_VENDORS)
     if unknown:
         raise ReconcileSettingError(
-            f"cost.reconcile names unknown vendors {unknown}; allowed: {sorted(RECONCILE_VENDORS)}"
+            f"cost.reconcile names unknown vendors {unknown}. Allowed: {sorted(RECONCILE_VENDORS)}"
         )
     unbuilt = sorted(set(value) - BUILT_VENDORS)
     if unbuilt:
         raise ReconcileSettingError(
             f"cost.reconcile: {unbuilt} cannot be reconciled yet "
-            "(Deepgram needs a project id on the credential); only 'openrouter' is available"
+            "(Deepgram needs a project id on the credential). Only 'openrouter' is available"
         )
     return list(dict.fromkeys(value))
 

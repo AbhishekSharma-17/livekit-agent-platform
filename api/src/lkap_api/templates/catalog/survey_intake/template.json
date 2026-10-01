@@ -10,7 +10,7 @@
   ],
   "order": 60,
   "pack_id": "generic",
-  "greeting": "Hi! This is a two-minute feedback survey — five quick questions. Ready?",
+  "greeting": "Hi! This is a two-minute feedback survey with five quick questions. Ready?",
   "builtin_tools_disabled": [
     "pin_frame",
     "describe_current_frame",

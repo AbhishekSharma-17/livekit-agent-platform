@@ -1,4 +1,4 @@
-# Acme Dental — practice information
+# Acme Dental practice information
 
 Acme Dental is a fictional practice used by the Receptionist starter. Replace this document with your own practice information.
 

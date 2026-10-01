@@ -8,7 +8,7 @@
     {
       "name": "base_url",
       "label": "Records address",
-      "help": "The address of your records; the reference is added to its end (…/<reference>) and read with GET.",
+      "help": "The address of your records. The reference is added to its end (…/<reference>) and read with GET.",
       "kind": "url",
       "required": true,
       "example": "https://records.example.com/api/records",
@@ -66,7 +66,7 @@
             "max_rows": 3,
             "bindings": [{"path": "", "to": "table:{{ kit.prefix }}_results"}]
           },
-          "fake": [{"{{ kit.key_column }}": "DEMO-1001", "name": "Demo — Asha Rao", "status": "Active"}]
+          "fake": [{"{{ kit.key_column }}": "DEMO-1001", "name": "Demo · Asha Rao", "status": "Active"}]
         }
       ],
       "flow_nodes": {
@@ -115,7 +115,7 @@
     {
       "id": "rest",
       "label": "Your own system",
-      "summary": "Reads a record from your own system's address with GET (a key is optional; without one the call carries no key).",
+      "summary": "Reads a record from your own system's address with GET (a key is optional, and without one the call carries no key).",
       "source": "http",
       "requires": {"secret_names": ["API_KEY"]},
       "tools": [
@@ -142,7 +142,7 @@
             "execution": {"mode": "auto"},
             "bindings": [{"path": "", "to": "table:{{ kit.prefix }}_results"}]
           },
-          "fake": {"reference": "DEMO-1001", "name": "Demo — Asha Rao", "status": "Active"}
+          "fake": {"reference": "DEMO-1001", "name": "Demo · Asha Rao", "status": "Active"}
         }
       ],
       "flow_nodes": {

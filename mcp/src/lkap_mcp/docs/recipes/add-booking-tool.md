@@ -49,7 +49,7 @@ to add only some of them, or a single template id such as
 { "id_or_slug": "<agent>", "tool_ids": ["<the tool ids from step 3>"] }
 ```
 Then `agent_validate(id_or_slug)`. The booking tools pass the caller's own
-time zone to Cal.com; the agent reads it from the time note in its
+time zone to Cal.com. The agent reads it from the time note in its
 instructions, and opening hours stay in the business time zone.
 
 ## 5. Try it
@@ -57,4 +57,4 @@ instructions, and opening hours stay in the business time zone.
 `chat_start` and ask for "a slot next Tuesday afternoon". The agent should
 offer two or three times, read your name and email back (`spell_back`
 helps) and only book after you say yes. Writes (book, move, cancel) wait for
-Cal.com's answer; a look-up of free times answers inline when it is quick.
+Cal.com's answer. A look-up of free times answers inline when it is quick.

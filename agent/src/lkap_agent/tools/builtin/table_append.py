@@ -53,7 +53,7 @@ def build_table_append_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
             raise ToolError(str(exc)) from exc
         values = parse_json_object(row, "row")
         if not values:
-            raise ToolError("row is empty; pass at least one cell.")
+            raise ToolError("row is empty. Pass at least one cell.")
         values.setdefault("id", uuid.uuid4().hex[:12])
 
         current = ctx.ui.state.blocks.get(target) or {}

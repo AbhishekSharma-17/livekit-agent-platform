@@ -31,7 +31,7 @@ def _template(**overrides: Any) -> dict[str, Any]:
 
 
 _SEED: dict[str, Any] = {
-    "name": "Demo — Policy directory",
+    "name": "Demo · Policy directory",
     "file": "policy_directory.csv",
     "key_columns": [{"name": "policy_number"}, {"name": "policyholder_name"}],
 }

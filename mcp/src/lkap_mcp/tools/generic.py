@@ -127,8 +127,8 @@ def _reference_value(ctx: ServerContext, key: str, value: Any, *, resolve: bool)
                 parse_secret(value, field_name=key, inline_allowed=True)
         raise RequestRefused(
             "inline_secret_refused",
-            f"api_request refuses an inline value for {key!r}; "
-            "use the typed tool, or an env:/file: reference",
+            f"api_request refuses an inline value for {key!r}. "
+            "Use the typed tool, or an env:/file: reference",
         )
     parsed = parse_secret(
         value, field_name=key, inline_allowed=False, file_allowed=not ctx.settings.http_mode
@@ -213,7 +213,7 @@ def register(registry: Registry) -> None:
         if not confirm:
             extra = " and all of its sessions" if query else ""
             return ToolResult.needs_confirmation(
-                f"permanently delete {kind} {id}{extra}; this cannot be undone"
+                f"permanently delete {kind} {id}{extra}. This cannot be undone"
             )
         await client.delete(path, params=query)
         return ToolResult.success({"deleted": True, "kind": kind, "id": id})
@@ -221,13 +221,13 @@ def register(registry: Registry) -> None:
     @registry.tool(annotations=DESTRUCTIVE, data="ApiResponse", write_scopes=WRITE_SCOPES)
     async def api_request(
         method: HttpVerb,
-        path: Annotated[str, Field(description="A /v1/... path (no query string; use query)")],
+        path: Annotated[str, Field(description="A /v1/... path (no query string, use query)")],
         query: dict[str, Any] | None = None,
         body: Any = None,
         confirm: Annotated[bool, Field(description="Required for any method other than GET")] = False,
         plan: bool = False,
     ) -> ToolResult:
-        """Call a /v1 route that has no typed tool (reads first; writes need confirm). Prefer the typed
+        """Call a /v1 route that has no typed tool (reads first, writes need confirm). Prefer the typed
         tools.
         """
         try:

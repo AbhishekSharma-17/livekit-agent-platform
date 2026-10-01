@@ -284,7 +284,7 @@ def _merge_settings(current: dict[str, Any], incoming: dict[str, Any]) -> dict[s
             # S5-26: `cost.prices` goes through PUT /v1/workspace/prices (validated and audited).
             raise UnprocessableEntityError(
                 f"settings.cost.{unknown_cost[0]} cannot be set here"
-                + ("; use PUT /v1/workspace/prices" if "prices" in unknown_cost else ""),
+                + (". Use PUT /v1/workspace/prices" if "prices" in unknown_cost else ""),
                 details={"allowed": sorted(COST_KEYS)},
             )
         cost = dict(current.get("cost") or {}) if isinstance(current.get("cost"), dict) else {}
@@ -458,12 +458,12 @@ async def add_member(payload: MemberCreate, ctx: PathWorkspaceDep, db: DbDep) ->
     _check_owner_change(ctx, payload.role)
     user = (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none()
     if user is None:
-        raise NotFoundError(f"no user with email '{payload.email}'; send an invite instead")
+        raise NotFoundError(f"no user with email '{payload.email}'. Send an invite instead")
     if await db.get(WorkspaceMember, (ctx.workspace_id, user.id)) is not None:
         raise ConflictError(f"'{payload.email}' is already a member")
     if not await _was_member(db, ctx.workspace_id, user.id):
         raise ConflictError(
-            f"'{payload.email}' has never been a member of this workspace; send an invite, which "
+            f"'{payload.email}' has never been a member of this workspace. Send an invite, which "
             "the user accepts with their own password",
             details={"reason": "use_invite"},
         )
@@ -547,7 +547,7 @@ async def create_invite(
         # V2-21: the token of a pending account sets its password; another
         # workspace's pending invitee must not be claimable from here.
         raise ConflictError(
-            f"'{payload.email}' has a pending invite from another workspace; they must accept it "
+            f"'{payload.email}' has a pending invite from another workspace. They must accept it "
             "(and sign in) before this workspace can invite them",
             details={"reason": "pending_elsewhere"},
         )

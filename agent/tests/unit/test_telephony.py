@@ -674,7 +674,7 @@ async def test_flow_transfer_warm_node_falls_back_to_cold_and_says_so() -> None:
     ok = await session.flow_transfer(_TransferNode(to="+15550004444", mode="warm"), state=None)
 
     assert ok is False
-    assert events[0] == ("info", {"message": "warm transfer is not available yet; transferring cold"})
+    assert events[0] == ("info", {"message": "warm transfer is not available yet. Transferring cold"})
 
 
 # --------------------------------------------------------- config client (R-V2-20)

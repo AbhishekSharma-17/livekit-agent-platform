@@ -84,7 +84,7 @@ UNIT_WORDS: dict[str, str] = {
 }
 
 FOOTER_CAVEAT = (
-    "List prices at the entry tier; included minutes, volume discounts and enterprise contracts "
+    "List prices at the entry tier. Included minutes, volume discounts and enterprise contracts "
     "are not modelled. Estimates are not bills."
 )
 STREAM_CAVEAT = "Streaming speech-to-text is billed for every second the call is open, silence included."
@@ -517,7 +517,7 @@ def _finish(b: _Builder, config: AgentConfig, channel: EstimateChannel, price_ve
                     per_session_only[bd] += cost
         else:
             unpriced.append(
-                f"{LABELS[line.slot]} — {_vendor_label(line.provider_id)}"
+                f"{LABELS[line.slot]} · {_vendor_label(line.provider_id)}"
                 f"{' ' + line.model if line.model else ''} ({UNIT_WORDS.get(line.unit, line.unit)})"
             )
         mid_qty = line.qty["mid"]

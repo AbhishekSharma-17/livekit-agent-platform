@@ -291,7 +291,7 @@ async def test_notebook_write_keeps_to_the_bounds() -> None:
 async def test_a_second_notebook_needs_its_block_id() -> None:
     other = NOTEBOOK.model_copy(update={"id": "book2"})
     ctx, ui, _room = _ctx([NOTEBOOK, other])
-    with pytest.raises(ToolError, match="use one of: book, book2"):
+    with pytest.raises(ToolError, match="Use one of: book, book2"):
         await _write(ctx, section_id="notes", text="x")
     await _write(ctx, section_id="notes", text="x", block_id="book2")
     assert len(_section(ui, "notes", "book2")["entries"]) == 1

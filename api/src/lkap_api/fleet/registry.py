@@ -72,7 +72,7 @@ async def _resolve_connection(db: AsyncSession, connection_id: str | None) -> Li
         return await get_connection_by_id(db, connection_id)
     row = await default_connection(db, DEFAULT_WORKSPACE_ID)
     if row is None:
-        raise ConflictError("no default connection exists; start the worker with LKAP_CONNECTION_ID set")
+        raise ConflictError("no default connection exists. Start the worker with LKAP_CONNECTION_ID set")
     return row
 
 
@@ -174,7 +174,7 @@ async def record_heartbeat(db: AsyncSession, instance_key: str, payload: WorkerH
     """
     row = await _by_key(db, instance_key)
     if row is None:
-        raise NotFoundError(f"unknown worker instance '{instance_key}'; register first")
+        raise NotFoundError(f"unknown worker instance '{instance_key}'. Register first")
     if row.status == "draining" and payload.status in ("starting", "ready"):
         log.debug("worker_heartbeat_kept_draining", instance_key=instance_key, reported=payload.status)
     else:

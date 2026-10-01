@@ -5,7 +5,7 @@ different MCP connection than the one you're using to configure the
 platform right now).
 
 The server must be `https` on a public host. An operator can narrow which
-hosts are allowed at all; a refused host fails at save with a clear reason.
+hosts are allowed at all. A refused host fails at save with a clear reason.
 
 ## 1. Store the server's key, if it needs one
 

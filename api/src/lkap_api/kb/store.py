@@ -180,8 +180,8 @@ def vector_store_kind(settings: Settings) -> StoreKind:
         case "pgvector":
             if not postgres:
                 raise VectorStoreConfigError(
-                    "LKAP_VECTOR_STORE=pgvector needs a Postgres LKAP_DATABASE_URL; "
-                    "unset it (or set lancedb) to use the file-based store"
+                    "LKAP_VECTOR_STORE=pgvector needs a Postgres LKAP_DATABASE_URL. "
+                    "Unset it (or set lancedb) to use the file-based store"
                 )
             return "pgvector"
         case _:

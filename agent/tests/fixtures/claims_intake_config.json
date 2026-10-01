@@ -719,7 +719,7 @@
           {
             "block_id": null,
             "do": "note.push",
-            "text": "The policy is lapsed: a person reviews it before the claim is assigned."
+            "text": "The policy is lapsed. A person reviews it before the claim is assigned."
           },
           {
             "do": "instruct",

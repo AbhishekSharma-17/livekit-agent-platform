@@ -188,8 +188,8 @@ def _raise_for(status: int, body: dict[str, Any], *, action: str) -> None:
     details = {"livekit_code": code or None, "http_status": status}
     if status in (401, 403) or code in ("unauthenticated", "permission_denied"):
         raise PhoneNumbersUnavailableError(
-            f"LiveKit refused {action}: {message}. The request was signed with {GRANT_DESCRIPTION}; "
-            "check that this project has LiveKit Phone Numbers and that the connection's key may manage SIP.",
+            f"LiveKit refused {action}: {message}. The request was signed with {GRANT_DESCRIPTION}. "
+            "Check that this project has LiveKit Phone Numbers and that the connection's key may manage SIP.",
             details={**details, "grant": GRANT_DESCRIPTION},
         )
     if code == "not_found" or status == 404:

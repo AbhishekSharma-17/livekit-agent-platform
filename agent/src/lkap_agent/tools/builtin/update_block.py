@@ -64,22 +64,22 @@ _FORM_PROTECTED: Final[frozenset[str]] = frozenset({"status", "values", "submitt
 
 #: What to use instead, for the refused types that have their own tools.
 _OWN_TOOLS: Final[dict[str, str]] = {
-    "notebook": "is a notebook; use notebook_write or notebook_check",
-    "layout": "only groups other blocks; change those blocks instead",
-    "canvas": "is a drawing board; use draw_on_canvas or clear_canvas",
-    "link": "is a link; use send_link",
-    "consent": "asks for consent; use request_consent",
-    "upload": "asks for files; use request_upload",
-    "choices": "asks for a choice; use request_choice",
-    "signature": "asks for a signature; use request_signature",
-    "timer": "is a timer; use start_timer",
+    "notebook": "is a notebook. Use notebook_write or notebook_check",
+    "layout": "only groups other blocks. Change those blocks instead",
+    "canvas": "is a drawing board. Use draw_on_canvas or clear_canvas",
+    "link": "is a link. Use send_link",
+    "consent": "asks for consent. Use request_consent",
+    "upload": "asks for files. Use request_upload",
+    "choices": "asks for a choice. Use request_choice",
+    "signature": "asks for a signature. Use request_signature",
+    "timer": "is a timer. Use start_timer",
 }
 
 
 def _refusal(block_id: str, block_type: str) -> str:
     """Why ``update_block`` does not write a block of ``block_type`` (outside the allow-list)."""
     if block_type in ENVELOPE_BLOCK_TYPES:
-        return f"Block {block_id!r} shows {block_type}; use set_status or push_note instead."
+        return f"Block {block_id!r} shows {block_type}. Use set_status or push_note instead."
     hint = _OWN_TOOLS.get(block_type)
     if hint is not None:
         return f"Block {block_id!r} {hint}."
@@ -100,7 +100,7 @@ def _check_card_images(fields: dict[str, Any], config: dict[str, Any]) -> None:
         if not url:
             continue
         if not hosts:
-            raise ToolError("This cards block shows no pictures from the web; use image_asset_id or none.")
+            raise ToolError("This cards block shows no pictures from the web. Use image_asset_id or none.")
         problem = https_url_problem(str(url), allowed_hosts=hosts)
         if problem is not None:
             raise ToolError(f"A card's picture: {problem}.")
@@ -117,7 +117,7 @@ def _priced_cart_ops(
     unknown = sorted(set(fields) - {"currency", "lines", "adjustments"})
     if unknown:
         raise ToolError(
-            f"A cart's {', '.join(unknown)} cannot be set; change its currency, lines or adjustments."
+            f"A cart's {', '.join(unknown)} cannot be set. Change its currency, lines or adjustments."
         )
     merged = {**current, **fields}
     lines = merged.get("lines") or []
@@ -133,7 +133,7 @@ def _priced_cart_ops(
     except ValidationError:
         max_lines = CartBlockConfig().max_lines
     if len(lines) > max_lines:
-        raise ToolError(f"That is {len(lines)} lines; this cart shows at most {max_lines}.")
+        raise ToolError(f"That is {len(lines)} lines. This cart shows at most {max_lines}.")
     try:
         state = priced_cart(
             str(merged.get("currency") or "USD"),
@@ -155,7 +155,7 @@ def _check_code_length(fields: dict[str, Any], config: dict[str, Any]) -> None:
     except ValidationError:
         max_chars = CodeBlockConfig().max_chars
     if len(code) > max_chars:
-        raise ToolError(f"The code is {len(code)} characters; this block shows at most {max_chars}.")
+        raise ToolError(f"The code is {len(code)} characters. This block shows at most {max_chars}.")
 
 
 def parse_json_object(raw: str, what: str) -> dict[str, Any]:
@@ -184,15 +184,15 @@ def build_update_block_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
         live = {s.id: s for s in session_block_specs(ctx.ui, ctx.config.panel)}
         spec = live.get(block_id)
         if spec is None:
-            raise ToolError(f"Unknown block {block_id!r}; blocks: {describe_blocks(live.values())}.")
+            raise ToolError(f"Unknown block {block_id!r}. Blocks: {describe_blocks(live.values())}.")
         # V6-21 (S6-1): an allow-list, not a list of refusals.
         if spec.type not in UPDATABLE_BLOCK_TYPES | {"form"}:
             raise ToolError(_refusal(block_id, spec.type))
         fields = parse_json_object(patch, "patch")
         if not fields:
-            raise ToolError("patch is empty; pass the fields to change.")
+            raise ToolError("patch is empty. Pass the fields to change.")
         if spec.type == "form" and _FORM_PROTECTED & fields.keys():
-            raise ToolError("A form's status and values are set by the user; use request_form to ask.")
+            raise ToolError("A form's status and values are set by the user. Use request_form to ask.")
         if spec.type == "cards":
             _check_card_images(fields, spec.config)
         if spec.type == "code":

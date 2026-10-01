@@ -1,7 +1,7 @@
 # Recipe: start from a starter template
 
-Goal: create a working agent from one of the platform's starters — a
-configuration preset layered on a pack — then follow the starter's own next
+Goal: create a working agent from one of the platform's starters (a
+configuration preset layered on a pack) then follow the starter's own next
 steps. The fastest route from "I want a receptionist" to a first test chat.
 
 ## 1. Pick a starter

@@ -502,7 +502,7 @@ def check_kb_embedder(kb: KnowledgeBase, embedder: Embedder) -> None:
     if reason is None:
         return
     raise KbEmbedderMismatchError(
-        f"{reason}; re-create the knowledge base or configure the embedder it was built with",
+        f"{reason}. Re-create the knowledge base or configure the embedder it was built with",
         details={
             "kb_id": kb.id,
             "kb_name": kb.name,

@@ -151,7 +151,7 @@ def _validate_fields(fields: list[FormField]) -> None:
         raise ToolError("Field names must be unique and non-empty.")
     for field in fields:
         if field.type == "select" and not field.options:
-            raise ToolError(f"Field {field.name!r} is a select; give it options.")
+            raise ToolError(f"Field {field.name!r} is a select. Give it options.")
         if field.type == "file":
             try:
                 validate_accept(field.accept)

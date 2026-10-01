@@ -44,7 +44,7 @@ def test_a_stored_rule_with_a_refused_pattern_loads_and_is_an_error_at_its_path(
     assert [(issue.path, issue.severity) for issue in issues] == [("rules[1].when", "error")]
     assert issues[0].message == slow_pattern_message("hazard", pattern)
     assert f"/{pattern}/" in issues[0].message and "can stall the call" in issues[0].message
-    assert "write it as" in issues[0].message
+    assert "Write it as" in issues[0].message
 
 
 def test_rule_issues_names_every_refused_pattern_of_a_condition() -> None:

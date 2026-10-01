@@ -305,7 +305,7 @@ def test_mcp_legacy_fields_with_explicit_no_auth_fold_into_header_auth() -> None
     ],
 )
 def test_mcp_legacy_fields_that_disagree_with_header_auth_are_an_error(legacy: dict[str, Any]) -> None:
-    with pytest.raises(ValidationError, match="set auth only"):
+    with pytest.raises(ValidationError, match="Set auth only"):
         McpServerDefinition.model_validate(
             {
                 "name": "crm",

@@ -26,7 +26,7 @@ NO_BACKEND_MESSAGE = (
     "to install the memory add-on)"
 )
 NO_MODEL_MESSAGE = (
-    "Nothing can pick out what to remember after the call: use an OpenAI or OpenRouter language "
+    "Nothing can pick out what to remember after the call. Use an OpenAI or OpenRouter language "
     "model with a key, or turn on 'store what the caller said as it was'"
 )
 

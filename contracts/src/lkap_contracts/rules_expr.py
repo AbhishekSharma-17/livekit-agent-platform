@@ -671,7 +671,7 @@ def _tokens(text: str) -> list[_Token]:
         if word is not None:
             if word.group(0).lower() not in _KEYWORDS:
                 raise ConditionError(
-                    f"'{word.group(0)}' is not something a condition understands; name a variable as "
+                    f"'{word.group(0)}' is not something a condition understands. Name a variable as "
                     "var.<name> and put text in quotes",
                     index,
                 )
@@ -823,7 +823,7 @@ def _check_pattern(pattern: str, position: int, *, safe: bool = True) -> None:
         raise ConditionError(f"a pattern is at most {MAX_LITERAL_CHARS} characters", position)
     if safe and nested_repeat(pattern):
         raise ConditionError(
-            "this pattern repeats a group that already repeats, which can take very long; simplify it",
+            "this pattern repeats a group that already repeats, which can take very long. Simplify it",
             position,
         )
     try:

@@ -54,7 +54,7 @@ REASONING_SLOTS: Final[tuple[ProviderSlot, ...]] = ("llm", "workflow_llm")
 #: The voice-latency warning; ``{name}``, ``{effort}`` and ``{lowest}`` are filled in.
 SLOW_VOICE_EFFORT_MESSAGE: Final[str] = (
     "{name} thinks at '{effort}' effort before every answer, which adds several seconds to each "
-    "reply on a voice call; set Reasoning effort to '{lowest}' (or leave it empty) for a faster "
+    "reply on a voice call. Set Reasoning effort to '{lowest}' (or leave it empty) for a faster "
     "conversation"
 )
 
@@ -62,7 +62,7 @@ SLOW_VOICE_EFFORT_MESSAGE: Final[str] = (
 #: thinks on every turn, so the wording says "can").
 ALWAYS_REASONS_TIP: Final[str] = (
     "Tip: {name} can think before it answers and has no effort setting, so how long it thinks is up "
-    "to the model, which can add seconds to each reply on a voice call; a model without reasoning, or "
+    "to the model, which can add seconds to each reply on a voice call. A model without reasoning, or "
     "one whose effort can be lowered, answers faster"
 )
 

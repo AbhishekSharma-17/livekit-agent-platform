@@ -2,7 +2,7 @@
 
 Reference notes for `search_knowledge` on how a first notice of loss (FNOL)
 intake is normally handled, independent of any specific claim. These are
-general practices, not coverage promises — coverage is always confirmed by a
+general practices, not coverage promises. Coverage is always confirmed by a
 licensed adjuster after policy review.
 
 ## Minimum facts every claim needs
@@ -28,7 +28,7 @@ of the damage taken before cleanup are the most useful evidence for any
 physical loss; a police or incident report is expected for theft and most
 auto collisions; and receipts, estimates, or invoices support the claimed
 dollar amount. A document is only marked already provided when the claimant
-has actually described or shown it — do not assume it exists.
+has actually described or shown it. Do not assume it exists.
 
 ## Why some claims go to special investigation
 

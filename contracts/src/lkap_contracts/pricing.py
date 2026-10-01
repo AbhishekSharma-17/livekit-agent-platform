@@ -194,7 +194,7 @@ _OPENAI_TIER = "Standard tier (Batch, Flex and Priority are priced differently)"
 _GOOGLE_TIER = "Standard tier, paid (Batch, Flex and Priority are priced differently)"
 _GOOGLE_FREE = (
     "Google's free tier is free of charge within its limits (content may be used to improve "
-    "Google's products); the paid rate is shown"
+    "Google's products). The paid rate is shown"
 )
 _ANTHROPIC_TIER = "standard rate (the Batch API is half price)"
 _LK_TIER = "LiveKit Build tier list price (Ship/Scale can be cheaper for speech models)"
@@ -309,7 +309,7 @@ PRICES: list[Price] = [
         "audio_s_in",
         Decimal("0.006") / _MIN,
         _OPENAI,
-        tier_note="OpenAI's own per-minute estimate ($0.006/min); billed per token",
+        tier_note="OpenAI's own per-minute estimate ($0.006/min), billed per token",
     ),
     _openai("gpt-4o-mini-transcribe", "audio_tokens_in", "1.25", "openai-stt"),
     _openai("gpt-4o-mini-transcribe", "tokens_out", "5.00", "openai-stt"),
@@ -319,7 +319,7 @@ PRICES: list[Price] = [
         "audio_s_in",
         Decimal("0.003") / _MIN,
         _OPENAI,
-        tier_note="OpenAI's own per-minute estimate ($0.003/min); billed per token",
+        tier_note="OpenAI's own per-minute estimate ($0.003/min), billed per token",
     ),
     # -------------------------------------------- Anthropic (model ids as the registry lists them)
     _row(
@@ -528,7 +528,7 @@ PRICES: list[Price] = [
         "tokens_in",
         Decimal(0),
         _FASTEMBED,
-        tier_note="runs on the worker; no vendor charge",
+        tier_note="runs on the worker, with no vendor charge",
     ),
 ]
 
@@ -959,7 +959,7 @@ def _live_quote(
         source_url=OPENROUTER_MODELS_URL,
         as_of=(fetched_at or now).date().isoformat(),
         fetched_at=fetched_at,
-        free_tier_note="an OpenRouter free model: no charge within OpenRouter's free-model limits"
+        free_tier_note="an OpenRouter free model, with no charge within OpenRouter's free-model limits"
         if free
         else None,
         stale=stale,

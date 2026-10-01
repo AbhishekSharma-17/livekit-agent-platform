@@ -258,7 +258,7 @@ class QdrantStore:
                 )
             if distance is not None and distance != "Cosine":
                 raise ConnectorError(
-                    f"Qdrant collection '{self._collection}' uses {distance} distance; it must use Cosine"
+                    f"Qdrant collection '{self._collection}' uses {distance} distance. It must use Cosine"
                 )
         self._ready_width = dimension
 

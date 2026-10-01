@@ -382,7 +382,7 @@ async def test_a_builder_may_add_a_kit_but_not_bind_a_key(
             "https://",
         ),
         ("record_lookup", {"variant": "nope"}, "no variant 'nope'"),
-        ("record_lookup", {"variant": "dataset"}, "pick one (dataset_id)"),
+        ("record_lookup", {"variant": "dataset"}, "Pick one (dataset_id)"),
         ("record_lookup", {"variant": "dataset", "dataset_id": "missing"}, "unknown lookup table"),
         (
             "case_ticket",

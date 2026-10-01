@@ -106,7 +106,7 @@ def _key_spec(raw: str) -> dict[str, DatasetKeyType]:
         return _KEY_SPEC.validate_python(json.loads(raw))
     except (json.JSONDecodeError, ValidationError):
         raise UnprocessableEntityError(
-            'key_columns is a JSON object of column → type, e.g. {"phone": "phone"}; the types are '
+            'key_columns is a JSON object of column → type, e.g. {"phone": "phone"}. The types are '
             "string, phone, email and number",
             details={"field": "key_columns", "reason": "invalid_key_columns"},
         ) from None

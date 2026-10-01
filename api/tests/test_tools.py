@@ -381,7 +381,7 @@ async def test_dry_run_refuses_an_empty_allowlist_with_a_clear_message(
     assert response.status_code == 400
     body = response.json()
     assert "allowed_hosts" in body["error"]["message"]
-    assert "add it" in body["error"]["message"]
+    assert "Add it" in body["error"]["message"]
     assert mock_http == []
 
 

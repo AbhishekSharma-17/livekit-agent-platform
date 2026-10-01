@@ -44,7 +44,7 @@ def test_presets_read_plainly(jurisdiction: str) -> None:
 
 def test_us_preset_names_two_party_consent_without_a_state_list() -> None:
     note = COMPLIANCE_PRESETS["us"].counsel_note
-    assert "confirm with counsel for two-party-consent states" in note
+    assert "Confirm with counsel for two-party-consent states" in note
     for state in ("California", "Florida", "Illinois", "Washington"):
         assert state not in note
 

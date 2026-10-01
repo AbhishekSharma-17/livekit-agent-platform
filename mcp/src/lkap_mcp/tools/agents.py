@@ -68,7 +68,7 @@ def dropped_kit_warning(before: dict[str, Any], after: dict[str, Any]) -> list[s
     names = ", ".join(kits)
     return [
         f"the new instructions no longer hold the text the {names} kit{'s' if len(kits) != 1 else ''} "
-        "added; keep each <!-- kit:... --> section in the instructions, or run kit_add again for "
+        "added. Keep each <!-- kit:... --> section in the instructions, or run kit_add again for "
         "each kit (it restores only what is missing)"
     ]
 
@@ -239,7 +239,7 @@ def register(registry: Registry) -> None:
     async def agent_get(
         id_or_slug: str, include_config: bool = True, include_validation: bool = False
     ) -> ToolResult:
-        """One agent with its full config; optionally its validation result."""
+        """One agent with its full config. Optionally its validation result."""
         agent = await resolve_agent(client, id_or_slug)
         warnings: list[str] = []
         result: dict[str, Any] = {"agent": agent}
@@ -257,20 +257,20 @@ def register(registry: Registry) -> None:
             Field(
                 description=(
                     "A starter id from lkap://templates (blank, knowledge_assistant, receptionist, "
-                    "vision_assistant, claims_intake, phone_agent, lead_qualification, survey_intake); "
-                    "it seeds the config, knowledge bases and HTTP tools and wins over pack_id"
+                    "vision_assistant, claims_intake, phone_agent, lead_qualification, survey_intake). "
+                    "It seeds the config, knowledge bases and HTTP tools and wins over pack_id"
                 )
             ),
         ] = None,
         pack_id: Annotated[
             str,
-            Field(description="A pack without a starter (rare); ignored when template_id is set"),
+            Field(description="A pack without a starter (rare). Ignored when template_id is set"),
         ] = "generic",
         description: str = "",
         connection_id: str | None = None,
         config: Annotated[
             AgentConfig | None,
-            Field(description="A whole config; omit to seed it from the starter or the pack"),
+            Field(description="A whole config. Omit to seed it from the starter or the pack"),
         ] = None,
         patch: Annotated[
             dict[str, Any] | None,
@@ -351,11 +351,11 @@ def register(registry: Registry) -> None:
         save_with_errors: bool = False,
         plan: bool = False,
     ) -> ToolResult:
-        """Change an agent: merge-patch (or replace) its config, rename, rebind; validated before saving.
+        """Change an agent: merge-patch (or replace) its config, rename, rebind. Validated before saving.
 
         Background tools (docs ``concepts/tools``): ``patch={"tools": {"execution_default": "auto"}}``
         lets the read tools (GET HTTP tools, ``search_knowledge``, ``http_request`` GETs,
-        ``describe_current_frame``) announce and finish in the background; writes, MCP tools,
+        ``describe_current_frame``) announce and finish in the background. Writes, MCP tools,
         telephony, forms and flow edges never follow it. ``tools.builtin_execution[name]`` sets
         one read built-in; ``voice.thinking_sound`` plays a clip during blocking waits. Keep
         ``tools.max_tool_steps`` at 4 or more with a background default.
@@ -365,7 +365,7 @@ def register(registry: Registry) -> None:
         caller too instead of detecting the caller's own zone (``detect``, the default).
 
         Ready-made panels (docs ``concepts/panels-and-blocks``): ``panel_preset="notebook"`` replaces
-        ``panel`` with the Notebook preset; it combines with a ``patch`` that has no ``panel`` key.
+        ``panel`` with the Notebook preset. It combines with a ``patch`` that has no ``panel`` key.
         Live extraction and rules (docs ``concepts/extraction``): ``patch={"extraction": {"enabled":
         true, "fields": [...]}, "rules": [{"id", "when": "var.hazard matches /fire/i", "then": [...]}]}``
         captures facts into the session's variables in the background and reacts to them.
@@ -401,7 +401,7 @@ def register(registry: Registry) -> None:
                 except ValidationError as error:
                     return ToolResult.fail(
                         "invalid_config",
-                        "the resulting config is invalid; nothing was saved",
+                        "the resulting config is invalid. Nothing was saved",
                         issues=config_issues(error),
                     )
             body["config"] = candidate
@@ -421,15 +421,15 @@ def register(registry: Registry) -> None:
             # The api validates every saved config; save_with_errors cannot override it.
             result = failure.to_result()
             if result.error is not None:
-                result.error.message = f"{failure.message}; nothing was saved"
+                result.error.message = f"{failure.message}. Nothing was saved"
             return result
         validation, warnings = await validate_saved(ctx, updated["id"])
         if "config" in body:
             warnings += dropped_kit_warning(agent.get("config") or {}, body["config"])
         if agent.get("config_version") != updated.get("config_version"):
             warnings.append(
-                f"config_version {agent.get('config_version')} -> {updated.get('config_version')}; "
-                "agent_versions restores an earlier one"
+                f"config_version {agent.get('config_version')} -> {updated.get('config_version')}. "
+                "Agent_versions restores an earlier one"
             )
         return ToolResult.success({"agent": updated, "validation": validation}, warnings=warnings)
 
@@ -475,7 +475,7 @@ def register(registry: Registry) -> None:
     ) -> ToolResult:
         """Run an agent's test cases: a simulated caller per case over a text session, then five judges.
 
-        Cases live in the agent's config (`tests`; add them with agent_update). Needs a ready worker
+        Cases live in the agent's config (`tests`, add them with agent_update). Needs a ready worker
         on the agent's connection and an OpenAI-compatible workflow or QA model (OpenRouter works) to
         play the caller and judge. Read the verdicts with agent_tests_result.
         """
@@ -522,7 +522,7 @@ def register(registry: Registry) -> None:
 
     @registry.tool(scopes={"agents:write"}, annotations=DESTRUCTIVE, data="AgentOut")
     async def agent_archive(id_or_slug: str, archive: bool = True, confirm: bool = False) -> ToolResult:
-        """Archive an agent (blocks new sessions; needs confirm) or unarchive it."""
+        """Archive an agent (blocks new sessions, needs confirm) or unarchive it."""
         agent = await resolve_agent(client, id_or_slug)
         if archive and not confirm:
             return ToolResult.needs_confirmation(
@@ -611,7 +611,7 @@ def register(registry: Registry) -> None:
         allowed_toolkits: Annotated[
             list[str] | None,
             Field(
-                description="Apps the server or finder may use (toolkit slugs); empty = every connected app"
+                description="Apps the server or finder may use (toolkit slugs). Empty = every connected app"
             ),
         ] = None,
         denied_actions: Annotated[
@@ -633,13 +633,13 @@ def register(registry: Registry) -> None:
             dict[str, list[str]] | None,
             Field(
                 description="Per app (toolkit slug), the accounts (connection ids from apps_connections) "
-                "the server or finder may use; an app left out uses its default account. With two or "
+                "the server or finder may use. An app left out uses its default account. With two or "
                 "more accounts of one app the agent must say which account each action uses"
             ),
         ] = None,
         plan: bool = False,
     ) -> ToolResult:
-        """Choose how an agent uses connected apps; saving provisions the app server or tool finder.
+        """Choose how an agent uses connected apps. Saving provisions the app server or tool finder.
 
         The api creates (or reuses) the Composio session on save and attaches it as a managed MCP
         server; ``off`` or another mode removes it. Picked actions attach with ``apps_add_tools``.

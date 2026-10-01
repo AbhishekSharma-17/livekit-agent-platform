@@ -135,7 +135,7 @@ async def resolve_egress_target(
         )
     raise NoEgressStorageError(
         "recording needs an S3-compatible storage config (MinIO or S3) on the connection or the "
-        "agent's recording.storage_config_id; a 'local' storage config cannot receive an Egress "
+        "agent's recording.storage_config_id. A 'local' storage config cannot receive an Egress "
         "upload, which is written by LiveKit's own Egress service, not this api process",
         details={"connection_id": connection.id, "workspace_id": workspace_id},
     )

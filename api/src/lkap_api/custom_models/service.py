@@ -100,7 +100,7 @@ CAPABILITY_SLOTS: tuple[ProviderSlot, ...] = ("llm", "workflow_llm", "realtime")
 #: Kinds a "Test model" run accepts: the model kinds plus avatars (a session-less GET).
 TESTABLE_KINDS = MODEL_KINDS | {"avatar"}
 
-NO_PROBE_MESSAGE = "no test for this provider; the model is checked on the first session"
+NO_PROBE_MESSAGE = "no test for this provider. The model is checked on the first session"
 PLUGIN_CAVEAT = (
     "a passing test proves the vendor accepts this id with this key, not that the plugin builds it"
 )
@@ -337,9 +337,9 @@ def estimate_cost(
             cost = prompt * usage.chars
             note = f"from the vendor catalog's input pricing × {usage.chars} characters"
             if completion:
-                note += "; output audio is priced separately and not counted"
+                note += ". Output audio is priced separately and not counted"
             return cost, note
-    return None, f"no price on file for this model; the probe used {_usage_note(usage)}"
+    return None, f"no price on file for this model. The probe used {_usage_note(usage)}"
 
 
 # ------------------------------------------------------------------------ the run
@@ -404,7 +404,7 @@ def _cached_result(spec: ProviderSpec, model: str, row: Any) -> ModelTestResult:
         probes=[],
         detected=out.detected or ModelCapabilities(),
         cost_estimate_usd=out.last_test_cost_usd,
-        cost_note="the result of the last run within 10 minutes; pass force=true to run it again",
+        cost_note="the result of the last run within 10 minutes. Pass force=true to run it again",
         message=out.last_test_message,
         record_id=out.id,
     )
@@ -436,7 +436,7 @@ async def _no_probe_result(
             db, spec=spec, credential_id=credential.id if credential else None, model=request.model
         )
         listed = "is" if item is not None else "is not (or not yet)"
-        message = f"no generation probe: images cost money; the id {listed} in the cached vendor list"
+        message = f"no generation probe, because images cost money. The id {listed} in the cached vendor list"
     else:
         message = NO_PROBE_MESSAGE
     return ModelTestResult(
@@ -485,7 +485,7 @@ async def run_model_test(
         )
         if credential is None:
             raise UnprocessableEntityError(
-                f"no key for '{spec.id}' in this workspace (or several and no default); add one or pass "
+                f"no key for '{spec.id}' in this workspace (or several and no default). Add one or pass "
                 "credential_id"
             )
         raw = vault.decrypt(credential.ciphertext)

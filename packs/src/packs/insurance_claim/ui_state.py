@@ -162,7 +162,7 @@ def camera_note(observation: str, claimant_description: str, confirmed: bool) ->
     note = f"Agent saw on camera: {observation}"
     if claimant_description:
         note += f" Claimant described it as: {claimant_description}."
-        note += " Confirmed on camera." if confirmed else " Not confirmed on camera; needs a clearer photo."
+        note += " Confirmed on camera." if confirmed else " Not confirmed on camera. Needs a clearer photo."
     return note
 
 

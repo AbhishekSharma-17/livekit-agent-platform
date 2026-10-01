@@ -46,7 +46,7 @@ _DEFAULT_QUESTION = "Describe what is visible in this image."
 _REALTIME_VISION_MODES: frozenset[str] = frozenset({"realtime", "half_cascade"})
 
 TEXT_ONLY_MODEL_ERROR = (
-    "The configured language model cannot see images; ask an admin to switch it to a vision-capable model."
+    "The configured language model cannot see images. Ask an admin to switch it to a vision-capable model."
 )
 
 
@@ -96,7 +96,7 @@ def build_describe_current_frame_tool(
                 return "No camera or screen frame is currently available."
             return (
                 f"A live {snapshot.source} frame is available (captured "
-                f"{snapshot.age_s:.1f}s ago) — you can already see it directly."
+                f"{snapshot.age_s:.1f}s ago). You can already see it directly."
             )
 
         if _llm_vision(ctx) is False:

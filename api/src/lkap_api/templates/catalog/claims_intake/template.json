@@ -2,7 +2,7 @@
   "id": "claims_intake",
   "name": "Claims intake",
   "tagline": "Takes an insurance claim in a notebook: policy lookup, checklists, photos and a sketch.",
-  "description": "A first-notice-of-loss intake for a fictional insurer, built from blocks and tool kits: it asks about safety first, finds the policy in a demo lookup table by number or name, writes the claim into a notebook as the caller talks, lists the documents the kind of claim needs, never confirms coverage, hands safety concerns to a person, pins camera photos with notes and draws a sketch of the scene. Comes with two knowledge bases and test conversations.",
+  "description": "A first-notice-of-loss intake for a fictional insurer, built from blocks and tool kits. It asks about safety first, finds the policy in a demo lookup table by number or name, writes the claim into a notebook as the caller talks, lists the documents the kind of claim needs, never confirms coverage, hands safety concerns to a person, pins camera photos with notes and draws a sketch of the scene. Comes with two knowledge bases and test conversations.",
   "category": "forms",
   "chips": [
     "variables",
@@ -561,7 +561,7 @@
         },
         {
           "do": "note.push",
-          "text": "The policy is lapsed: a person reviews it before the claim is assigned."
+          "text": "The policy is lapsed. A person reviews it before the claim is assigned."
         },
         {
           "do": "instruct",
@@ -700,7 +700,7 @@
   ],
   "dataset_seeds": [
     {
-      "name": "Demo — Policy directory",
+      "name": "Demo · Policy directory",
       "file": "policy_directory.csv",
       "key_columns": [
         {
@@ -719,7 +719,7 @@
       "kit_id": "record_lookup",
       "variant": "dataset",
       "block_prefix": "policy",
-      "dataset": "Demo — Policy directory",
+      "dataset": "Demo · Policy directory",
       "add_test_case": false
     },
     {

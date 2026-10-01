@@ -79,7 +79,7 @@ def build_describe_asset_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]
         if ref is None:
             raise ToolError(f"There is no file {asset_id!r} in this session.")
         if not ref.mime.startswith("image/"):
-            raise ToolError("Only photos can be read this way; this file is not an image.")
+            raise ToolError("Only photos can be read this way. This file is not an image.")
         model = vision_llm(ctx)
         if model is None:
             raise ToolError(TEXT_ONLY_MODEL_ERROR)

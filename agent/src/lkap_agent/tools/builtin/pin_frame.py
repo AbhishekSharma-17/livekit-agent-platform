@@ -99,7 +99,7 @@ def _build_with_canvas(ctx: PackSessionContext, boards: str) -> FunctionTool[...
         """
         board = canvas_block_id.strip()
         if board and board not in block_ids_of_type(session_block_specs(ctx.ui, ctx.config.panel), "canvas"):
-            raise ToolError(f"There is no drawing board {board!r}; boards: {boards}.")
+            raise ToolError(f"There is no drawing board {board!r}. Boards: {boards}.")
         pinned = await _pin(ctx, caption, confirmed, kind)
         if pinned is None:
             return "No fresh camera or screen frame is available to pin right now."

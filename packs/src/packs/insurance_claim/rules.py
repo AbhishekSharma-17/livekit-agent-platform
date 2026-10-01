@@ -403,7 +403,7 @@ def apply_coverage_and_evidence_rules(
 
     else:
         coverage_notes.append(
-            "Claim type is unclear; route for human triage after collecting minimum loss "
+            "Claim type is unclear. Route for human triage after collecting minimum loss "
             "facts and proof of loss."
         )
 

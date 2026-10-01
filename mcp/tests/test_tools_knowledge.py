@@ -66,7 +66,7 @@ async def test_kb_add_document_blocked_url_relays_the_guard_with_a_hint(key: Any
 
     assert added["ok"] is False and added["error"]["status"] == 422
     assert added["error"]["details"]["reason"] == "blocked_destination"
-    assert "public hosts only" in added["error"]["hint"]
+    assert "Public hosts only" in added["error"]["hint"]
 
 
 async def test_kb_add_document_needs_exactly_one_source(key: Any, mcp_session: Any) -> None:

@@ -362,7 +362,7 @@ def pick_block(specs: Iterable[BlockSpec], block_type: BlockType, requested: str
         return candidates[0]
     if not candidates:
         raise ValueError(f"This panel has no {block_type} block.")
-    raise ValueError(f"Unknown {block_type} block {requested!r}; use one of: {', '.join(candidates)}.")
+    raise ValueError(f"Unknown {block_type} block {requested!r}. Use one of: {', '.join(candidates)}.")
 
 
 def describe_blocks(specs: Iterable[BlockSpec], types: Iterable[BlockType] | None = None) -> str:
@@ -388,7 +388,7 @@ def choice_selection_error(state: Mapping[str, Any], selected: Any) -> str | Non
     ids = [o.get("id") for o in options if isinstance(o, dict)] if isinstance(options, list) else []
     unknown = [s for s in selected if s not in ids]
     if unknown:
-        return f"unknown option(s) {', '.join(unknown)}; the options are {', '.join(map(str, ids)) or 'none'}"
+        return f"unknown option(s) {', '.join(unknown)}. The options are {', '.join(map(str, ids)) or 'none'}"
     if not selected:
         return "pick at least one option"
     if len(set(selected)) != len(selected):
@@ -408,7 +408,7 @@ def slot_selection_error(state: Mapping[str, Any], selected: Any) -> str | None:
     if find_slot(state, selected) is None:
         slots = state.get("slots")
         ids = [str(s.get("id")) for s in slots if isinstance(s, dict)] if isinstance(slots, list) else []
-        return f"unknown slot {selected}; the slots are {', '.join(ids) or 'none'}"
+        return f"unknown slot {selected}. The slots are {', '.join(ids) or 'none'}"
     return None
 
 

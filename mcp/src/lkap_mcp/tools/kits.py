@@ -78,7 +78,7 @@ def register(registry: Registry) -> None:
         return ToolResult.success(
             [_summary(item) for item in items if isinstance(item, dict)],
             next_steps=[
-                "Preview one: kit_add(kit_id=..., agent_id=..., settings={...}, dry_run=true); then run it "
+                "Preview one: kit_add(kit_id=..., agent_id=..., settings={...}, dry_run=true). Then run it "
                 "without dry_run."
             ],
         )
@@ -102,7 +102,7 @@ def register(registry: Registry) -> None:
             str | None,
             Field(
                 description="A tool-secret key holding the variant's secret names (binding it needs "
-                "providers:write); without it the HTTP tools carry no key header"
+                "providers:write). Without it the HTTP tools carry no key header"
             ),
         ] = None,
         connection_id: Annotated[
@@ -117,7 +117,7 @@ def register(registry: Registry) -> None:
         ] = None,
         add_test_case: bool = True,
         dry_run: Annotated[
-            bool, Field(description="List what would be added and validate it; change nothing")
+            bool, Field(description="List what would be added and validate it. Change nothing")
         ] = False,
         plan: bool = False,
     ) -> ToolResult:

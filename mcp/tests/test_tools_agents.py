@@ -100,7 +100,7 @@ async def test_agent_update_api_invalid_config_relays_the_422_issues_and_saves_n
         result = await mcp.call("agent_update", id_or_slug=agent["id"], patch=bad)
 
     assert result["ok"] is False and result["error"]["status"] == 422
-    assert "nothing was saved" in result["error"]["message"]
+    assert "Nothing was saved" in result["error"]["message"]
     assert (await admin.get(f"/v1/agents/{agent['id']}")).json()["config_version"] == agent["config_version"]
 
 

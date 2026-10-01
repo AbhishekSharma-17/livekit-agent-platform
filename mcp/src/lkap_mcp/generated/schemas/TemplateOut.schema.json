@@ -514,7 +514,7 @@
       "type": "object"
     },
     "DatasetSeed": {
-      "description": "A lookup table the starter creates from ``seeds/<file>`` (V6-22, ask #105).\n\nAt create time the api reuses a table of this ``name`` in the agent's workspace when one\nexists and did not fail to import; otherwise it reads the file like an upload (the same\nparser and key normalisation) and stores the rows in the create's own transaction, so the\ntable is ready before the agent is validated. Rows are demo data: ``name`` starts with\n``Demo — `` for the shipped starters.",
+      "description": "A lookup table the starter creates from ``seeds/<file>`` (V6-22, ask #105).\n\nAt create time the api reuses a table of this ``name`` in the agent's workspace when one\nexists and did not fail to import; otherwise it reads the file like an upload (the same\nparser and key normalisation) and stores the rows in the create's own transaction, so the\ntable is ready before the agent is validated. Rows are demo data: ``name`` starts with\n``Demo · `` for the shipped starters.",
       "properties": {
         "file": {
           "description": "A `.csv` or `.json` file under `seeds/`",
@@ -3260,7 +3260,7 @@
       "type": "object"
     },
     "ToolNode": {
-      "description": "Call one of the agent's attached tools with no model turn, then branch on the outcome (D-V6-28).\n\nThe worker runs the tool the moment the step is entered — through the same execution path\nas a call the model makes (blocking, the same guardrails and fences) — applies\n:attr:`bindings` to the result, and takes the edge :attr:`on` names for the outcome. The\nresult text itself never reaches the model: what the next steps need goes into variables\n(``var:<name>`` bindings), which a later step's instructions show fenced, or onto the panel.",
+      "description": "Call one of the agent's attached tools with no model turn, then branch on the outcome (D-V6-28).\n\nThe worker runs the tool the moment the step is entered (through the same execution path\nas a call the model makes: blocking, the same guardrails and fences), applies\n:attr:`bindings` to the result, and takes the edge :attr:`on` names for the outcome. The\nresult text itself never reaches the model: what the next steps need goes into variables\n(``var:<name>`` bindings), which a later step's instructions show fenced, or onto the panel.",
       "properties": {
         "arguments": {
           "additionalProperties": {

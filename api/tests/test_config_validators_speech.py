@@ -160,7 +160,7 @@ def test_fireworks_stt_is_an_error_with_the_vendor_reason() -> None:
     config = _with(stt=ProviderRef(provider_id="fireworksai-stt", credential_id="cred-fw"))
 
     errors = [i.message for i in _issues(config) if i.severity == "error" and i.path == "pipeline.stt"]
-    assert errors == ["Fireworks stopped its speech service on 2026-06-10; pick another transcriber."]
+    assert errors == ["Fireworks stopped its speech service on 2026-06-10. Pick another transcriber."]
 
 
 def test_a_deprecated_model_is_a_warning_naming_the_new_default() -> None:
@@ -169,7 +169,7 @@ def test_a_deprecated_model_is_a_warning_naming_the_new_default() -> None:
     )
 
     warnings = [i.message for i in _issues(config) if i.severity == "warning" and i.path == "pipeline.tts"]
-    assert warnings == ["'inworld-tts-1.5-max' is deprecated by the vendor; pick 'inworld-tts-2'"]
+    assert warnings == ["'inworld-tts-1.5-max' is deprecated by the vendor. Pick 'inworld-tts-2'"]
 
 
 def test_an_older_but_current_model_is_not_flagged() -> None:

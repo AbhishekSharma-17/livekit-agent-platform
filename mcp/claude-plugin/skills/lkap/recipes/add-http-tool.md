@@ -15,7 +15,7 @@ header, and verify it before the agent ever calls it live.
 }
 ```
 `http-tool-secret` credentials have no live test (`test=false` skips the
-attempt); note the returned `id` as `secret_key_id` below.
+attempt). Note the returned `id` as `secret_key_id` below.
 
 ## 2. Create the tool
 
@@ -41,7 +41,7 @@ attempt); note the returned `id` as `secret_key_id` below.
 
 ## 3. Verify
 
-Check the returned `ToolDryRunResult.status`/`body`; call `tool_dry_run`
+Check the returned `ToolDryRunResult.status`/`body`. Call `tool_dry_run`
 again any time you change the definition:
 
 `tool_dry_run(...)`

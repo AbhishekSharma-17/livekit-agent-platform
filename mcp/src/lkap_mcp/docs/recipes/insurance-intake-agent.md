@@ -16,22 +16,22 @@ tool, tested and published. Do
 }
 ```
 The `claims_intake` starter needs no code pack. It seeds the cascaded
-LiveKit Inference pipeline (works with no vendor key; the model can see the
+LiveKit Inference pipeline (works with no vendor key, the model can see the
 camera), a greeting that asks about safety first, the Notebook panel (a claim
 notebook, a drawing board, pictures), live extraction of the claim into the
 notebook's summary, rules that list the documents each kind of claim needs,
 never confirm coverage and hand safety concerns to a person, and three
 test conversations (`agent_tests_run`). It also adds three tool kits: the
-policy lookup (`policy_lookup` on the `Demo — Policy directory` lookup table,
-created once per workspace), the details intake and the hand-over; and two
+policy lookup (`policy_lookup` on the `Demo · Policy directory` lookup table,
+created once per workspace), the details intake and the hand-over, and two
 knowledge bases ("Claims intake · Policy lines", "Claims intake · Intake
 playbook"). Check `kb_get` for `ready` before relying on them. The sketch
-needs a Google key (the Gemini API key, stored under `google-llm`; a key added
-from any Google entry serves it); it is optional — without one the
+needs a Google key (the Gemini API key, stored under `google-llm`, a key added
+from any Google entry serves it). It is optional. Without one the
 `image_gen` slot is left empty and everything else works. Add it later with
 `provider_key_create`.
 
-The older `insurance_claim` code pack is kept for agents made from it; it
+The older `insurance_claim` code pack is kept for agents made from it. It
 only appears when the deployment lists it in `LKAP_PACKS`.
 
 ## 2. Add knowledge
@@ -68,7 +68,7 @@ only appears when the deployment lists it in `LKAP_PACKS`.
   "dry_run_args": { "city": "Austin" }
 }
 ```
-Check the returned `ToolDryRunResult` before moving on — a non-2xx status or
+Check the returned `ToolDryRunResult` before moving on. A non-2xx status or
 an empty body usually means the `url` or `allowed_hosts` needs a fix.
 
 ## 4. Attach and validate
@@ -85,7 +85,7 @@ an empty body usually means the `url` or `allowed_hosts` needs a fix.
 ```json
 { "id_or_slug": "fnol-intake" }
 ```
-Fix any `issues` before continuing — most commonly a missing pipeline slot
+Fix any `issues` before continuing. Most commonly a missing pipeline slot
 or an unknown tool/kb id from a typo.
 
 ## 5. Test it

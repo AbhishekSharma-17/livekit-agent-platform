@@ -84,14 +84,14 @@ async def fleet_action(
     row = await service.get_connection(db, ctx.workspace_id, connection_id)
     if row.deployment_mode != "supervised":
         raise ConflictError(
-            f"connection '{row.slug}' is {row.deployment_mode}; only supervised pools are managed here"
+            f"connection '{row.slug}' is {row.deployment_mode}. Only supervised pools are managed here"
         )
     match payload.action:
         case "start":
             replicas = payload.replicas if payload.replicas is not None else row.replicas
             if replicas < 1:
                 raise UnprocessableEntityError(
-                    "start needs at least one replica; use 'stop' to stop the pool",
+                    "start needs at least one replica. Use 'stop' to stop the pool",
                     details={"field": "replicas"},
                 )
             await service.set_desired_replicas(db, row, replicas, settings.packs_list)

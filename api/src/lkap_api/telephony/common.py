@@ -90,7 +90,7 @@ async def resolve_connection(
         return await get_connection(db, workspace_id, connection_id)
     row = await default_connection(db, workspace_id)
     if row is None:
-        raise UnprocessableEntityError("the workspace has no default connection; pass connection_id")
+        raise UnprocessableEntityError("the workspace has no default connection. Pass connection_id")
     return row
 
 

@@ -343,7 +343,7 @@ def _pick_consent_block(specs: list[BlockSpec], block_id: str, kind: str) -> Blo
         match = next((s for s in specs if s.id == block_id), None)
         if match is None:
             raise ToolError(
-                f"Unknown consent block {block_id!r}; use one of: {', '.join(s.id for s in specs)}."
+                f"Unknown consent block {block_id!r}. Use one of: {', '.join(s.id for s in specs)}."
             )
         return match
     candidates = [s for s in specs if not kind or consent_block_config(s).kind == kind]

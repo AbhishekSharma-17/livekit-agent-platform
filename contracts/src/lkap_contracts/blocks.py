@@ -403,7 +403,7 @@ def validate_accept(values: Iterable[str]) -> list[str]:
         value = raw.strip().lower()
         if value != "image/*" and value not in UPLOAD_MIME_TYPES:
             raise ValueError(
-                f"{raw!r} is not a file type callers may send; use image/* or one of "
+                f"{raw!r} is not a file type callers may send. Use image/* or one of "
                 + ", ".join(UPLOAD_MIME_TYPES)
             )
         if value not in seen:
@@ -896,7 +896,7 @@ def layout_issues(blocks: Sequence[BlockSpec], *, path: str = "panel.blocks") ->
             issues.append(
                 Issue(
                     path=base,
-                    message="this layout holds no blocks yet; add the blocks it shows",
+                    message="this layout holds no blocks yet. Add the blocks it shows",
                     severity="warning",
                 )
             )
@@ -908,7 +908,7 @@ def layout_issues(blocks: Sequence[BlockSpec], *, path: str = "panel.blocks") ->
             elif target not in types:
                 message = f"there is no block {target!r} on this panel"
             elif types[target] == "layout":
-                message = f"{target!r} is a layout; a layout cannot hold another layout"
+                message = f"{target!r} is a layout. A layout cannot hold another layout"
             elif target in claimed:
                 owner = claimed[target]
                 message = (
@@ -1001,7 +1001,7 @@ def canvas_claim_issues(blocks: Sequence[BlockSpec], *, path: str = "panel.block
             if target not in types:
                 message = f"there is no block {target!r} on this panel"
             elif types[target] != "canvas":
-                message = f"{target!r} is a {types[target]} block; an ink section shows a canvas block"
+                message = f"{target!r} is a {types[target]} block. An ink section shows a canvas block"
             elif target in claimed:
                 message = f"{target!r} is already shown in {claimed[target]!r}"
             elif target in in_layouts:

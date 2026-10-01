@@ -107,7 +107,7 @@ COMPLIANCE_PRESETS: Final[dict[Jurisdiction, CompliancePreset]] = {
         ),
         counsel_note=(
             "EU law requires telling people when they are talking to an AI. "
-            "This wording is a starting point: confirm it with counsel."
+            "This wording is a starting point. Confirm it with counsel."
         ),
     ),
     "in": CompliancePreset(
@@ -117,7 +117,7 @@ COMPLIANCE_PRESETS: Final[dict[Jurisdiction, CompliancePreset]] = {
         recording_text="This call can be recorded so we have a record of it. Is it okay if we record it?",
         counsel_note=(
             "India's data protection rules on notice and consent are being phased in. "
-            "This wording is a starting point: confirm it with counsel."
+            "This wording is a starting point. Confirm it with counsel."
         ),
     ),
     "us": CompliancePreset(
@@ -128,8 +128,8 @@ COMPLIANCE_PRESETS: Final[dict[Jurisdiction, CompliancePreset]] = {
             "We'd like to record this call for our records. Do we have your permission to record it?"
         ),
         counsel_note=(
-            "Some states require everyone on a call to agree before it is recorded: "
-            "confirm with counsel for two-party-consent states."
+            "Some states require everyone on a call to agree before it is recorded. "
+            "Confirm with counsel for two-party-consent states."
         ),
     ),
 }

@@ -396,7 +396,7 @@ async def get_access_token(
             row.ciphertext = vault.encrypt(bag)
             row.updated_at = ts
             row.last_test_at, row.last_test_ok = ts, False
-            row.last_test_message = "the sign-in needs to be renewed: sign in again"
+            row.last_test_message = "the sign-in needs to be renewed. Sign in again"
             audit.record(
                 db,
                 workspace_id=workspace_id,

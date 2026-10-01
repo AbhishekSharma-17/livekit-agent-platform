@@ -37,7 +37,7 @@ def disabled_provider_issues(ctx: ValidationContext) -> list[Issue]:
                     path=f"pipeline.{slot}",
                     message=(
                         f"provider '{ref.provider_id}' is disabled for this workspace "
-                        "(providers.disabled) — an admin can re-enable it on the Providers page"
+                        "(providers.disabled). An admin can re-enable it on the Providers page"
                     ),
                     severity="error",
                 )

@@ -168,7 +168,7 @@ def _cell(value: object) -> str | None:
 
 def _too_many_rows() -> DatasetFileError:
     return DatasetFileError(
-        f"this file has more than {MAX_DATASET_ROWS:,} rows; a lookup table holds at most "
+        f"this file has more than {MAX_DATASET_ROWS:,} rows. A lookup table holds at most "
         f"{MAX_DATASET_ROWS:,}, so split the file or remove rows",
         details={"reason": "too_many_rows", "max_rows": MAX_DATASET_ROWS},
     )
@@ -286,7 +286,7 @@ def _resolve_keys(
         name = wanted if wanted in names else by_label.get(" ".join(wanted.split()).casefold())
         if name is None:
             raise DatasetFileError(
-                f"the file has no column '{wanted}'; its columns are: {', '.join(labels)}",
+                f"the file has no column '{wanted}'. Its columns are: {', '.join(labels)}",
                 details={"reason": "unknown_key_column", "column": wanted},
             )
         resolved[name] = kind

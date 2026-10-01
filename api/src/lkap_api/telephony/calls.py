@@ -379,16 +379,16 @@ async def _outbound_trunk(
             )
         )
         if not trunks:
-            raise UnprocessableEntityError("the agent's connection has no outbound trunk; add one first")
+            raise UnprocessableEntityError("the agent's connection has no outbound trunk. Add one first")
         if len(trunks) > 1:
             raise UnprocessableEntityError(
-                "the agent's connection has several outbound trunks; pass trunk_id",
+                "the agent's connection has several outbound trunks. Pass trunk_id",
                 details={"trunk_ids": [t.id for t in trunks]},
             )
         trunk = trunks[0]
     if not trunk.lk_trunk_id:
         raise ConflictError(
-            f"trunk '{trunk.name}' is not on LiveKit yet; sync it first",
+            f"trunk '{trunk.name}' is not on LiveKit yet. Sync it first",
             details={"reason": "trunk_not_synced", "trunk_id": trunk.id},
         )
     return trunk
@@ -443,13 +443,13 @@ async def prepare_outbound_call(
     open_calls = await open_outbound_calls(db, workspace_id)
     if open_calls >= policy.max_concurrent_outbound:
         raise CallsBusyError(
-            "the workspace already has its maximum of outbound calls in progress; try again shortly",
+            "the workspace already has its maximum of outbound calls in progress. Try again shortly",
             details={"max_concurrent_outbound": policy.max_concurrent_outbound, "open": open_calls},
         )
     limits = AgentLimits.model_validate(agent.limits or {})
     if await live_session_count(db, agent) >= limits.max_concurrent_sessions:
         raise CallsBusyError(
-            "this agent is at its concurrent session limit; try again shortly",
+            "this agent is at its concurrent session limit. Try again shortly",
             details={"max_concurrent_sessions": limits.max_concurrent_sessions},
         )
     ring = max(MIN_RING_S, min(MAX_RING_S, payload.timeout_s))

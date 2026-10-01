@@ -107,7 +107,7 @@ class SimliFaceMemberProbe:
         if ctx.model in ids:
             return _passed(latency, "the id is in this key's face list")
         message = (
-            f"the key works, but the id is not among this account's own faces ({len(ids)} listed); "
+            f"the key works, but the id is not among this account's own faces ({len(ids)} listed). "
             "Simli's preset faces are not listed and can't be verified without starting a session"
         )
         return ProbeOutcome(

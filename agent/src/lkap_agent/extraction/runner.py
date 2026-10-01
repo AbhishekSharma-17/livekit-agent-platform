@@ -86,7 +86,7 @@ SENSITIVE_MASK: Final[str] = "••••"
 EXTRACTION_TIMEOUT_ATTR: Final[str] = "extraction_timeout_s"
 #: What the timeout warning suggests.
 _TIMEOUT_HINT: Final[str] = (
-    "the extraction model did not answer within the budget; raise LKAP_EXTRACTION_TIMEOUT_S on the "
+    "the extraction model did not answer within the budget. Raise LKAP_EXTRACTION_TIMEOUT_S on the "
     "worker or set a faster workflow_llm on the agent"
 )
 

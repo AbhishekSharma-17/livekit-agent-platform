@@ -33,7 +33,7 @@ KEY_COLUMNS_HELP = (
     "ignored) or 'number'. At least one, at most 8"
 )
 PINNED_HELP = (
-    "Key column -> a fixed value the model never supplies; may be {{ ctx.caller_phone }} (look the "
+    "Key column -> a fixed value the model never supplies. May be {{ ctx.caller_phone }} (look the "
     "caller up by the number they call from) or {{ var.<name> }}"
 )
 BINDINGS_HELP = (
@@ -50,7 +50,7 @@ def _read_upload(file_path: str) -> tuple[str, bytes]:
         raise FileNotFoundError(f"no such file: {path}")
     size = path.stat().st_size
     if size > MAX_DATASET_BYTES:
-        raise ValueError(f"{path.name} is {size} bytes; the limit is {MAX_DATASET_BYTES}")
+        raise ValueError(f"{path.name} is {size} bytes. The limit is {MAX_DATASET_BYTES}")
     return path.name, path.read_bytes()
 
 
@@ -65,7 +65,7 @@ def register(registry: Registry) -> None:
         current = dataset
         while current.get("status") == "pending":
             if time.monotonic() >= deadline:
-                return current, [f"still importing after {timeout_s:g}s; dataset_list shows the final status"]
+                return current, [f"still importing after {timeout_s:g}s. dataset_list shows the final status"]
             await asyncio.sleep(delay)
             delay = min(delay * 2, _POLL_MAX_S)
             current = await client.get(f"/v1/datasets/{seg(str(dataset.get('id')))}")
@@ -93,7 +93,7 @@ def register(registry: Registry) -> None:
         timeout_s: Annotated[float, Field(gt=0, le=600)] = 120,
         plan: bool = False,
     ) -> ToolResult:
-        """Make a lookup table from CSV or JSON (text or a local file); waits until its rows are imported."""
+        """Make a lookup table from CSV or JSON (text or a local file). Waits until its rows are imported."""
         if (text is None) == (file_path is None):
             return ToolResult.fail("invalid_input", "pass exactly one of text or file_path")
         if file_path is not None:
@@ -131,20 +131,20 @@ def register(registry: Registry) -> None:
             created,
             warnings=warnings,
             next_steps=[
-                f'Test it: dataset_lookup(dataset_id="{created.get("id")}", keys={{...}}); '
-                "give an agent a lookup tool with tool_create_dataset(...)."
+                f'Test it: dataset_lookup(dataset_id="{created.get("id")}", keys={{...}}). '
+                "Give an agent a lookup tool with tool_create_dataset(...)."
             ],
         )
 
     @registry.tool(scopes={"agents:write"}, annotations=DESTRUCTIVE, data="Deleted")
     async def dataset_delete(dataset_id: str, confirm: bool = False, plan: bool = False) -> ToolResult:
-        """Delete a lookup table, its rows and its file (needs confirm; refused while a tool uses it)."""
+        """Delete a lookup table, its rows and its file (needs confirm, refused while a tool uses it)."""
         path = f"/v1/datasets/{seg(dataset_id)}"
         if plan:
             return planned(request("DELETE", path))
         if not confirm:
             return ToolResult.needs_confirmation(
-                f"permanently delete lookup table {dataset_id}; this cannot be undone"
+                f"permanently delete lookup table {dataset_id}. This cannot be undone"
             )
         await client.delete(path)
         return ToolResult.success({"deleted": True, "kind": "dataset", "id": dataset_id})
@@ -152,7 +152,7 @@ def register(registry: Registry) -> None:
     @registry.tool(scopes={"agents:write"}, annotations=READ, data="DatasetLookupOut")
     async def dataset_lookup(
         dataset_id: str,
-        keys: Annotated[dict[str, str], Field(description="Key column -> value; a row must match every one")],
+        keys: Annotated[dict[str, str], Field(description="Key column -> value. A row must match every one")],
         match: Literal["exact", "prefix"] = "exact",
         return_columns: Annotated[
             list[str] | None, Field(description="The columns to return (all when empty)")
@@ -195,7 +195,7 @@ def register(registry: Registry) -> None:
         agent_id: str | None = None,
         plan: bool = False,
     ) -> ToolResult:
-        """Give agents a lookup tool on one lookup table (read-only; the rows reach the model fenced)."""
+        """Give agents a lookup tool on one lookup table (read-only, the rows reach the model fenced)."""
         definition = DatasetToolDefinition(
             name=name,
             description=description,

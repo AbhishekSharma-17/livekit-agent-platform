@@ -36,7 +36,7 @@ def build_check_item_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
         item = next((i for i in items if i.id == item_id), None)
         if item is None:
             ids = ", ".join(i.id for i in items) or "none (call set_checklist first)"
-            raise ToolError(f"Unknown checklist item {item_id!r}; the items are: {ids}.")
+            raise ToolError(f"Unknown checklist item {item_id!r}. The items are: {ids}.")
         update: dict[str, Any] = {"done": done, "edited_by": None}
         cleaned = " ".join(hint.split())[:MAX_HINT_CHARS]
         if cleaned:

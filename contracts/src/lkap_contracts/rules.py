@@ -263,7 +263,7 @@ def slow_pattern_message(rule_id: str, pattern: str) -> str:
     return (
         f"rule '{rule_id}': the pattern /{pattern}/ can stall the call (it repeats a group that "
         "already repeats or holds alternatives, or two open-ended repeats can meet), so the rule "
-        "never runs until it is fixed; write it as a plain list of alternatives or with fixed "
+        "never runs until it is fixed. Write it as a plain list of alternatives or with fixed "
         "counts, e.g. /fire|smoke/ instead of /(fire|smoke)+/"
     )
 

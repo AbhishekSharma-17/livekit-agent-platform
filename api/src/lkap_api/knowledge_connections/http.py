@@ -104,8 +104,8 @@ def error_for(vendor: str, response: httpx.Response) -> ConnectorError:
     status = response.status_code
     if 300 <= status < 400:
         return ConnectorError(
-            f"{vendor} answered with a redirect (HTTP {status}); redirects are not followed — "
-            "use the service's final address",
+            f"{vendor} answered with a redirect (HTTP {status}). Redirects are not followed. "
+            "Use the service's final address",
             status=status,
         )
     message = _vendor_message(vendor, response)

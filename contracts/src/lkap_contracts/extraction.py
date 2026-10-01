@@ -254,7 +254,7 @@ def _notebook_section_problem(config: Any, section_id: str | None) -> str | None
     if section is None:
         return f"it has no section '{section_id}'"
     if section.kind not in ("details", "text"):
-        return f"section '{section_id}' is a {section.kind} section; use a details or text section"
+        return f"section '{section_id}' is a {section.kind} section. Use a details or text section"
     return None
 
 
@@ -341,7 +341,7 @@ def extraction_issues(
             issues.append(
                 Issue(
                     path=f"{path}.name",
-                    message=f"the flow step '{flow_extracted[field.name]}' also captures '{field.name}'; the "
+                    message=f"the flow step '{flow_extracted[field.name]}' also captures '{field.name}'. The "
                     "step's own capture wins and the live extraction leaves it alone",
                     severity="warning",
                 )
@@ -373,7 +373,7 @@ def extraction_issues(
                 issues.append(
                     Issue(
                         path=path,
-                        message="'when a step ends' only applies to flow agents; this agent has no flow",
+                        message="'when a step ends' only applies to flow agents. This agent has no flow",
                         severity="warning",
                     )
                 )

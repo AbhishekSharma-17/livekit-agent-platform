@@ -1,8 +1,8 @@
 # Recipe: add a tool kit
 
-Goal: give an agent a whole job in one step — the tools, the panel blocks
+Goal: give an agent a whole job in one step (the tools, the panel blocks
 they fill, a short instruction snippet, the details it captures and the
-rules that drive the panel — from the kit catalogue.
+rules that drive the panel) from the kit catalogue.
 
 You need from the user: which job (look a record up, open a case, take
 down details, verify the caller, send a payment or signing link, hand over
@@ -36,9 +36,9 @@ the agent's check afterwards. Nothing changes.
 ## 3. Add it
 
 Run the same `kit_add(...)` without `dry_run`. Everything lands in one new
-configuration version; the snippet sits between `<!-- kit:case_ticket:case -->`
+configuration version. The snippet sits between `<!-- kit:case_ticket:case -->`
 markers at the end of the instructions. Adding the kit again with the same
-`block_prefix` adds nothing; another prefix adds a second copy (a `policy`
+`block_prefix` adds nothing. Another prefix adds a second copy (a `policy`
 lookup next to an `order` lookup).
 
 - **Keys.** `secret_key_id` is an `http-tool-secret` key holding the secret
@@ -47,10 +47,10 @@ lookup next to an `order` lookup).
 - **Connected apps.** A `composio` variant needs `connection_id` (connect
   the app first, recipe `connect-an-app`) and `providers:write`.
 - **Flows.** On a flow agent, `flow_anchor` names the step the kit's steps
-  hang off; an agent without a flow never becomes one.
+  hang off. An agent without a flow never becomes one.
 
 ## 4. Validate and try it
 
 `agent_validate(id_or_slug)` should show no error. Each kit adds a test
 case whose tools answer from the kit's fakes, so
-`agent_tests_run(id_or_slug)` runs offline; then `chat_start` to talk to it.
+`agent_tests_run(id_or_slug)` runs offline. Then `chat_start` to talk to it.

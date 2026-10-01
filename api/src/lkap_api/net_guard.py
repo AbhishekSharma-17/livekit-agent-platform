@@ -391,11 +391,11 @@ def check_url(url: str, policy: NetPolicy, *, schemes: frozenset[str] = HTTP_SCH
         return None
     if policy.trusted_private:
         return (
-            f"{problem}; a self-hosted connection may reach loopback, private (RFC 1918 / ULA) "
+            f"{problem}. A self-hosted connection may reach loopback, private (RFC 1918 / ULA) "
             "and carrier-grade NAT addresses, never cloud metadata, link-local or reserved ones"
         )
     return (
-        f"{problem}; outbound requests to private or local networks are refused "
+        f"{problem}. Outbound requests to private or local networks are refused "
         "(an operator can allow a host with LKAP_NET_ALLOW_PRIVATE_HOSTS)"
     )
 

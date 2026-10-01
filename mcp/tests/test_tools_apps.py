@@ -127,7 +127,7 @@ async def test_apps_connect_managed_returns_the_link_for_the_human(
     assert result["ok"] is True, result
     assert result["data"]["status"] == "initiated"
     assert result["data"]["redirect_url"].startswith("https://connect.example.com/")
-    assert any("do not open it yourself" in step for step in result["next_steps"])
+    assert any("Do not open it yourself" in step for step in result["next_steps"])
     assert status["data"]["status"] == "initiated"
 
 

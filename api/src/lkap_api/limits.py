@@ -138,7 +138,7 @@ async def reserve_session_slot(db: AsyncSession, agent: Agent, limits: AgentLimi
     async with slot_lock(db, workspace_id=agent.workspace_id, agent_id=agent.id):
         if await live_session_count(db, agent) >= limits.max_concurrent_sessions:
             raise AgentBusyError(
-                "this agent is at its concurrent session limit; try again shortly",
+                "this agent is at its concurrent session limit. Try again shortly",
                 details={"max_concurrent_sessions": limits.max_concurrent_sessions},
             )
         yield

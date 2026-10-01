@@ -278,11 +278,11 @@ async def accept_invite(
     user = await db.get(User, claims.user_id)
     workspace = await db.get(Workspace, claims.workspace_id)
     if user is None or workspace is None or user.disabled_at is not None:
-        raise BadRequestError("invalid invite: it no longer matches an account")
+        raise BadRequestError("invalid invite. It no longer matches an account")
     member = await db.get(WorkspaceMember, (claims.workspace_id, claims.user_id))
     joins = await invites.join_count(db, claims.workspace_id, claims.user_id)
     if invites.state_fingerprint(user.password_hash, member is not None, joins) != claims.fingerprint:
-        raise BadRequestError("invalid invite: it has already been used")
+        raise BadRequestError("invalid invite. It has already been used")
 
     if user.password_hash is None:
         if (problem := password_problem(payload.password)) is not None:

@@ -188,7 +188,7 @@ def argument_template_issues(text: str) -> list[str]:
             continue
         namespace, name = parsed.group(1), parsed.group(2)
         if namespace == "ctx" and name not in CTX_PLACEHOLDERS:
-            issues.append(f"'{whole}' is not a session value; use one of: {', '.join(CTX_PLACEHOLDERS)}")
+            issues.append(f"'{whole}' is not a session value. Use one of: {', '.join(CTX_PLACEHOLDERS)}")
         elif namespace == "var" and not _VARIABLE_NAME_RE.match(name):
             issues.append(f"'{whole}' is not a variable name (lowercase letters, digits and _)")
     return issues
@@ -229,8 +229,8 @@ class ToolNodeOutcomes(BaseModel):
 class ToolNode(NodeBase):
     """Call one of the agent's attached tools with no model turn, then branch on the outcome (D-V6-28).
 
-    The worker runs the tool the moment the step is entered — through the same execution path
-    as a call the model makes (blocking, the same guardrails and fences) — applies
+    The worker runs the tool the moment the step is entered (through the same execution path
+    as a call the model makes: blocking, the same guardrails and fences), applies
     :attr:`bindings` to the result, and takes the edge :attr:`on` names for the outcome. The
     result text itself never reaches the model: what the next steps need goes into variables
     (``var:<name>`` bindings), which a later step's instructions show fenced, or onto the panel.
@@ -412,8 +412,8 @@ def _check_tool_nodes(nodes: list[FlowNode], edges: list[FlowEdge]) -> None:
     cycles = tool_only_cycles(nodes, edges)
     if cycles:
         raise ValueError(
-            f"tool nodes {', '.join(repr(n) for n in cycles[0])} form a loop with no agent step; "
-            "route one of them through an agent node"
+            f"tool nodes {', '.join(repr(n) for n in cycles[0])} form a loop with no agent step. "
+            "Route one of them through an agent node"
         )
 
 

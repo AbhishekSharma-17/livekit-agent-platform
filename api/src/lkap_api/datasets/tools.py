@@ -30,7 +30,7 @@ async def check_dataset_tool(db: AsyncSession, workspace_id: str, definition: Da
     for column in definition.key_columns:
         if column not in keys:
             raise UnprocessableEntityError(
-                f"'{column}' is not a key column of '{dataset.name}'; its keys are: {', '.join(keys)}",
+                f"'{column}' is not a key column of '{dataset.name}'. Its keys are: {', '.join(keys)}",
                 details={"field": "definition.key_columns", "reason": "not_a_key_column", "column": column},
             )
     for column in definition.return_columns:

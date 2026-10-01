@@ -58,7 +58,7 @@ def build_resolve_slot_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
                 raise ToolError("Pass the slot_id the caller chose (or start and end for another time).")
             if config.get("allow_custom") is not True:
                 raise ToolError(
-                    "Only the offered times can be booked here; ask the caller to pick one of them."
+                    "Only the offered times can be booked here. Ask the caller to pick one of them."
                 )
             try:
                 custom = TimeSlot(id=CUSTOM_SLOT_ID, start=start.strip(), end=end.strip(), label="Your time")
@@ -75,7 +75,7 @@ def build_resolve_slot_tool(ctx: PackSessionContext) -> FunctionTool[..., Any]:
             state = ctx.ui.state.blocks.get(target) or {}
             chosen = CUSTOM_SLOT_ID
         elif find_slot(state, chosen) is None:
-            raise ToolError(f"Unknown slot {chosen!r}; use one of the ids shown with request_slot.")
+            raise ToolError(f"Unknown slot {chosen!r}. Use one of the ids shown with request_slot.")
         submit = getattr(ctx.ui, "submit_block", None)
         resolved = False
         if callable(submit):

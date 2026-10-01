@@ -10,5 +10,5 @@ include_validation=true)`, then check the pipeline has every required slot
 for its mode, the knowledge bases and tools it's attached to actually
 exist and resolve, the panel's blocks validate, and (if it dials out) its
 `telephony.transfer_targets` are ones the workspace's dialing policy would
-actually allow. Report findings as a short list, not a wall of JSON; don't
+actually allow. Report findings as a short list, not a wall of JSON. Don't
 change anything without asking first.

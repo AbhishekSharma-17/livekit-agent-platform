@@ -4,14 +4,13 @@ import * as React from "react";
 import { CircleAlertIcon, CircleCheckIcon, CircleHelpIcon, FlaskConicalIcon, RefreshCwIcon, XIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { GatedButton } from "@/components/shared/gated-button";
 import { Icon } from "@/components/shared/icon";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { StatusPill } from "@/components/shared/status-chip";
 import { useCredentials, useProviderModel, useTestModel } from "@/components/console/lib/api-hooks";
-import { useWriteAccess } from "@/components/console/lib/roles";
 import { isInferenceProvider } from "@/components/console/registry/provider-meta";
 import { errorMessage } from "@/components/console/shared/error-banner";
+import { useWriteGate } from "@/components/console/shared/write-gate";
 import { ApiError } from "@/lib/api";
 import { isSendableModelId } from "@/lib/model-ids";
 import { cn } from "@/lib/utils";
@@ -198,7 +197,8 @@ export function ModelTestControls({
   className,
 }: ModelTestControlsProps) {
   const { state, fingerprint } = useTestedState(spec, modelId, credentialId, { readRecord });
-  const { canWrite } = useWriteAccess("builder");
+  // D12: viewers never see "Test model"; while the role loads it shows disabled.
+  const gate = useWriteGate("builder");
   const test = useTestModel(spec.id);
   const [result, setResult] = React.useState<ModelTestResult | null>(null);
   const [panelOpen, setPanelOpen] = React.useState(false);
@@ -243,23 +243,20 @@ export function ModelTestControls({
     <div className={cn("flex flex-col gap-2", className)} data-slot="model-test">
       <div className="flex flex-wrap items-center gap-2">
         {showChip ? <TestedChip state={shownState} /> : null}
-        {spec.probe ? (
-          <GatedButton
+        {spec.probe && gate.show ? (
+          <Button
             type="button"
-           
             size="sm"
-            allowed={canWrite}
-            reason="Testing a model needs the builder role or higher."
-            disabled={test.isPending || missingKey}
+            disabled={gate.pending || test.isPending || missingKey}
             aria-expanded={panelOpen}
             aria-controls={panelOpen ? panelId : undefined}
             onClick={() => run(false)}
           >
             <FlaskConicalIcon aria-hidden="true" />
             {test.isPending ? "Testing…" : result ? "Test again" : "Test model"}
-          </GatedButton>
+          </Button>
         ) : null}
-        {spec.probe && missingKey ? (
+        {spec.probe && gate.can && missingKey ? (
           <span className="text-caption text-text-secondary">Choose a key to test this model.</span>
         ) : null}
       </div>

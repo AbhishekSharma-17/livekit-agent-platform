@@ -19,8 +19,9 @@ Nothing in `components/shared/**` imports screen code. The permission helpers re
   `brand` as `primary`; `data-variant` keeps the caller's value. The primitives that are a page's main action
   already opt in (`NewResourceButton`, `ConfirmDialog`'s confirm).
 - **Permissions (D12).** Hide row and edit actions a person can't use (`IfCan`, `RowMenu` hides itself when
-  empty); replace page-level primaries with a `ReadOnlyNote` that names the next step. `GatedButton`
-  (disabled plus tooltip) is deprecated.
+  empty); replace page-level primaries with a `ReadOnlyNote` that names the next step. Single controls use
+  `useWriteGate` (hidden when unusable, disabled while the role loads). The old `GatedButton` (disabled plus
+  tooltip) is gone (O3, UI-R1).
 - **Dialogs only.** No sheet or drawer primitive exists (D7); large forms use `DialogContent size="lg|xl"`.
 - **Errors.** Everything a person reads goes through `friendlyError` (`src/lib/friendly-error.ts`, pure and free of console code, so the caller page can borrow its sentences through `codeMessage` / `statusMessage`);
   `errorMessage()` returns its text. The raw detail is on `.raw` for logs only.

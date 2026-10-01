@@ -14,7 +14,6 @@ export * from "./description-list";
 export * from "./empty-state";
 export * from "./field";
 export * from "./file-input";
-export * from "./gated-button";
 export * from "./icon";
 export * from "./kbd";
 export * from "./list-card";

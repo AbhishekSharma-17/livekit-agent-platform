@@ -275,12 +275,15 @@ describe("Test model", () => {
     expect((calls.filter((c) => c.method === "POST")[1].body as { force?: boolean }).force).toBe(true);
   });
 
-  it("a viewer sees the chip but cannot run a test", async () => {
-    stub("viewer");
+  it("a viewer sees the chip but no Test model button (D12: hidden, not disabled)", async () => {
+    const { calls } = stub("viewer");
     withClient(<Harness kind="llm" initial={CUSTOM_LLM} />);
-    const button = await screen.findByRole("button", { name: /Test model/ });
+    expect(await screen.findByTestId("tested-chip")).toBeTruthy();
+    await waitFor(() => expect(calls.some((c) => c.url.includes("auth/me"))).toBe(true));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /Test model/ })).toBeNull());
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(button.hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByRole("button", { name: /Test model/ })).toBeNull();
+    expect(screen.queryByText("Choose a key to test this model.")).toBeNull();
   });
 
   it("a stored record shows “Tested ✓” with a relative time; a rotated key resets it to Untested", async () => {

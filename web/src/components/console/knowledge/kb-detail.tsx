@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useDeleteKb, useKb, useKnowledgeConnections, useProviders } from "@/components/console/lib/api-hooks";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { embedderLabel } from "@/components/console/knowledge/embedder-label";
-import { knowledgeConnectionKindLabel } from "@/components/console/settings/knowledge-connection-dialog";
+import { knowledgeConnectionKindLabel } from "@/components/console/knowledge/knowledge-connection-dialog";
 import { DangerZoneCard } from "@/components/console/shared/danger-zone-card";
 import { KbDocuments, type KbDocumentsHandle } from "@/components/console/knowledge/kb-documents";
 import { KbSourceCard } from "@/components/console/knowledge/kb-source-card";

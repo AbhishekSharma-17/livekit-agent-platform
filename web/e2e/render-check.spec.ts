@@ -41,7 +41,6 @@ const SETTINGS_TABS = [
   "ai-agents",
   "webhooks",
   "compliance",
-  "knowledge-connections",
   "storage",
   "environment",
   "danger",
@@ -66,6 +65,8 @@ interface RouteSpec {
   needs?: string;
   /** The page itself answers 404 (a not-found route). */
   notFound?: boolean;
+  /** An old link that must land here (path and query); checked, and not reported as an unexpected redirect. */
+  redirectsTo?: string;
 }
 
 interface Ids {
@@ -87,6 +88,12 @@ const ROUTES: RouteSpec[] = [
   { name: "console-agents-new", path: "/console/agents/new" },
   { name: "console-agents-id", path: (ids) => (ids.agent ? `/console/agents/${ids.agent}` : null), needs: "an agent" },
   { name: "console-knowledge", path: "/console/knowledge" },
+  { name: "console-knowledge-connections", path: "/console/knowledge?tab=connections" },
+  {
+    name: "console-settings-knowledge-connections-moved",
+    path: "/console/settings?tab=knowledge-connections",
+    redirectsTo: "/console/knowledge?tab=connections",
+  },
   {
     name: "console-knowledge-id",
     path: (ids) => (ids.knowledgeBase ? `/console/knowledge/${ids.knowledgeBase}` : null),
@@ -197,7 +204,12 @@ function writeReport() {
   const errors = shots.filter(({ shot }) => shot.consoleErrors.length > 0);
   const overflow = shots.filter(({ shot }) => shot.overflowPx > 0);
   const unreachable = results.filter((r) => r.unreachable);
-  const redirected = shots.filter(({ route, shot }) => route.path && new URL(shot.finalUrl).pathname !== new URL(route.path, "http://x").pathname);
+  const redirected = shots.filter(
+    ({ route, shot }) =>
+      route.path &&
+      !ROUTES.find((spec) => spec.name === route.name)?.redirectsTo &&
+      new URL(shot.finalUrl).pathname !== new URL(route.path, "http://x").pathname,
+  );
 
   const lines: string[] = [
     "# Render check",
@@ -302,6 +314,12 @@ for (const route of ROUTES) {
         save();
         if (shot.consoleErrors.length > 0) problems.push(`${theme} ${width}px console errors: ${shot.consoleErrors.join(" | ")}`);
         if (width === 390 && shot.overflowPx > 1) problems.push(`${theme} 390px: page scrolls ${shot.overflowPx}px sideways`);
+        if (route.redirectsTo) {
+          const landed = new URL(shot.finalUrl);
+          if (`${landed.pathname}${landed.search}` !== route.redirectsTo) {
+            problems.push(`${theme} ${width}px: expected to land on ${route.redirectsTo}, ended at ${landed.pathname}${landed.search}`);
+          }
+        }
       }
     }
     expect(problems, `render check on ${target}`).toEqual([]);

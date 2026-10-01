@@ -43,7 +43,7 @@ const TAB_GROUPS: { id: string; label: string; kinds: ProviderKind[] }[] = [
   // V5-25 (D-V5-7): the vendors the `web_search` and `send_sms` built-ins call.
   { id: "web_search", label: KIND_LABEL.web_search, kinds: ["web_search"] },
   { id: "sms", label: KIND_LABEL.sms, kinds: ["sms"] },
-  // V5-20: vector stores and re-ranking services a knowledge connection uses (Settings → Knowledge connections, V5-24).
+  // V5-20: vector stores and re-ranking services a knowledge connection uses (Knowledge → Connections, V5-24; in Settings before UI-R1).
   { id: "knowledge", label: KIND_LABEL.knowledge, kinds: ["knowledge"] },
 ];
 const TAB_IDS = new Set(TAB_GROUPS.map((t) => t.id));

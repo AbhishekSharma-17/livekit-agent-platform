@@ -461,8 +461,8 @@ describe("CreateKbDialog — 'Where is this knowledge stored?' (V5-24)", () => {
     fireEvent.click(within(dialog).getByRole("radio", { name: /^A knowledge connection/ }));
 
     expect(await within(dialog).findByText(/No knowledge connections yet\./)).toBeTruthy();
-    expect(within(dialog).getByRole("link", { name: "Add one in Settings" }).getAttribute("href")).toBe(
-      "/console/settings?tab=knowledge-connections",
+    expect(within(dialog).getByRole("link", { name: "Add one under Connections" }).getAttribute("href")).toBe(
+      "/console/knowledge?tab=connections",
     );
   });
 });

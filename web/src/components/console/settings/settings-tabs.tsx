@@ -8,7 +8,6 @@ import {
   CpuIcon,
   HardDriveIcon,
   KeyRoundIcon,
-  PlugIcon,
   ShieldCheckIcon,
   SunIcon,
   TriangleAlertIcon,
@@ -28,7 +27,6 @@ import { AiAgentsTab } from "./ai-agents-tab";
 import { WebhooksTab } from "./webhooks-tab";
 import { StorageTab } from "./storage-tab";
 import { ComplianceTab } from "./compliance-tab";
-import { KnowledgeConnectionsTab } from "./knowledge-connections-tab";
 import { DangerTab } from "./danger-tab";
 
 /**
@@ -40,7 +38,9 @@ import { DangerTab } from "./danger-tab";
  * list becomes a horizontal tab strip that scrolls sideways above the content.
  *
  * Tab ids are stable deep links used elsewhere (`?tab=workspace#account`,
- * `?tab=webhooks`, `?tab=knowledge-connections`); never rename one.
+ * `?tab=webhooks`); never rename one. A section that moves to another page
+ * keeps its old link through `MOVED_SETTINGS_TABS` (`moved-tabs.ts`), which
+ * the settings page redirects.
  */
 interface TabDef {
   id: string;
@@ -57,7 +57,6 @@ const TABS: TabDef[] = [
   { id: "ai-agents", label: "AI agents", icon: BotIcon, content: <AiAgentsTab /> },
   { id: "webhooks", label: "Webhooks", icon: WebhookIcon, content: <WebhooksTab /> },
   { id: "compliance", label: "Compliance", icon: ShieldCheckIcon, content: <ComplianceTab /> },
-  { id: "knowledge-connections", label: "Knowledge connections", icon: PlugIcon, content: <KnowledgeConnectionsTab /> },
   { id: "storage", label: "Storage", icon: HardDriveIcon, content: <StorageTab /> },
   { id: "environment", label: "Environment", icon: CpuIcon, content: <EnvironmentTab /> },
   { id: "danger", label: "Danger zone", icon: TriangleAlertIcon, content: <DangerTab /> },

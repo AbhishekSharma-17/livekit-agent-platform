@@ -5,11 +5,11 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { KnowledgeConnectionsTab } from "@/components/console/settings/knowledge-connections-tab";
+import { KnowledgeConnectionsTab } from "@/components/console/knowledge/knowledge-connections-tab";
 import type { KnowledgeConnectionOut, ProviderSpec, ProvidersResponse } from "@/contracts/lkap-contracts";
 
 /**
- * V5-24 console knowledge connections: Settings → Knowledge connections
+ * V5-24 console knowledge connections: Knowledge → Connections (moved from Settings in UI-R1)
  * (table + add/edit dialog, kind radio cards, Test connection, delete
  * naming the knowledge bases in use). No `<Toaster/>` is mounted in these
  * component tests — `sonner` is mocked and asserted on directly, the same

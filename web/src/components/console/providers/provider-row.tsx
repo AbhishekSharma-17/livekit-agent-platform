@@ -63,10 +63,10 @@ export function ProviderRow({
   if (provider.kind === "web_search" || provider.kind === "sms") {
     return <NetworkToolProviderRow provider={provider} query={query} where="Picked per agent, in its Tools tab." />;
   }
-  // V5-20: a knowledge connection's key is used from Settings → Knowledge connections, not per
+  // V5-20: a knowledge connection's key is used from Knowledge → Connections, not per
   // LiveKit connection either, so it gets the same read-only row.
   if (provider.kind === "knowledge") {
-    return <NetworkToolProviderRow provider={provider} query={query} where="Used through Settings → Knowledge connections." />;
+    return <NetworkToolProviderRow provider={provider} query={query} where="Used through Knowledge → Connections." />;
   }
   return <GenericProviderRow provider={provider} connections={connections} query={query} />;
 }

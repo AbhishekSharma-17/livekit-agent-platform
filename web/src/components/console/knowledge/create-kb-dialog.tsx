@@ -26,7 +26,7 @@ import { EMBEDDER_CHOICES, embedderHelp, embedderLabel } from "@/components/cons
 import {
   MANAGED_SEARCH_CONNECTION_KINDS,
   VECTOR_STORE_CONNECTION_KINDS,
-} from "@/components/console/settings/knowledge-connection-dialog";
+} from "@/components/console/knowledge/knowledge-connection-dialog";
 import { readOnlyCopy } from "@/components/console/shared/permission";
 import { ReadOnlyNote } from "@/components/shared/read-only-note";
 import { LoadingRow } from "@/components/shared/loading-state";
@@ -366,10 +366,10 @@ function ConnectionPicker({
         <p className="text-caption text-text-secondary" role="status">
           {emptyMessage}{" "}
           <Link
-            href="/console/settings?tab=knowledge-connections"
+            href="/console/knowledge?tab=connections"
             className="font-medium text-brand underline-offset-3 hover:underline"
           >
-            Add one in Settings
+            Add one under Connections
           </Link>
           .
         </p>

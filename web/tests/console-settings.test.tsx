@@ -167,8 +167,6 @@ describe("SettingsTabs", () => {
       "Webhooks",
       // V5-17: Compliance, between Webhooks and Storage.
       "Compliance",
-      // V5-24: Knowledge connections, between Compliance and Storage.
-      "Knowledge connections",
       "Storage",
       "Environment",
       "Danger zone",
@@ -176,6 +174,8 @@ describe("SettingsTabs", () => {
       expect(screen.getByRole("tab", { name: label })).toBeTruthy();
     }
     expect(screen.getByRole("tab", { name: "Workspace" }).getAttribute("aria-selected")).toBe("true");
+    // UI-R1: knowledge connections moved to the Knowledge page.
+    expect(screen.queryByRole("tab", { name: "Knowledge connections" })).toBeNull();
   });
 
   it("lays the sections out as a vertical nav on desktop (D5), mounting only the active section", () => {

@@ -27,7 +27,7 @@ import { useKbs, useKnowledgeConnections } from "@/components/console/lib/api-ho
 import { EmptyState } from "@/components/console/shared/empty-state";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { embedderLabel } from "@/components/console/knowledge/embedder-label";
-import { RERANKER_CONNECTION_KINDS } from "@/components/console/settings/knowledge-connection-dialog";
+import { RERANKER_CONNECTION_KINDS } from "@/components/console/knowledge/knowledge-connection-dialog";
 import { DetailsDisclosure } from "@/components/console/sessions/details-disclosure";
 import type { AgentEditorForm } from "@/components/console/lib/schemas";
 import { pluralize } from "@/lib/format";

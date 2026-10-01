@@ -41,11 +41,13 @@ import {
   RERANKER_CONNECTION_KINDS,
 } from "./knowledge-connection-dialog";
 import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "@/components/shared/list-search";
-import { RowsSkeleton } from "./settings-card";
+import { RowsSkeleton } from "@/components/console/settings/settings-card";
 import type { KnowledgeConnectionOut, KnowledgeConnectionTestOut, ProviderSpec } from "@/contracts/lkap-contracts";
 
 /**
- * Settings → **Knowledge connections** (V5-24, K §5.3): the workspace's Qdrant
+ * Knowledge → **Connections** (`/console/knowledge?tab=connections`; it lived in
+ * Settings until UI-R1, and `/console/settings?tab=knowledge-connections` now
+ * redirects here) (V5-24, K §5.3): the workspace's Qdrant
  * / Pinecone / Weaviate vector stores, Ragie managed search (V5-45) and
  * Cohere / Voyage AI hosted re-rankers — add, test, edit and delete. A
  * knowledge base picks one of the vector-store or Ragie rows when it is
@@ -56,11 +58,38 @@ import type { KnowledgeConnectionOut, KnowledgeConnectionTestOut, ProviderSpec }
  * like the vault keys they use (`knowledge_connections/router.py`). Builders
  * see the list read-only (D12): no write actions, and a note naming who can.
  */
-export function KnowledgeConnectionsTab() {
+export function KnowledgeConnectionsTab({
+  addAction = "section",
+}: {
+  /**
+   * Where "Add connection" lives. `section` (default) puts it in the card's
+   * header; `page` leaves it out because the page header carries it
+   * (`AddKnowledgeConnectionButton`), as on the Knowledge page.
+   */
+  addAction?: "section" | "page";
+} = {}) {
   return (
     <RequireWrite min="builder" title="Only builders, admins and owners can see knowledge connections">
-      <KnowledgeConnectionsTabInner />
+      <KnowledgeConnectionsTabInner addAction={addAction} />
     </RequireWrite>
+  );
+}
+
+/**
+ * The page-level primary for the Connections tab (docs/ui/DESIGN-SYSTEM.md
+ * section 7.3): "Add connection" for admins and owners, a read-only note for
+ * builders, and nothing for viewers (the tab itself tells them who can see it).
+ */
+export function AddKnowledgeConnectionButton() {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <IfCan min="admin" fallback={<IfCan min="builder"><ReadOnlyNote>{readOnlyCopy("admin", "add or change connections")}</ReadOnlyNote></IfCan>}>
+      <Button type="button" variant="primary" onClick={() => setOpen(true)}>
+        <PlusIcon aria-hidden="true" />
+        Add connection
+      </Button>
+      <KnowledgeConnectionDialog open={open} onOpenChange={setOpen} />
+    </IfCan>
   );
 }
 
@@ -82,7 +111,7 @@ function ConnectionStatus({ connection }: { connection: KnowledgeConnectionOut }
   );
 }
 
-function KnowledgeConnectionsTabInner() {
+function KnowledgeConnectionsTabInner({ addAction }: { addAction: "section" | "page" }) {
   const query = useKnowledgeConnections();
   const providersQuery = useProviders();
   const providers = React.useMemo(() => providersQuery.data?.providers ?? [], [providersQuery.data]);
@@ -185,12 +214,14 @@ function KnowledgeConnectionsTabInner() {
       title="Knowledge connections"
       description="Keep a knowledge base's vectors in your own Qdrant, Pinecone or Weaviate account, search documents kept in Ragie, or re-rank search results with a hosted service."
       aside={
-        <IfCan min="admin" fallback={<ReadOnlyNote>{readOnlyCopy("admin", "add or change connections")}</ReadOnlyNote>}>
-          <Button type="button" variant="primary" size="sm" onClick={() => setAdding(true)}>
-            <PlusIcon aria-hidden="true" />
-            Add connection
-          </Button>
-        </IfCan>
+        addAction === "section" ? (
+          <IfCan min="admin" fallback={<ReadOnlyNote>{readOnlyCopy("admin", "add or change connections")}</ReadOnlyNote>}>
+            <Button type="button" variant="primary" size="sm" onClick={() => setAdding(true)}>
+              <PlusIcon aria-hidden="true" />
+              Add connection
+            </Button>
+          </IfCan>
+        ) : undefined
       }
     >
       <SectionRow>

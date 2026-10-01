@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusPill, type StatusTone } from "@/components/shared/status-chip";
 import { VendorMark } from "@/components/shared/vendor-mark";
+import { UNIDENTIFIED_ACCOUNT, accountIdentity, accountLabel, accountName } from "@/components/console/tools/apps/account-identity";
 import {
   Collapsible,
   CollapsibleContent,
@@ -306,6 +307,11 @@ export function ProviderToolEditorDialog({
                   <div className="min-w-0">
                     <p className="truncate text-body font-medium text-foreground">{appName}</p>
                     <p className="truncate text-caption text-text-secondary">{actionName}</p>
+                    {connection ? (
+                      <p className="truncate text-caption text-text-secondary" data-testid="provider-tool-account">
+                        {accountIdentity(connection) ? `Runs as ${accountName(connection, appName)}` : `Runs as ${accountLabel(connection, appName)} · ${UNIDENTIFIED_ACCOUNT.toLowerCase()}`}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

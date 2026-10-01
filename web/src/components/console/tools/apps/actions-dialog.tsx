@@ -85,10 +85,10 @@ export function ActionsDialog({
   onAdded,
   accountLabel,
 }: ActionsDialogProps) {
-  // "Gmail actions — Work" / "Added 2 action(s) from Gmail (Work)" — two
+  // "Gmail actions · Work" / "Added 2 action(s) from Gmail (Work)": two
   // different shapes for the same distinction, so the title reads as a
   // heading and the toast reads as a sentence.
-  const titleSuffix = accountLabel ? ` — ${accountLabel}` : "";
+  const titleSuffix = accountLabel ? ` · ${accountLabel}` : "";
   const inlineAccount = accountLabel ? ` (${accountLabel})` : "";
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");

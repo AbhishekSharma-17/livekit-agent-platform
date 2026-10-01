@@ -29,6 +29,8 @@ import { appsErrorToast } from "@/components/console/tools/apps/use-composio";
 import { fieldsFor } from "@/components/console/tools/apps/connect-app-dialog";
 import { ActionsDialog } from "@/components/console/tools/apps/actions-dialog";
 import { RenameAccountDialog } from "@/components/console/tools/apps/rename-account-dialog";
+import { AccountIdentityLine, accountName } from "@/components/console/tools/apps/account-identity";
+import { VendorMark } from "@/components/shared/vendor-mark";
 import { useWriteGate } from "@/components/console/shared/write-gate";
 import { LoadingRow } from "@/components/shared/loading-state";
 import { Tag } from "@/components/shared/tag";
@@ -147,15 +149,21 @@ export function ConnectionRow({
   return (
     <div className="flex flex-col gap-2 rounded border border-border p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-body font-medium text-foreground">{label}</span>
-          {connection.is_default ? <Tag>Default</Tag> : null}
-          <LifecycleBadge state={STATUS_STATE[status]} label={STATUS_LABEL[status]} size="sm" />
-          {connection.last_checked_at ? (
-            <span className="text-caption text-text-secondary">
-              Checked <RelativeTime iso={connection.last_checked_at} />
-            </span>
-          ) : null}
+        <div className="flex min-w-0 items-start gap-2">
+          {showAccountLabel ? <VendorMark vendor={toolkit.name} size="sm" className="mt-0.5" /> : null}
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-body font-medium text-foreground">{label}</span>
+              {connection.is_default ? <Tag>Default</Tag> : null}
+              <LifecycleBadge state={STATUS_STATE[status]} label={STATUS_LABEL[status]} size="sm" />
+              {connection.last_checked_at ? (
+                <span className="text-caption text-text-secondary">
+                  Checked <RelativeTime iso={connection.last_checked_at} />
+                </span>
+              ) : null}
+            </div>
+            {status !== "initiated" ? <AccountIdentityLine connection={connection} checkable={status === "active"} /> : null}
+          </div>
         </div>
         {gate.show ? (
           <div className="flex flex-wrap items-center gap-1">
@@ -237,7 +245,7 @@ export function ConnectionRow({
         pickedActions={connection.picked_actions ?? []}
         open={actionsOpen}
         onOpenChange={setActionsOpen}
-        accountLabel={showAccountLabel ? label : undefined}
+        accountLabel={showAccountLabel ? accountName(connection, toolkit.name) : undefined}
       />
     </div>
   );

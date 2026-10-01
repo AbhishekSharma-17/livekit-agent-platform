@@ -1156,6 +1156,22 @@ export function useToolProviderConnection(id: string | null, options?: { poll?: 
   });
 }
 
+/**
+ * `GET .../connections/{id}?identify=true` — "Check now" (V6-35): asks the app
+ * who the account is signed in as, right away, and refreshes every view of it.
+ * Viewers may run it (it is the same read as the status check).
+ */
+export function useIdentifyConnection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.get<AppConnectionOut>(`${APPS_BASE}/connections/${id}`, { identify: "true" }),
+    onSuccess: (connection) => {
+      queryClient.setQueryData(keys.appsConnection(connection.id), connection);
+      void queryClient.invalidateQueries({ queryKey: keys.appsConnections });
+    },
+  });
+}
+
 /** `POST .../connections` — start (or, for a key, finish) a connection. */
 export function useConnectApp() {
   const queryClient = useQueryClient();

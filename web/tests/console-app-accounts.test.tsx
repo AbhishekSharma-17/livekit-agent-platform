@@ -236,7 +236,7 @@ describe("ConnectionRow — Rename and Make default (R-V5-13)", () => {
 });
 
 describe("ActionsDialog — accountLabel names which account just changed (R-V5-13)", () => {
-  it('titles the dialog "<App> actions — <label>" and the success toast names the account, when accountLabel is set', async () => {
+  it('titles the dialog "<App> actions · <label>" and the success toast names the account, when accountLabel is set', async () => {
     const calls = stubApi((call) => {
       if (/\/toolkits\/[^/?]+\/actions/.test(call.url)) return { status: 200, body: actionPage([actionFixture()]) };
       return undefined;
@@ -252,7 +252,7 @@ describe("ActionsDialog — accountLabel names which account just changed (R-V5-
         accountLabel="Work"
       />,
     );
-    const dialog = await screen.findByRole("dialog", { name: "GitHub actions — Work" });
+    const dialog = await screen.findByRole("dialog", { name: "GitHub actions · Work" });
     await within(dialog).findByText("List repositories");
     fireEvent.click(within(dialog).getByRole("checkbox", { name: /List repositories/ }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Add as tools" }));

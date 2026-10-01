@@ -43,6 +43,7 @@ import { ReadOnlyNote } from "@/components/shared/read-only-note";
 import { Alert } from "@/components/ui/alert";
 import { useWriteGate } from "@/components/console/shared/write-gate";
 import { KIT_PREFIX_PATTERN } from "@/components/console/tools/kits/constants";
+import { appAccountName } from "@/components/console/tools/apps/account-identity";
 import type {
   AgentOut,
   KitChange,
@@ -334,7 +335,7 @@ export function AddKitDialog({
                     <SelectContent>
                       {connections.map((connection) => (
                         <SelectItem key={connection.id} value={connection.id}>
-                          {connection.label ? `${connection.toolkit_name ?? connection.toolkit} (${connection.label})` : (connection.toolkit_name ?? connection.toolkit)}
+                          {appAccountName(connection)}
                         </SelectItem>
                       ))}
                     </SelectContent>

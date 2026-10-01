@@ -665,9 +665,9 @@ slug` (unique per workspace), `format csv|json, columns JSON [{name, label, type
 JSON [{name, type}], row_count, storage_key, sha256, status pending|ready|failed, created_at,
 updated_at`) is a workspace's read-only lookup table. The uploaded bytes stay in the storage backend
 under `datasets/<workspace>/<id>/source.<csv|tsv|json>` (V6-21, S6-18, rows stored before keep their key). `dataset_rows` (`id, dataset_id → datasets CASCADE, ordinal,
-keys JSON, row JSON`; index `(dataset_id, ordinal)`) holds the cells by column name and the row's
+keys JSON, row JSON`, index `(dataset_id, ordinal)`) holds the cells by column name and the row's
 normalised keys. `dataset_keys` (`row_id → dataset_rows CASCADE, column_name, dataset_id → datasets
-CASCADE, value VARCHAR(256)`; primary key `(row_id, column_name)`, index `(dataset_id, column_name,
+CASCADE, value VARCHAR(256)`, primary key `(row_id, column_name)`, index `(dataset_id, column_name,
 value)`) is the per-key lookup index (the ledger's `column`, renamed because it is a reserved word). The import's
 progress and error live on its `jobs` row (`kind = dataset_import`, `payload.done/total/error`). The
 same migration widens `tools.kind` to `('http','mcp','provider','dataset')`. Quotas

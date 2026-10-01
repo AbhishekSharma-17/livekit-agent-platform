@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { ExternalLinkIcon } from "lucide-react";
 
 import { Icon } from "@/components/shared/icon";
-import { StateMeter } from "@/components/shared/state-meter";
+import { LkapLogo } from "@/components/shared/lkap-logo";
 import {
   Sidebar,
   SidebarCollapseTrigger,
@@ -52,14 +52,14 @@ function RailTooltip({ label, touch, children }: { label: string; touch: boolean
 }
 
 /**
- * The sidebar's content (docs/ui/DESIGN-SYSTEM.md section 7.1): the
- * wordmark, the nav grouped by job, then the account menu at the foot above a
+ * The sidebar's content (docs/ui/DESIGN-SYSTEM.md section 7.1): the LKAP
+ * logo (28 px mark and wordmark, a link to Overview), the nav grouped by job, then the account menu at the foot above a
  * hairline. Rendered twice from one component: in the desktop sidebar, and in
  * the full-screen Menu dialog at 820 px and below (48 px rows there).
  *
  * On desktop the header also holds the collapse control. Collapsed, the
- * sidebar is a 58 px icon rail: the wordmark and the link labels fade (the
- * links keep their names), each link gets a tooltip, the live dot sits on
+ * sidebar is a 58 px icon rail: the logo shows only its mark, centred, the
+ * link labels fade (every link keeps its name, the logo's is "LKAP Console"), each link gets a tooltip, the live dot sits on
  * its icon and the account menu is just the avatar. The Menu dialog never
  * collapses.
  */
@@ -98,17 +98,21 @@ function SidebarBody({ touch = false }: { touch?: boolean }) {
             : "group-data-[state=collapsed]/sidebar:flex-col group-data-[state=collapsed]/sidebar:items-stretch group-data-[state=collapsed]/sidebar:gap-1"
         }
       >
-        <Link
-          href="/console"
-          onClick={onNavigate}
-          className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded px-2 outline-none focus-visible:shadow-focus group-data-[state=collapsed]/sidebar:flex-none group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
-        >
-          <StateMeter state="idle" size="sm" bars={4} />
-          <span className="min-w-0 flex-1 truncate text-control group-data-[state=collapsed]/sidebar:sr-only">
-            <span className="font-semibold text-foreground">LKAP</span>{" "}
-            <span className="font-normal text-text-secondary">Console</span>
-          </span>
-        </Link>
+        <RailTooltip label="LKAP Console" touch={touch}>
+          <Link
+            href="/console"
+            onClick={onNavigate}
+            data-slot="sidebar-logo"
+            className="flex h-11 min-w-0 flex-1 items-center rounded px-1.5 outline-none focus-visible:shadow-focus group-data-[state=collapsed]/sidebar:flex-none group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
+          >
+            <LkapLogo
+              size="md"
+              product="Console"
+              textClassName="group-data-[state=collapsed]/sidebar:sr-only"
+              className="group-data-[state=collapsed]/sidebar:gap-0"
+            />
+          </Link>
+        </RailTooltip>
         {touch ? null : <SidebarCollapseTrigger className="group-data-[state=collapsed]/sidebar:self-center" />}
       </SidebarHeader>
       <SidebarContent>

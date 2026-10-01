@@ -523,6 +523,25 @@ describe("collapsible sidebar", () => {
     expect(tooltip.textContent).toBe("Agents");
   });
 
+  it("leads with the LKAP logo linking to Overview, and keeps only its mark (same name, a tooltip) in the rail", async () => {
+    renderShell();
+    const logo = within(sidebar()).getByRole("link", { name: "LKAP Console" });
+    expect(logo.getAttribute("href")).toBe("/console");
+    expect(logo.querySelector('[data-slot="lkap-mark"]')?.getAttribute("class")).toContain("size-7");
+    expect(within(logo).getByText("Console").closest("span[class*='sr-only']")).not.toBeNull();
+    // The phone top bar has its own mark link, hidden above 640 px.
+    const topBarLogo = document.querySelector('[data-slot="top-bar-logo"]') as HTMLElement;
+    expect(topBarLogo.getAttribute("aria-label")).toBe("LKAP Console");
+    expect(topBarLogo.className).toContain("max-[640px]:inline-flex");
+
+    fireEvent.keyDown(window, { key: "b", metaKey: true });
+    expect(sidebar().getAttribute("data-state")).toBe("collapsed");
+    const railLogo = within(sidebar()).getByRole("link", { name: "LKAP Console" });
+    act(() => railLogo.focus());
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip.textContent).toBe("LKAP Console");
+  });
+
   it("keeps names, the current page and the live count for assistive tech in the rail", async () => {
     stubFetch({ liveSessions: 3 });
     pathname = "/console/agents";

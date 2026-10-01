@@ -1,10 +1,11 @@
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
-import { StateMeter } from "@/components/shared/state-meter";
+import { LkapLogo } from "@/components/shared/lkap-logo";
 
 /**
- * Root 404 (docs/UI_UX_SPEC.md §7.12): branded, with a way back. Catches any
+ * Root 404 (docs/UI_UX_SPEC.md §7.12): branded with the LKAP mark (an image
+ * named "LKAP"), with a way back. Catches any
  * URL that does not match a route (outside `/console`, which gets its own
  * `console/not-found.tsx` inside the shell). Same voice as the session
  * surface's unavailable pages (§5.7, WP-8) without repeating their exact
@@ -15,9 +16,7 @@ import { StateMeter } from "@/components/shared/state-meter";
 export default function NotFound() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-background px-4 py-16 text-center text-foreground">
-      <span aria-hidden="true" className="inline-flex">
-        <StateMeter state="idle" size="md" />
-      </span>
+      <LkapLogo variant="mark" size="lg" labelled />
       <div className="flex flex-col gap-2">
         <h1 className="text-page font-semibold tracking-[-0.018em]">There&apos;s nothing at this address</h1>
         <p className="max-w-[42ch] text-body text-text-secondary">

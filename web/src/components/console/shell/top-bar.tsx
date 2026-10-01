@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as React from "react";
 
+import { LkapLogo } from "@/components/shared/lkap-logo";
 import type { BreadcrumbEntry } from "@/components/shared/page-header";
 import {
   Breadcrumb,
@@ -23,10 +24,11 @@ import { useBreadcrumbTrail } from "./breadcrumb-context";
 /**
  * The top bar (docs/ui/DESIGN-SYSTEM.md sections 7.1 and 7.2): 56 px, sticky,
  * the frosted `--scrim` with a 12 px backdrop blur and a bottom hairline.
- * Left: the hamburger (820 px and below) and the breadcrumb: the workspace as
- * context, then the page's own trail (set with `ConsoleBreadcrumbs`) or the
- * nav label, the current page last with `aria-current`. The workspace crumb
- * is dropped on phones to leave the page name room.
+ * Left: the hamburger (820 px and below), then the breadcrumb: the workspace
+ * as context, then the page's own trail (set with `ConsoleBreadcrumbs`) or
+ * the nav label, the current page last with `aria-current`. On phones the
+ * workspace crumb is dropped to leave the page name room, and the LKAP mark
+ * (a link to Overview named "LKAP Console") sits before the breadcrumb.
  *
  * Search lives on each list, not here; there are no notifications yet, so
  * there is no bell.
@@ -46,6 +48,14 @@ export function TopBar() {
       className="sticky top-0 z-30 flex h-topbar shrink-0 items-center gap-2 border-b border-border bg-scrim px-5 backdrop-blur-md min-[821px]:rounded-t-lg max-[820px]:px-4"
     >
       <SidebarTrigger className="-ml-1.5" />
+      <Link
+        href="/console"
+        aria-label="LKAP Console"
+        data-slot="top-bar-logo"
+        className="hidden shrink-0 rounded-sm outline-none focus-visible:shadow-focus max-[640px]:inline-flex"
+      >
+        <LkapLogo variant="mark" size="sm" />
+      </Link>
       <Breadcrumb className="min-w-0 flex-1">
         <BreadcrumbList className="flex-nowrap gap-2 text-control text-text-secondary">
           {items.map((item, index) => {

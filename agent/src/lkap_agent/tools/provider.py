@@ -17,8 +17,9 @@ Errors are spoken-safe (D-V5-C9): ``successful=false`` becomes a
 ``ToolError`` with the first sentence of Composio's message, an auth-shaped
 failure (an expired, missing or revoked connection) becomes
 :data:`REAUTH_MESSAGE`, which the session observer turns into a
-``tool_needs_reauth`` event, and any URL in any error text is removed before
-the model sees it — a sign-in link is never read aloud.
+``tool_needs_reauth`` event, a 429 becomes :data:`BUSY_MESSAGE` (V6-36), and any
+URL in any error text is removed before the model sees it — a sign-in link is
+never read aloud.
 
 V6-07 (D-V6-22/23): ``pinned_arguments`` are applied over the model's arguments (string
 values rendered with ``{{ ctx.* }}``/``{{ var.* }}``) and hidden from its schema;
@@ -70,6 +71,10 @@ EXECUTE_BASE: Final = f"https://{COMPOSIO_HOST}/api/v3.1/tools/execute"
 #: What the model is told when the app's connection needs a person (D-V5-C9). The session
 #: observer matches it to record ``tool_needs_reauth``; never includes a link.
 REAUTH_MESSAGE: Final = "This app needs to be reconnected by an admin"
+
+#: What the model is told when Composio rate limits the workspace (V6-36: a 429 is the
+#: organisation's one-minute budget, never the app's fault and never a reconnect).
+BUSY_MESSAGE: Final = "The app service is busy right now. Try again in a moment"
 
 #: Longest error text passed to the model.
 MAX_ERROR_CHARS: Final = 200
@@ -227,6 +232,9 @@ def _request_for(
             successful=body.get("successful") if isinstance(body, dict) else None,
         )
         failed = response.status_code >= 400 or (isinstance(body, dict) and body.get("successful") is False)
+        if response.status_code == 429:
+            _log.info("provider_tool.rate_limited", tool=definition.name)
+            raise ToolError(BUSY_MESSAGE)
         if response.status_code in (401, 403) or (failed and _is_auth_shaped(message, code, slug)):
             _log.info("provider_tool.needs_reauth", tool=definition.name, status=response.status_code)
             raise ToolError(REAUTH_MESSAGE)
@@ -357,6 +365,7 @@ def build_provider_tools(
 
 
 __all__ = [
+    "BUSY_MESSAGE",
     "EXECUTE_BASE",
     "REAUTH_MESSAGE",
     "build_provider_tool",

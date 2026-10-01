@@ -289,7 +289,7 @@ describe("GuardrailsSection", () => {
       fireEvent.change(within(dialog).getByLabelText("Pattern"), { target: { value: "\\d{3}" } });
       fireEvent.change(within(dialog).getByLabelText("Test this pattern"), { target: { value: "call 123 now" } });
       fireEvent.click(within(dialog).getByRole("button", { name: "Test" }));
-      expect(within(dialog).getByText("Matches — this would trip the rule.")).toBeTruthy();
+      expect(within(dialog).getByText("Matches. This would trip the rule.")).toBeTruthy();
     });
 
     it("reports no match", async () => {
@@ -307,7 +307,7 @@ describe("GuardrailsSection", () => {
       fireEvent.change(within(dialog).getByLabelText("Test this pattern"), { target: { value: "abc" } });
       fireEvent.click(within(dialog).getByRole("button", { name: "Test" }));
       expect(
-        within(dialog).getByText("Can't check this pattern in the browser — it's still checked when you save."),
+        within(dialog).getByText("Can't check this pattern in the browser. It's still checked when you save."),
       ).toBeTruthy();
     });
   });

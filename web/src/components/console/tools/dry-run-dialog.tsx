@@ -20,6 +20,7 @@ import {
 import { useDryRunTool } from "@/components/console/lib/api-hooks";
 import { errorMessage } from "@/components/console/shared/error-banner";
 import type { ToolDryRunResult } from "@/contracts/lkap-contracts";
+import { EMPTY_VALUE } from "@/lib/format";
 
 export function DryRunDialog({ toolId, trigger }: { toolId: string; trigger: React.ReactNode }) {
   const argsId = React.useId();
@@ -73,7 +74,7 @@ export function DryRunDialog({ toolId, trigger }: { toolId: string; trigger: Rea
               <div className="mb-1.5 flex items-center gap-2">
                 <StatusPill tone={result.ok ? "success" : "danger"}>{result.ok ? "OK" : "Failed"}</StatusPill>
                 <span className="text-text-secondary">
-                  {result.status_code ?? "—"} · {result.duration_ms}ms
+                  {result.status_code ?? EMPTY_VALUE} · {result.duration_ms}ms
                 </span>
               </div>
               <pre tabIndex={0} className="max-h-72 overflow-auto font-mono break-all whitespace-pre-wrap outline-none focus-visible:ring-2 focus-visible:ring-ring">{result.result}</pre>

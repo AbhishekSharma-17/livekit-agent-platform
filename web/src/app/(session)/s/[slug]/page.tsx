@@ -70,7 +70,7 @@ export async function generateMetadata({
   const { mode } = await searchParams;
   const { agent } = await loadAgent(slug, mode === "test");
   return {
-    title: agent ? `${agent.name} — live session` : "Live session",
+    title: agent ? `${agent.name} · Live session` : "Live session",
     description: agent?.description || undefined,
   };
 }

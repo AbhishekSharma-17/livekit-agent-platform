@@ -432,7 +432,7 @@ describe("delete", () => {
 
     const dialog = await findDialog(/Delete/);
     expect(dialog.getAttribute("role")).toBe("alertdialog");
-    expect(within(dialog).getByText(/sessions are kept for the audit trail/)).toBeTruthy();
+    expect(within(dialog).getByText(/Sessions are kept for the audit trail/)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete agent" }));
     await waitFor(() => expect(server.deleted).toBe(true));
     expect(routerPush).toHaveBeenCalledWith("/console/agents");
@@ -781,7 +781,7 @@ describe("summary rail", () => {
     await ready();
     const rail = screen.getByRole("complementary", { name: "Agent summary" });
     await waitFor(() => expect(within(rail).getByText(/≈ \$0\.0400\/min · estimate/)).toBeTruthy(), { timeout: 3000 });
-    expect(within(rail).getByText(/typically \$0\.0300–\$0\.0500/)).toBeTruthy();
+    expect(within(rail).getByText(/typically \$0\.0300 to \$0\.0500/)).toBeTruthy();
 
     fireEvent.click(within(rail).getByRole("button", { name: /Cost/ }));
     const dialog = await findDialog("Cost estimate");

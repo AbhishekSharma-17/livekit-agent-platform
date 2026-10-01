@@ -11,7 +11,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "LKAP console",
     short_name: "LKAP",
-    description: "LiveKit Agent Platform — configure and run real-time voice + video agents.",
+    description: "LiveKit Agent Platform. Configure and run real-time voice and video agents.",
     start_url: "/console",
     display: "standalone",
     background_color: BROWSER_COLORS.light.background,

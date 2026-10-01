@@ -253,7 +253,7 @@ describe("Test model", () => {
     ]);
     withClient(<Harness kind="llm" initial={CUSTOM_LLM} />);
     await clickTest();
-    expect(await screen.findByText("Too many tests right now — try again in 12 s.")).toBeTruthy();
+    expect(await screen.findByText("Too many tests right now. Try again in 12 s.")).toBeTruthy();
   });
 
   it("a 422 renders the api's message and never the id", async () => {
@@ -430,7 +430,7 @@ describe("id-field issues (R-V4-31; V4-08 moved them to <slot>.fields.<name>)", 
   it("a 32-hex face id shows the value-free warning inline and is not marked invalid", async () => {
     stub("admin", [(req) => (req.url.includes("/catalog") ? { body: catalogResponse([], "avatars") } : undefined)]);
     withClient(<Harness kind="avatar" initial={simli} />);
-    const warning = await screen.findByText(/Check this value: it looks like an API key; if it is the vendor's id, ignore this\./);
+    const warning = await screen.findByText(/Check this value\. It looks like an API key\. If it is the vendor's id, ignore this\./);
     expect(warning.closest('[data-slot="field-warning"]')).not.toBeNull();
     const input = document.getElementById("t-avatar-field-simli_config.face_id") as HTMLInputElement;
     expect(input.getAttribute("aria-invalid")).not.toBe("true");
@@ -440,7 +440,7 @@ describe("id-field issues (R-V4-31; V4-08 moved them to <slot>.fields.<name>)", 
   it("a prefixed key in an id field is an error", async () => {
     stub("admin", [(req) => (req.url.includes("/catalog") ? { body: catalogResponse([], "avatars") } : undefined)]);
     withClient(<Harness kind="avatar" initial={{ ...simli, fields: { "simli_config.face_id": "sk_Zq9WkX7vRt3LmN8pYb2HcJ5d" } }} />);
-    expect(await screen.findByText(/Can't use this value: it looks like an API key, not a model id\./)).toBeTruthy();
+    expect(await screen.findByText(/Can't use this value\. It looks like an API key, not a model id\./)).toBeTruthy();
   });
 
   it("an api issue at pipeline.avatar.fields.<name> lands under that field, and the control carries the path", async () => {

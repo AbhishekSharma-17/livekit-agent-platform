@@ -300,7 +300,7 @@ export function EditorShell({
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title={`Delete “${agent.name}”?`}
-        description="This permanently deletes the agent and its private tools. Agents that have sessions can't be deleted — sessions are kept for the audit trail. Unpublish it instead."
+        description="This permanently deletes the agent and its private tools. Agents that have sessions can't be deleted. Sessions are kept for the audit trail. Unpublish it instead."
         confirmLabel="Delete agent"
         onConfirm={onDelete}
       />

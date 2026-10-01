@@ -85,29 +85,29 @@ describe("Catalog dialog — paging and search", () => {
     const { calls } = stub("admin");
     withClient(<CatalogDialog provider={OPENROUTER} />);
     const dialog = await openDialog();
-    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 1–200 of 458"));
+    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 1 to 200 of 458"));
     expect(calls.find((c) => c.url.includes("/catalog"))?.url).toContain("limit=200");
 
     fireEvent.click(within(dialog).getByRole("button", { name: /Next/ }));
-    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 201–400 of 458"));
+    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 201 to 400 of 458"));
     expect(calls.some((c) => c.url.includes("offset=200"))).toBe(true);
     fireEvent.click(within(dialog).getByRole("button", { name: /Next/ }));
-    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 401–458 of 458"));
+    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 401 to 458 of 458"));
     expect(within(dialog).getByRole("button", { name: /Next/ }).hasAttribute("disabled")).toBe(true);
     fireEvent.click(within(dialog).getByRole("button", { name: /Previous/ }));
-    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 201–400 of 458"));
+    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 201 to 400 of 458"));
   });
 
   it("search asks the api's cached list (`q`, never the vendor) and starts again on page one", async () => {
     const { calls } = stub("admin");
     withClient(<CatalogDialog provider={OPENROUTER} />);
     const dialog = await openDialog();
-    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 1–200 of 458"));
+    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 1 to 200 of 458"));
     fireEvent.click(within(dialog).getByRole("button", { name: /Next/ }));
-    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toContain("201–400"));
+    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toContain("201 to 400"));
 
     fireEvent.change(within(dialog).getByRole("searchbox", { name: /Search the models/ }), { target: { value: "gemini" } });
-    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 1–30 of 30"));
+    await waitFor(() => expect(within(dialog).getByTestId("catalog-range").textContent).toBe("Showing 1 to 30 of 30"));
     expect(within(dialog).getByText("Gemini 0", { selector: "p" })).toBeTruthy();
     expect(within(dialog).queryByText("Model 40")).toBeNull();
     const search = calls.filter((c) => c.url.includes("q=gemini"));

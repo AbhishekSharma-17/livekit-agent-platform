@@ -228,8 +228,8 @@ describe("HttpToolEditorDialog — session values and variables (V6-11)", () => 
 
     fireEvent.click(getByText("Add a binding"));
     // "A card's field" is the default kind for the first row when the agent has a details block.
-    fireEvent.change(getByLabelText("Binding 1 — which part of the result"), { target: { value: "/holder" } });
-    fireEvent.change(getByLabelText("Binding 1 — field key"), { target: { value: "holder" } });
+    fireEvent.change(getByLabelText("Binding 1: which part of the result"), { target: { value: "/holder" } });
+    fireEvent.change(getByLabelText("Binding 1: field key"), { target: { value: "holder" } });
 
     fireEvent.click(getByText("Save tool"));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
@@ -254,7 +254,7 @@ describe("HttpToolEditorDialog — session values and variables (V6-11)", () => 
     // No agent panel loaded — the default kind is "status" (needs nothing further); switch it
     // to "A checklist item" and leave the item id blank to produce an incomplete row.
     fireEvent.click(getByText("Add a binding"));
-    fireEvent.click(getByLabelText("Binding 1 — goes to"));
+    fireEvent.click(getByLabelText("Binding 1: goes to"));
     fireEvent.click(await screen.findByRole("option", { name: "A checklist item" }));
 
     fireEvent.click(getByText("Save tool"));
@@ -262,7 +262,7 @@ describe("HttpToolEditorDialog — session values and variables (V6-11)", () => 
     expect(onSaved).not.toHaveBeenCalled();
 
     // Filling the item id clears the gate and Save goes through.
-    fireEvent.change(getByLabelText("Binding 1 — checklist item id"), { target: { value: "item-1" } });
+    fireEvent.change(getByLabelText("Binding 1: checklist item id"), { target: { value: "item-1" } });
     fireEvent.click(getByText("Save tool"));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
   });

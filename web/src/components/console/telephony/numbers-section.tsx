@@ -57,6 +57,7 @@ import {
   normalizeE164,
   sipEnabled,
 } from "./model";
+import { EMPTY_VALUE } from "@/lib/format";
 
 /**
  * Numbers (V2-17, V4-05): the number → agent map. A number is either typed in
@@ -229,7 +230,7 @@ function NumberCell({ number, query }: { number: PhoneNumberOut; query: string }
 
 function SourceChip({ number, trunks }: { number: PhoneNumberOut; trunks: TrunkOut[] }) {
   if (isHostedNumber(number)) return <Tag>LiveKit</Tag>;
-  return <span className="text-label text-text-secondary">{sourceText(number, trunks) || "—"}</span>;
+  return <span className="text-label text-text-secondary">{sourceText(number, trunks) || EMPTY_VALUE}</span>;
 }
 
 function RoutingCell({ number }: { number: PhoneNumberOut }) {
@@ -354,7 +355,7 @@ function GetNumberSteps() {
         <li>Pick the inbound agent that answers the number.</li>
       </ol>
       <p className="text-caption text-text-secondary">
-        US numbers only, inbound only; the Build plan includes one number and 50 inbound minutes.
+        US numbers only, inbound only. The Build plan includes one number and 50 inbound minutes.
       </p>
     </div>
   );
@@ -367,7 +368,7 @@ export function GetNumberDialog({ open, onOpenChange }: { open: boolean; onOpenC
         <DialogHeader>
           <DialogTitle>Get a LiveKit phone number</DialogTitle>
           <DialogDescription>
-            A number hosted by LiveKit needs no SIP trunk. You buy it in your LiveKit account; this console only reads
+            A number hosted by LiveKit needs no SIP trunk. You buy it in your LiveKit account. This console only reads
             it and routes it.
           </DialogDescription>
         </DialogHeader>
@@ -462,7 +463,7 @@ function DeleteNumberButton({ number }: { number: PhoneNumberOut }) {
         title={`Remove ${number.e164}?`}
         description={
           hosted
-            ? "It is detached from its agent and forgotten here. The number stays in your LiveKit project; manage or give it up in the LiveKit dashboard."
+            ? "It is detached from its agent and forgotten here. The number stays in your LiveKit project. Manage or give it up in the LiveKit dashboard."
             : "Its dispatch rule is deleted and it stops reaching an agent. The trunk keeps the number in its list."
         }
         confirmLabel="Remove number"

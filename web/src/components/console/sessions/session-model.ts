@@ -1,6 +1,6 @@
 import { lifecycleStatus, type StatusTone } from "@/components/shared/status-map";
 import type { SessionOut } from "@/contracts/lkap-contracts";
-import { toMillis } from "@/lib/format";
+import { EMPTY_VALUE, toMillis } from "@/lib/format";
 
 /**
  * Pure helpers shared by the sessions list and the session detail
@@ -51,7 +51,7 @@ export function channelLabel(channel: string | null | undefined): string | null 
 }
 
 export function pipelineModeLabel(mode: string | null | undefined): string {
-  if (!mode) return "—";
+  if (!mode) return EMPTY_VALUE;
   return PIPELINE_MODE_LABEL[mode as SessionOut["pipeline_mode"]] ?? mode;
 }
 

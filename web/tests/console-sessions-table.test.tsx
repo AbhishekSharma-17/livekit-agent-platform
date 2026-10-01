@@ -260,9 +260,9 @@ describe("SessionsTable — columns, links, pagination", () => {
     expect(table().getByText("Phone (inbound)")).toBeTruthy();
     expect(table().getByText("Realtime")).toBeTruthy();
     expect(table().getByText("12")).toBeTruthy();
-    // Never started → "—" duration.
+    // Never started → "None" duration.
     const neverRow = table().getByText("room-never").closest("tr") as HTMLElement;
-    expect(within(neverRow).getAllByText("—").length).toBeGreaterThanOrEqual(2);
+    expect(within(neverRow).getAllByText("None").length).toBeGreaterThanOrEqual(2);
     const link = table().getAllByRole("link")[0];
     expect(link.getAttribute("href")).toBe("/console/sessions/abc");
   });
@@ -276,14 +276,14 @@ describe("SessionsTable — columns, links, pagination", () => {
 
     expect(await (await loadedTable()).findByText("room-0")).toBeTruthy();
     expect(table().queryByText("room-25")).toBeNull();
-    expect(screen.getByText("1–25 of 30")).toBeTruthy();
+    expect(screen.getByText("1 to 25 of 30")).toBeTruthy();
     expect(screen.getByText("Page 1 of 2")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(table().getByText("room-29")).toBeTruthy();
     expect(table().queryByText("room-0")).toBeNull();
-    expect(screen.getByText("26–30 of 30")).toBeTruthy();
+    expect(screen.getByText("26 to 30 of 30")).toBeTruthy();
     expect(routerReplace).toHaveBeenLastCalledWith("/console/sessions?page=2", { scroll: false });
   });
 
@@ -535,12 +535,12 @@ describe("SessionsTable — export CSV and post-call field columns (V5-34)", () 
     fireEvent.click(screen.getByRole("option", { name: "Claim type" }));
     const header = table().getByText("Claim type");
     expect(header).toBeTruthy();
-    // Not in the (not yet extended) list payload — the column renders honestly as "—",
+    // Not in the (not yet extended) list payload — the column renders honestly as "None",
     // in the cell right under the new header (never "Not mentioned", reserved for a value
     // the api actually returned as `null`).
     const columnIndex = Array.from(header.closest("tr")?.children ?? []).indexOf(header.closest("th")!);
     const bodyRow = table().getAllByRole("row")[1];
-    expect(bodyRow.children[columnIndex]?.textContent).toBe("—");
+    expect(bodyRow.children[columnIndex]?.textContent).toBe("None");
   });
 });
 

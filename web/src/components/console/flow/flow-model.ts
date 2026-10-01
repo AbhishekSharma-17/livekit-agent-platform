@@ -129,7 +129,7 @@ export function toolArgumentIssues(text: string): string[] {
       continue;
     }
     if (namespace === "ctx" && !(CTX_PLACEHOLDERS as readonly string[]).includes(name)) {
-      issues.push(`'${whole}' is not a session value; use one of: ${CTX_PLACEHOLDERS.join(", ")}`);
+      issues.push(`'${whole}' is not a session value. Use one of: ${CTX_PLACEHOLDERS.join(", ")}`);
     } else if (namespace === "var" && !VARIABLE_NAME_PATTERN.test(name)) {
       issues.push(`'${whole}' is not a variable name (lowercase letters, digits and _)`);
     }
@@ -349,7 +349,7 @@ export function flowDraftIssues(flow: FlowDraft): FlowIssue[] {
         error(`flow.edges[${j}]`, "Assign this path to an outcome (Found, Nothing found or Failed) in the tool step.");
       }
     } else if (!edge.condition?.trim()) {
-      warning(`flow.edges[${j}].condition`, "Describe when to take this path — the model reads it.");
+      warning(`flow.edges[${j}].condition`, "Describe when to take this path. The model reads it.");
     }
   });
 
@@ -373,7 +373,7 @@ export function flowDraftIssues(flow: FlowDraft): FlowIssue[] {
     flow.nodes.forEach((node, i) => {
       const kind = kindOf(node);
       if (kind !== "start" && !UNCONNECTABLE_KINDS.includes(kind) && !reachable.has(node.id)) {
-        error(`flow.nodes[${i}]`, "Not reachable from the start node — connect it.");
+        error(`flow.nodes[${i}]`, "Not reachable from the start node. Connect it.");
       }
     });
   }

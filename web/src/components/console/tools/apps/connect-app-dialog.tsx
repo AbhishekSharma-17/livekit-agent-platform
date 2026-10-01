@@ -31,7 +31,7 @@ import type { AuthOption, ConnectMethod, SubjectKind } from "@/components/consol
 import type { AppAuthField, ToolkitOut } from "@/contracts/lkap-contracts";
 
 const METHOD_LABEL: Record<ConnectMethod, string> = {
-  managed: "Managed — one click",
+  managed: "Managed (one click)",
   custom_oauth: "Your own OAuth app",
   api_key: "API key",
   none: "No sign-in needed",
@@ -217,7 +217,7 @@ export function ConnectAppDialog({ toolkit, trigger, open: openProp, onOpenChang
           <DialogDescription id="connect-app-description">
             {isAddingAccount
               ? `Sign in with the account you want to add. If the wrong account is preselected, sign out of ${toolkit.name} in your browser or use a private window.`
-              : `Agents can use ${toolkit.name} once it's connected — pick actions for them in Actions afterwards.`}
+              : `Agents can use ${toolkit.name} once it's connected. Pick actions for them in Actions afterwards.`}
           </DialogDescription>
         </DialogHeader>
 

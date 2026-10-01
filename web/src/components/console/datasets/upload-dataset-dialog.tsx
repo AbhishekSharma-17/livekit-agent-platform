@@ -107,7 +107,7 @@ export function UploadDatasetDialog({ variant = "primary" }: { variant?: "primar
       const headers = await sniffDatasetFileColumns(picked);
       setColumns(headers.map((header) => ({ name: header, matchOn: false, type: "string" })));
       if (headers.length === 0) {
-        setFileError("Couldn't read this file's columns — check it has a header row.");
+        setFileError("Couldn't read this file's columns. Check it has a header row.");
       }
     } finally {
       setSniffing(false);
@@ -164,7 +164,7 @@ export function UploadDatasetDialog({ variant = "primary" }: { variant?: "primar
           <DialogHeader>
             <DialogTitle>Upload a lookup table</DialogTitle>
             <DialogDescription id={`${uid}-description`}>
-              A .csv, .tsv or .json file, at most {DATASET_UPLOAD_MAX_MB} MB. Nothing in a cell is ever run — it&rsquo;s read as
+              A .csv, .tsv or .json file, at most {DATASET_UPLOAD_MAX_MB} MB. Nothing in a cell is ever run. It&rsquo;s read as
               plain text.
             </DialogDescription>
           </DialogHeader>
@@ -230,7 +230,7 @@ export function UploadDatasetDialog({ variant = "primary" }: { variant?: "primar
                       </label>
                       {column.matchOn ? (
                         <Select value={column.type} onValueChange={(next) => setType(column.name, next as DatasetKeyType)}>
-                          <SelectTrigger className="w-40 shrink-0 max-sm:w-full" aria-label={`${column.name} — type`}>
+                          <SelectTrigger className="w-40 shrink-0 max-sm:w-full" aria-label={`${column.name}: type`}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>

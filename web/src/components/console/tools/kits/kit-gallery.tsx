@@ -49,7 +49,7 @@ export function KitGallery({ agent }: { agent: AgentOut }) {
   const visible = kits.filter((kit) => matchesQuery([kit.name, kit.summary, ...kitNeeds(kit)], query));
 
   return (
-    <Section id="tools-kits" title="Kits" description="A whole job in one step — tools, panel and instructions together.">
+    <Section id="tools-kits" title="Kits" description="A whole job in one step: tools, panel and instructions together.">
       <SectionRow>
         {kitsQuery.isLoading ? (
           <LoadingRegion label="Loading kits" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

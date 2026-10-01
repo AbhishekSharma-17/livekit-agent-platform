@@ -206,7 +206,7 @@ export function HttpToolEditorDialog({
     }
 
     if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(draft.name)) {
-      nextErrors.name = "Use letters, numbers or underscore; start with a letter or underscore.";
+      nextErrors.name = "Use letters, numbers or underscore. Start with a letter or underscore.";
     }
 
     const allowedHosts = draft.allowed_hosts
@@ -214,7 +214,7 @@ export function HttpToolEditorDialog({
       .map((h) => h.trim())
       .filter(Boolean);
     if (allowedHosts.length === 0) {
-      nextErrors.allowed_hosts = "Required — an empty list blocks every call.";
+      nextErrors.allowed_hosts = "Required. An empty list blocks every call.";
     }
 
     if (draft.silent_reply && isNonBlocking(draft.execution.mode)) {
@@ -436,7 +436,7 @@ export function HttpToolEditorDialog({
               <Field
                 label="Headers"
                 htmlFor={`${uid}-headers`}
-                hint={"JSON. " + neverOfferedHint("headers — they may carry secrets") + " Use {{ secret.NAME }} instead."}
+                hint={"JSON. " + neverOfferedHint("headers (they may carry secrets)") + " Use {{ secret.NAME }} instead."}
                 error={errors.headersJson}
               >
                 <Textarea

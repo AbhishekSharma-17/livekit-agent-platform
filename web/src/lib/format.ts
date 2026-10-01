@@ -57,13 +57,20 @@ function calendarParts(date: Date, timeZone?: string): { day: number; month: num
 }
 
 /**
+ * What a cell, stat or field shows when it has no value (an unknown cost, a call
+ * that never started, an unset name). One constant so the console says it the
+ * same way everywhere. The house copy style has no em dash (UI-R2b).
+ */
+export const EMPTY_VALUE = "None";
+
+/**
  * "19 Sep, 03:04" (adds the year when it isn't the current year). Month
  * abbreviations are fixed English three-letter forms (ICU's en-GB "Sept"
  * would otherwise vary by runtime).
  */
 export function formatDateTime(ts: string | number, options: DateFormatOptions = {}): string {
   const date = toDate(ts);
-  if (!date) return "—";
+  if (!date) return EMPTY_VALUE;
   const { seconds = false, timeZone } = options;
   const { day, month, year } = calendarParts(date, timeZone);
   const currentYear = calendarParts(new Date(), timeZone).year;
@@ -74,7 +81,7 @@ export function formatDateTime(ts: string | number, options: DateFormatOptions =
 /** "03:04" (or "03:04:05" with `seconds`). */
 export function formatTime(ts: string | number, options: DateFormatOptions = {}): string {
   const date = toDate(ts);
-  if (!date) return "—";
+  if (!date) return EMPTY_VALUE;
   const { seconds = false, timeZone } = options;
   return new Intl.DateTimeFormat(LOCALE, {
     hour: "2-digit",
@@ -90,7 +97,7 @@ export function formatTime(ts: string | number, options: DateFormatOptions = {})
  * Sub-second durations round down to "0s".
  */
 export function formatDuration(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) return "—";
+  if (!Number.isFinite(ms) || ms < 0) return EMPTY_VALUE;
   const totalSeconds = Math.floor(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -102,7 +109,7 @@ export function formatDuration(ms: number): string {
 
 /** "0 B", "512 B", "1.5 KB", "3.2 MB", "1.1 GB" (binary units, 1 decimal ≥ 1 KB). */
 export function formatBytes(n: number): string {
-  if (!Number.isFinite(n) || n < 0) return "—";
+  if (!Number.isFinite(n) || n < 0) return EMPTY_VALUE;
   const units = ["B", "KB", "MB", "GB", "TB"];
   let value = n;
   let unit = 0;
@@ -131,7 +138,7 @@ export function formatRelative(
   options: DateFormatOptions = {},
 ): string {
   const ms = toMillis(ts);
-  if (Number.isNaN(ms)) return "—";
+  if (Number.isNaN(ms)) return EMPTY_VALUE;
   const diff = now - ms;
   const future = diff < 0;
   const abs = Math.abs(diff);

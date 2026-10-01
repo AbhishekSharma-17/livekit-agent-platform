@@ -130,7 +130,7 @@ export function CatalogDialog({ provider }: { provider: ProviderOut }) {
           <DialogDescription>
             {provider.default_credential_id
               ? "Listed with this provider's default key."
-              : "No default key set — showing the saved or built-in list."}
+              : "No default key set. Showing the saved or built-in list."}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="gap-3">
@@ -142,7 +142,7 @@ export function CatalogDialog({ provider }: { provider: ProviderOut }) {
             aria-label={`Search the ${kind}`}
           />
           <p className="text-caption text-text-secondary tabular-nums" aria-live="polite" data-testid="catalog-range">
-            {busy ? "Loading…" : total === 0 ? (q ? "Nothing matches." : "") : `Showing ${from}–${to} of ${total}`}
+            {busy ? "Loading…" : total === 0 ? (q ? "Nothing matches." : "") : `Showing ${from} to ${to} of ${total}`}
           </p>
           {busy ? (
             <SkeletonRows label="Loading the catalog" rows={4} rowClassName="h-12" />

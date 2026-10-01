@@ -79,7 +79,7 @@ export function SessionCapabilities() {
         <SectionRow>
           <Alert variant="warning">
             <AlertDescription>
-              The selected language model can&apos;t see images; camera and screen share still reach the panel, but
+              The selected language model can&apos;t see images. Camera and screen share still reach the panel, but
               per-turn vision and &quot;Describe current frame&quot; stay off.{" "}
               <Button
                 type="button"

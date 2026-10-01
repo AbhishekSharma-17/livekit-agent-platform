@@ -55,7 +55,7 @@ export function TestChatDialog({
         <DialogHeader>
           <DialogTitle>Test chat</DialogTitle>
           <DialogDescription>
-            {agent.name} — text only, no audio. Edit a past message or replay a reply, using its saved
+            {agent.name} · text only, no audio. Edit a past message or replay a reply, using its saved
             configuration.
           </DialogDescription>
         </DialogHeader>

@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { driverSentence, formatUsd } from "@/components/console/lib/cost-hooks";
 import type { CostDriver, CostLine } from "@/contracts/lkap-contracts";
 import type { SessionTabProps } from "@/components/console/sessions/detail/types";
+import { EMPTY_VALUE } from "@/lib/format";
 
 /**
  * Cost tab (docs/v2/UI_UX_SPEC-V2-AMENDMENTS.md §2.4, extended by V4-16 per
@@ -22,7 +23,7 @@ import type { SessionTabProps } from "@/components/console/sessions/detail/types
 function costCell(line: CostLine): string {
   if (line.note) return line.note;
   const formatted = formatUsd(line.cost_usd);
-  return formatted ?? "—";
+  return formatted ?? EMPTY_VALUE;
 }
 
 /** This line's estimated cost, joined from `cost.drivers` on (provider_id, model, unit). */
@@ -37,7 +38,7 @@ function estimatedCellFor(line: CostLine, drivers: CostDriver[]): string {
 
 function varianceText(variance: string | number | null | undefined, pct: number | null | undefined): string {
   const usd = formatUsd(typeof variance === "string" ? Math.abs(Number(variance)) : variance != null ? Math.abs(variance) : null);
-  if (usd === null) return "—";
+  if (usd === null) return EMPTY_VALUE;
   const sign = Number(variance) >= 0 ? "+" : "−";
   const pctText = pct != null ? ` (${pct >= 0 ? "+" : ""}${pct.toFixed(0)}%)` : "";
   return `${sign}${usd}${pctText}`;
@@ -75,7 +76,7 @@ export function CostTab({ session }: SessionTabProps) {
     <div className="space-y-4">
       <StatGrid>
         <StatCard label="Estimated" value={formatUsd(cost.estimated_usd) ?? "no estimate"} hint="Snapshot when the call started" />
-        <StatCard label="Actual" value={formatUsd(cost.total_usd) ?? "—"} hint="From the call's final usage" />
+        <StatCard label="Actual" value={formatUsd(cost.total_usd) ?? EMPTY_VALUE} hint="From the call's final usage" />
         {cost.estimated_usd != null && cost.total_usd != null ? (
           <StatCard
             label="Difference"
@@ -83,10 +84,10 @@ export function CostTab({ session }: SessionTabProps) {
             hint={varianceHint(cost.variance_usd)}
           />
         ) : (
-          <StatCard label="Difference" value="—" hint="Needs both figures" />
+          <StatCard label="Difference" value={EMPTY_VALUE} hint="Needs both figures" />
         )}
         {cost.reconciled_usd != null ? (
-          <StatCard label="Vendor charged" value={formatUsd(cost.reconciled_usd) ?? "—"} hint="Reconciled with the vendor" />
+          <StatCard label="Vendor charged" value={formatUsd(cost.reconciled_usd) ?? EMPTY_VALUE} hint="Reconciled with the vendor" />
         ) : null}
       </StatGrid>
 
@@ -108,18 +109,18 @@ export function CostTab({ session }: SessionTabProps) {
             {lines.map((line, index) => (
               <TableRow key={`${line.provider_id}-${line.unit}-${index}`}>
                 <TableCell className="font-medium text-foreground">{line.provider_id}</TableCell>
-                <TableCell className="text-text-secondary">{line.model ?? "—"}</TableCell>
+                <TableCell className="text-text-secondary">{line.model ?? EMPTY_VALUE}</TableCell>
                 <TableCell className="text-text-secondary">{line.unit}</TableCell>
                 <TableCell numeric>{String(line.quantity)}</TableCell>
                 <TableCell numeric className="text-text-secondary">
-                  {line.unit_price_usd != null ? (formatUsd(line.unit_price_usd) ?? "—") : "—"}
+                  {line.unit_price_usd != null ? (formatUsd(line.unit_price_usd) ?? EMPTY_VALUE) : EMPTY_VALUE}
                 </TableCell>
                 <TableCell numeric className="text-text-secondary">
                   {estimatedCellFor(line, drivers)}
                 </TableCell>
                 {hasVendorCharge ? (
                   <TableCell numeric className="text-text-secondary">
-                    {line.vendor_usd != null ? (formatUsd(line.vendor_usd) ?? "—") : "—"}
+                    {line.vendor_usd != null ? (formatUsd(line.vendor_usd) ?? EMPTY_VALUE) : EMPTY_VALUE}
                   </TableCell>
                 ) : null}
                 <TableCell numeric>{costCell(line)}</TableCell>
@@ -132,7 +133,7 @@ export function CostTab({ session }: SessionTabProps) {
                 Total
               </TableCell>
               <TableCell numeric className="font-medium text-foreground">
-                {formatUsd(cost.total_usd) ?? "—"}
+                {formatUsd(cost.total_usd) ?? EMPTY_VALUE}
               </TableCell>
             </TableRow>
           </TableFooter>

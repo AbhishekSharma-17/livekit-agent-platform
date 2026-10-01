@@ -154,7 +154,7 @@ export function DatasetToolEditorDialog({
 
     const nextErrors: DraftErrors = {};
     if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(draft.name)) {
-      nextErrors.name = "Use letters, numbers or underscore; start with a letter or underscore.";
+      nextErrors.name = "Use letters, numbers or underscore. Start with a letter or underscore.";
     }
     if (!draft.datasetId) {
       nextErrors.dataset = "Choose a lookup table.";
@@ -224,7 +224,7 @@ export function DatasetToolEditorDialog({
           <DialogHeader>
             <DialogTitle>{tool ? "Edit lookup tool" : "New lookup tool"}</DialogTitle>
             <DialogDescription id={`${uid}-description`}>
-              Looks rows up in one of the workspace&rsquo;s lookup tables. Read-only — nothing is ever written back.
+              Looks rows up in one of the workspace&rsquo;s lookup tables. Read-only. Nothing is ever written back.
             </DialogDescription>
           </DialogHeader>
 
@@ -282,7 +282,7 @@ export function DatasetToolEditorDialog({
                 </Select>
                 {readyDatasets.length === 0 ? (
                   <p className="mt-1 text-label text-text-secondary">
-                    No lookup tables ready yet — add one under Lookup tables.
+                    No lookup tables ready yet. Add one under Lookup tables.
                   </p>
                 ) : null}
               </Field>
@@ -361,7 +361,7 @@ export function DatasetToolEditorDialog({
               />
               <PinnedArgumentsEditor
                 title="Fixed values"
-                description="Fix a match-on column's value so the model never supplies it — e.g. {{ ctx.caller_phone }} for a caller-number lookup."
+                description="Fix a match-on column's value so the model never supplies it (e.g. {{ ctx.caller_phone }} for a caller-number lookup)."
                 emptyLabel="No fixed values yet."
                 values={draft.pinnedArguments}
                 onChange={(pinnedArguments) => setDraft((d) => ({ ...d, pinnedArguments }))}

@@ -21,6 +21,7 @@ import { LoadingRegion } from "@/components/shared/loading-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import type { ComplianceOut } from "@/contracts/lkap-contracts";
+import { EMPTY_VALUE } from "@/lib/format";
 
 /** `lkap_contracts.compliance.Jurisdiction` — the generated TS inlines it, so it's not an exported name. */
 type Jurisdiction = NonNullable<ComplianceOut["settings"]["jurisdiction"]>;
@@ -50,7 +51,7 @@ function useCompliance(workspaceId: string | undefined) {
 
 const TITLE = "Consent and disclosure";
 const DESCRIPTION =
-  "What callers are told, and asked, before an agent records them or tells them it's an AI. A starting point, not legal advice: have counsel review every wording for where you operate.";
+  "What callers are told, and asked, before an agent records them or tells them it's an AI. A starting point, not legal advice. Have counsel review every wording for where you operate.";
 
 export function ComplianceTab() {
   const { workspace: membership, isLoading: meLoading } = useActiveWorkspace();
@@ -241,9 +242,9 @@ function ComplianceReadOnly({ compliance }: { compliance: ComplianceOut }) {
       <SectionRow>
         <MetaList
           items={[
-            { term: "Jurisdiction", value: preset?.label ?? jurisdiction ?? "—" },
-            { term: "AI disclosure line", value: disclosure ?? "—" },
-            { term: "Recording question", value: recording ?? "—" },
+            { term: "Jurisdiction", value: preset?.label ?? jurisdiction ?? EMPTY_VALUE },
+            { term: "AI disclosure line", value: disclosure ?? EMPTY_VALUE },
+            { term: "Recording question", value: recording ?? EMPTY_VALUE },
             {
               term: "Counsel review",
               value: compliance.settings.counsel_note_ack ? "Acknowledged" : "Not acknowledged yet",

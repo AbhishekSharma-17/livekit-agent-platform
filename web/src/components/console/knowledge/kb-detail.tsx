@@ -22,7 +22,7 @@ import { DescriptionList } from "@/components/shared/description-list";
 import { LoadingRegion } from "@/components/shared/loading-state";
 import { Page, PageHeader } from "@/components/shared/page-header";
 import { Tag } from "@/components/shared/tag";
-import { pluralize } from "@/lib/format";
+import { EMPTY_VALUE, pluralize } from "@/lib/format";
 import { ConsoleBreadcrumbs } from "@/components/console/shell/breadcrumb-context";
 import type { KbOut } from "@/contracts/lkap-contracts";
 
@@ -111,7 +111,7 @@ export function KbDetail({ kbId }: { kbId: string }) {
                   isExternal
                     ? [
                         { term: "Documents", detail: pluralize(kb.document_count, "document", "documents"), mono: true },
-                        { term: "Partition", detail: kb.external_ref ?? "—", mono: true },
+                        { term: "Partition", detail: kb.external_ref ?? EMPTY_VALUE, mono: true },
                         { term: "Stored in", detail: storedIn },
                       ]
                     : [

@@ -147,7 +147,7 @@ export function TrunksSection({ connections }: { connections: ConnectionOut[] })
             description={
               connections.some(sipEnabled)
                 ? "Add an inbound trunk to receive calls, or an outbound trunk to place them."
-                : "No connection has SIP enabled. Test a connection first; self-hosted servers need the LiveKit SIP service."
+                : "No connection has SIP enabled. Test a connection first. Self-hosted servers need the LiveKit SIP service."
             }
           />
         </SectionRow>
@@ -303,7 +303,7 @@ export function TrunkDialog({
             <DialogDescription>
               {direction === "inbound"
                 ? "Point your carrier's SIP trunk at the LiveKit project's SIP URI, then list the numbers it delivers."
-                : "Calls leave through your carrier's SIP address; the first number is the caller ID."}
+                : "Calls leave through your carrier's SIP address. The first number is the caller ID."}
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="gap-4">
@@ -357,7 +357,7 @@ export function TrunkDialog({
               htmlFor="trunk-address"
               hint={
                 direction !== "outbound"
-                  ? "IP, CIDR or host; empty accepts any"
+                  ? "IP, CIDR or host. Empty accepts any"
                   : provider === "telnyx"
                     ? "Telnyx: sip.telnyx.com"
                     : "e.g. example.pstn.twilio.com"
@@ -384,7 +384,7 @@ export function TrunkDialog({
                   onChange={(e) => setUsername(e.target.value)}
                 />
               </Field>
-              <Field label="Password" htmlFor="trunk-password" optional hint="Stored encrypted; never shown again">
+              <Field label="Password" htmlFor="trunk-password" optional hint="Stored encrypted. Never shown again">
                 <Input
                   id="trunk-password"
                   type="password"

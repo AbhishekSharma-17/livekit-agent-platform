@@ -515,7 +515,7 @@ describe("PanelComposer", () => {
       config: { instructions: "Hi", pipeline: { mode: "cascaded" }, panel: { panel_id: "insurance_notebook", layout: "wide", blocks: [] } },
     });
     render(<Harness agent={a} />);
-    expect(await screen.findByText(/blocks the panel exposes: Claim documents/)).toBeTruthy();
+    expect(await screen.findByText(/Blocks the panel exposes: Claim documents/)).toBeTruthy();
   });
 
   it("gates the block tool switches on matching blocks and writes builtin_disabled", () => {

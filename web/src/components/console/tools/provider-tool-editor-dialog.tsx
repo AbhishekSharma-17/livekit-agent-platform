@@ -227,7 +227,7 @@ export function ProviderToolEditorDialog({
 
     const nextErrors: DraftErrors = {};
     if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(draft.name)) {
-      nextErrors.name = "Use letters, numbers or underscore; start with a letter or underscore.";
+      nextErrors.name = "Use letters, numbers or underscore. Start with a letter or underscore.";
     }
     if (draft.silent_reply && isNonBlocking(draft.execution.mode)) {
       nextErrors.execution = silentReplyConflictMessage(draft.name);
@@ -295,7 +295,7 @@ export function ProviderToolEditorDialog({
             <DialogTitle>Edit App action</DialogTitle>
             <DialogDescription id={`${uid}-description`}>
               One action of a connected app, run as a tool. The name, description and how it runs are yours to
-              change; the app and the action itself aren&rsquo;t.
+              change. The app and the action itself aren&rsquo;t.
             </DialogDescription>
           </DialogHeader>
 
@@ -397,7 +397,7 @@ export function ProviderToolEditorDialog({
                           Required
                         </StatusPill>
                       ) : null}
-                      {field.description ? <span className="text-caption text-text-secondary">— {field.description}</span> : null}
+                      {field.description ? <span className="text-caption text-text-secondary">{field.description}</span> : null}
                     </li>
                   ))}
                 </ul>

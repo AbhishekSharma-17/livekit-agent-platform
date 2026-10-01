@@ -114,7 +114,7 @@ export function EdgeForm({
         <Field
           label="Priority"
           htmlFor={`${id}-priority`}
-          hint="Higher goes first; the first path is also the fallback when a step's max turns run out."
+          hint="Higher goes first. The first path is also the fallback when a step's max turns run out."
         >
           <Input
             id={`${id}-priority`}

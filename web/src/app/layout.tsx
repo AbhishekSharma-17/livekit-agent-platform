@@ -15,7 +15,7 @@ const inter = Inter({ subsets: ["latin"], display: "swap", variable: "--font-int
 export const metadata: Metadata = {
   title: "LKAP",
   description:
-    "LiveKit Agent Platform — configure and run real-time voice + video agents.",
+    "LiveKit Agent Platform. Configure and run real-time voice and video agents.",
 };
 
 /** Browser chrome follows the page background in each theme (literal mirrors of the tokens). */

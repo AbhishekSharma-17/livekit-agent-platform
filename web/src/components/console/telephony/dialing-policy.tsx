@@ -68,7 +68,7 @@ export function policyFromSettings(settings: Record<string, unknown> | undefined
 
 /** Shown while `+1` is the only NANP prefix listed (R-V2-29). */
 export const PLUS_ONE_WARNING =
-  "+1 covers the US and Canada; Caribbean and territory numbers need their own prefix, for example +1876.";
+  "+1 covers the US and Canada. Caribbean and territory numbers need their own prefix, for example +1876.";
 
 /** Whether `+1` is listed with no longer `+1…` prefix beside it. */
 export function plusOneAlone(prefixes: string[]): boolean {
@@ -212,7 +212,7 @@ export function DialingPolicyCard() {
           <Field
             label="Allowed SIP hosts"
             htmlFor={ids.hosts}
-            hint="Hosts a sip: address may reach, for example your PBX. To transfer to a phone number use +E.164; use sip: only for a listed SIP host (a sip: address with a number needs its host listed too)."
+            hint="Hosts a sip: address may reach, for example your PBX. To transfer to a phone number use +E.164. Use sip: only for a listed SIP host (a sip: address with a number needs its host listed too)."
             error={errors.hosts}
             optional
           >

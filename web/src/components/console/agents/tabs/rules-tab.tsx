@@ -260,7 +260,7 @@ function ConditionEditor({
   const activeRows = rows ?? [];
   return (
     <div className="flex flex-col gap-2">
-      {activeRows.length === 0 ? <p className="text-xs text-text-secondary">No conditions yet — this rule never fires.</p> : null}
+      {activeRows.length === 0 ? <p className="text-xs text-text-secondary">No conditions yet. This rule never fires.</p> : null}
       {activeRows.map((row, index) => (
         <ConditionRowEditor
           key={index}

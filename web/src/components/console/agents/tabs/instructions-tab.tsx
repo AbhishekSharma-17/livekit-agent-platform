@@ -127,7 +127,7 @@ export function InstructionsTab({ agent }: { agent: AgentOut }) {
           </div>
           {hasModeInstructions ? (
             <p className="text-label text-text-secondary">
-              This pack has mode-specific instructions; the realtime variant is applied automatically.
+              This pack has mode-specific instructions. The realtime variant is applied automatically.
             </p>
           ) : null}
         </SectionRow>

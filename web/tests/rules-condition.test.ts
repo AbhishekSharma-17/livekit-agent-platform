@@ -55,7 +55,7 @@ describe("parseCondition — invalid, with the api's exact wording", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(ConditionError);
       expect((error as ConditionError).message).toMatch(
-        /'banana' is not something a condition understands; name a variable as var\.<name> and put text in quotes \(at character 1\)/,
+        /'banana' is not something a condition understands\. Name a variable as var\.<name> and put text in quotes \(at character 1\)/,
       );
     }
   });
@@ -99,7 +99,7 @@ describe("parseCondition — invalid, with the api's exact wording", () => {
 
   it("a catastrophic (nested-repeat) pattern is refused, not just slow", () => {
     expect(() => parseCondition("var.x matches /(a+)+/")).toThrow(
-      "this pattern repeats a group that already repeats, which can take very long; simplify it",
+      "this pattern repeats a group that already repeats, which can take very long. Simplify it",
     );
     expect(() => parseCondition("var.x matches /(\\w*\\s)*/")).toThrow(/repeats a group that already repeats/);
   });
@@ -185,7 +185,7 @@ describe("parseCondition — invalid, with the api's exact wording", () => {
 describe("conditionIssue / conditionErrorMessage — the api's exact prefix", () => {
   it("prefixes with 'the condition does not read: ' and a 1-based position", () => {
     expect(conditionIssue("banana")).toBe(
-      "the condition does not read: 'banana' is not something a condition understands; name a variable as var.<name> and put text in quotes (at character 1)",
+      "the condition does not read: 'banana' is not something a condition understands. Name a variable as var.<name> and put text in quotes (at character 1)",
     );
   });
 

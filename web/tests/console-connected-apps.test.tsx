@@ -658,17 +658,17 @@ function tableScope() {
 }
 
 describe("ToolsList — read-only rows for Composio-origin entries (docs/v5/_asks.md #16)", () => {
-  it("shows an App chip (with the connected app's name) for a provider tool, instead of HTTP/MCP", async () => {
+  it("shows App (with the connected app's name) for a provider tool, instead of HTTP/MCP", async () => {
     stubToolsListApi([providerTool()]);
     renderToolsList();
 
     await waitFor(() => expect(tableScope().getByText("googlecalendar_find_free_slots")).toBeTruthy());
     const table = tableScope();
     expect(table.getByText("App")).toBeTruthy();
-    // The chip's identity mark carries the *connected app's* name (resolved via
+    // The Kind cell names the *connected app* for assistive tech (resolved via
     // `connection_id` against the connections list, docs/v5/_asks.md #16),
-    // not just the tool's own raw `toolkit` slug.
-    expect(table.getByRole("img", { name: "Google Calendar" })).toBeTruthy();
+    // not just the tool's own raw `toolkit` slug. Its mark leads the row only.
+    expect(table.getByText(", Google Calendar").className).toContain("sr-only");
     expect(table.queryByText("MCP")).toBeNull();
   });
 

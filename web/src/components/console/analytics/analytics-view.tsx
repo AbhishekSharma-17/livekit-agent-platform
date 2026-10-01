@@ -33,6 +33,7 @@ import { RefreshButton } from "@/components/console/sessions/refresh-button";
 import { formatUsd } from "@/components/console/sessions/session-model";
 import { api } from "@/lib/api";
 import type { AnalyticsBucket, AnalyticsDriver, AnalyticsSummary, ProviderSpec } from "@/contracts/lkap-contracts";
+import { EMPTY_VALUE } from "@/lib/format";
 
 /**
  * `/console/analytics?range=&tab=` — the analytics archetype
@@ -218,7 +219,7 @@ function OverviewTab({ summary, onSeeAll }: { summary: AnalyticsSummary; onSeeAl
           hint={sessions > 0 ? "Test calls and public calls" : "No calls in this range"}
         />
         <StatCard label="Minutes" icon={ClockIcon} value={minutesText(summary.minutes)} hint="Time on calls" />
-        <StatCard label="Cost" icon={CoinsIcon} value={formatUsd(summary.cost_usd) ?? "—"} hint="At list prices" />
+        <StatCard label="Cost" icon={CoinsIcon} value={formatUsd(summary.cost_usd) ?? EMPTY_VALUE} hint="At list prices" />
         <StatCard
           label="Estimated"
           icon={WalletIcon}
@@ -234,7 +235,7 @@ function OverviewTab({ summary, onSeeAll }: { summary: AnalyticsSummary; onSeeAl
       </StatGrid>
 
       <Alert tone="info" title="Costs are estimates">
-        Actual cost is computed from usage at list prices; OpenRouter sessions use live prices and can be reconciled with
+        Actual cost is computed from usage at list prices. OpenRouter sessions use live prices and can be reconciled with
         OpenRouter&apos;s charge. Vendor invoices may differ (included minutes, volume tiers, taxes).
       </Alert>
 
@@ -534,7 +535,7 @@ function TopDriversTable({ drivers, providers }: { drivers: AnalyticsDriver[]; p
         </span>
       ),
     },
-    { id: "cost", header: "Cost", align: "end", cell: (d) => <span className="tabular-nums">{formatUsd(d.cost_usd) ?? "—"}</span> },
+    { id: "cost", header: "Cost", align: "end", cell: (d) => <span className="tabular-nums">{formatUsd(d.cost_usd) ?? EMPTY_VALUE}</span> },
     {
       id: "share",
       header: "Share",
@@ -558,7 +559,7 @@ function TopDriversTable({ drivers, providers }: { drivers: AnalyticsDriver[]; p
       renderCard={(d) => (
         <div className="flex items-center justify-between gap-2">
           <span className="font-medium text-foreground">{driverLabel(d, providers)}</span>
-          <span className="text-caption tabular-nums text-text-secondary">{formatUsd(d.cost_usd) ?? "—"}</span>
+          <span className="text-caption tabular-nums text-text-secondary">{formatUsd(d.cost_usd) ?? EMPTY_VALUE}</span>
         </div>
       )}
     />
@@ -589,7 +590,7 @@ function ByAgentTable({ buckets }: { buckets: AnalyticsBucket[] }) {
     },
     { id: "sessions", header: "Sessions", align: "end", cell: (b) => <span className="tabular-nums">{b.sessions}</span> },
     { id: "minutes", header: "Minutes", align: "end", cell: (b) => <span className="tabular-nums">{minutesText(b.minutes)}</span> },
-    { id: "cost", header: "Cost", align: "end", cell: (b) => <span className="tabular-nums">{formatUsd(b.cost_usd) ?? "—"}</span> },
+    { id: "cost", header: "Cost", align: "end", cell: (b) => <span className="tabular-nums">{formatUsd(b.cost_usd) ?? EMPTY_VALUE}</span> },
     { id: "failed", header: "Failed", align: "end", cell: (b) => <span className="tabular-nums text-text-secondary">{b.failed}</span> },
   ];
 
@@ -605,7 +606,7 @@ function ByAgentTable({ buckets }: { buckets: AnalyticsBucket[] }) {
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 flex-col gap-1">
               <span className="truncate font-medium text-foreground">{b.key}</span>
-              <span className="text-caption tabular-nums text-text-secondary">{`${b.sessions} sessions · ${formatUsd(b.cost_usd) ?? "—"}`}</span>
+              <span className="text-caption tabular-nums text-text-secondary">{`${b.sessions} sessions · ${formatUsd(b.cost_usd) ?? EMPTY_VALUE}`}</span>
             </div>
             <StatusPill tone={health.tone} size="sm">
               {health.label}

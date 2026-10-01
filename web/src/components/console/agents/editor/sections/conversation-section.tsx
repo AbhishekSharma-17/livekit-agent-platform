@@ -51,14 +51,14 @@ import { LanguagesCard } from "./languages-card";
 type ConversationPreset = NonNullable<AgentEditorForm["config"]["pipeline"]["conversation_preset"]>;
 
 const PRESETS: { value: ConversationPreset; label: string; description: string }[] = [
-  { value: "patient", label: "Patient", description: "Waits longer before replying — good for callers who pause to think." },
+  { value: "patient", label: "Patient", description: "Waits longer before replying, good for callers who pause to think." },
   { value: "balanced", label: "Balanced", description: "A good default for most calls." },
   { value: "snappy", label: "Snappy", description: "Replies quickly, and can start before the caller finishes talking." },
   {
     value: "fast",
     label: "Fast",
     description:
-      "Suggested for voice calls. Replies as soon as the caller finishes and prepares the answer early; with Deepgram Flux, Flux decides when they have finished.",
+      "Suggested for voice calls. Replies as soon as the caller finishes and prepares the answer early. With Deepgram Flux, Flux decides when they have finished.",
   },
   { value: "telephony", label: "Phone call", description: "Tuned for phone audio, where a short silence is easy to mishear." },
   { value: "custom", label: "Custom", description: "Set your own timing below." },
@@ -316,7 +316,7 @@ export function ConversationSection() {
             inline
             label="Reply while the caller is still finishing"
             htmlFor="preemptive-generation"
-            hint="Starts preparing the reply early — usually faster, but the draft is sometimes thrown away."
+            hint="Starts preparing the reply early. Usually faster, but the draft is sometimes thrown away."
           >
             <Controller
               control={control}
@@ -365,7 +365,7 @@ export function ConversationSection() {
                 </RadioGroup>
                 <p className="text-label leading-[1.125rem] text-text-secondary">
                   Leave unset to let the connection decide. Speech-to-text decides only with a model that can, such as
-                  Deepgram Flux; with any other model the turn detector still runs.
+                  Deepgram Flux. With any other model the turn detector still runs.
                 </p>
               </div>
             )}
@@ -436,7 +436,7 @@ export function ConversationSection() {
               <Field
                 label="Background sound"
                 htmlFor="voice-ambient-sound"
-                hint="Plays quietly for the whole call. Needs audio output; not used in text chat."
+                hint="Plays quietly for the whole call. Needs audio output. Not used in text chat."
               >
                 <Select value={field.value ?? "none"} onValueChange={field.onChange}>
                   <SelectTrigger id="voice-ambient-sound" className="w-full sm:w-72" data-issue-path="voice.ambient_sound">
@@ -505,16 +505,16 @@ export function ConversationSection() {
               <Field
                 label="Read tools run"
                 htmlFor="tools-execution-default"
-                hint="Applies to GET web requests, search knowledge and describe current frame — anything that changes something always waits for the agent to reply."
+                hint="Applies to GET web requests, search knowledge and describe current frame. Anything that changes something always waits for the agent to reply."
               >
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger id="tools-execution-default" className="w-full sm:w-72" data-issue-path="tools.execution_default">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="blocking">Blocking — wait for the result</SelectItem>
-                    <SelectItem value="auto">Automatic — background only if slow</SelectItem>
-                    <SelectItem value="background">In the background — always</SelectItem>
+                    <SelectItem value="blocking">Blocking (wait for the result)</SelectItem>
+                    <SelectItem value="auto">Automatic (background only if slow)</SelectItem>
+                    <SelectItem value="background">In the background (always)</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
@@ -527,8 +527,8 @@ export function ConversationSection() {
             // focus; `tabIndex` here only makes this local hint focusable too,
             // in case it is ever reached directly.
             <p data-issue-path="tools.max_tool_steps" tabIndex={-1} className="text-label text-warning-text">
-              Read tools run &quot;{executionDefault}&quot; and each announcement spends a tool step; with {maxToolSteps} tool
-              steps a chain of lookups can run out of steps — use {MIN_TOOL_STEPS_FOR_BACKGROUND} or more (Tools tab →
+              Read tools run &quot;{executionDefault}&quot; and each announcement spends a tool step. With {maxToolSteps} tool
+              steps a chain of lookups can run out of steps, so use {MIN_TOOL_STEPS_FOR_BACKGROUND} or more (Tools tab →
               Advanced → Tool steps per turn).
             </p>
           ) : null}
@@ -685,7 +685,7 @@ function AdvancedTurnHandling() {
               htmlFor="turn-handling-json"
               optional
               error={error}
-              hint="Keys this form doesn't recognize are kept as-is; editing this also switches the preset above to Custom."
+              hint="Keys this form doesn't recognize are kept as-is. Editing this also switches the preset above to Custom."
             >
               <Textarea
                 id="turn-handling-json"

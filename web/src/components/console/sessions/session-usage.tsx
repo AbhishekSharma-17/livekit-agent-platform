@@ -1,4 +1,5 @@
 import * as React from "react";
+import { EMPTY_VALUE } from "@/lib/format";
 
 /**
  * `SessionOut.usage` rendered as label/value pairs, never raw JSON
@@ -44,7 +45,7 @@ export function formatUsageValue(value: unknown): string {
     return Number.isInteger(value) ? value.toLocaleString("en-US") : value.toFixed(2);
   }
   if (typeof value === "string" || typeof value === "boolean") return String(value);
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return EMPTY_VALUE;
   return JSON.stringify(value);
 }
 

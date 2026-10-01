@@ -95,7 +95,7 @@ describe("UploadDatasetDialog", () => {
     expect(screen.getByText("phone")).toBeTruthy();
     expect(screen.getByText("name")).toBeTruthy();
     // A type picker only shows once a column is checked (it's meaningless otherwise).
-    expect(screen.queryByLabelText("policy_number — type")).toBeNull();
+    expect(screen.queryByLabelText("policy_number: type")).toBeNull();
   });
 
   it("uploads only the checked columns, typed, as key_columns", async () => {

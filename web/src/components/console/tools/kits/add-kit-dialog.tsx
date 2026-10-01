@@ -231,7 +231,7 @@ export function AddKitDialog({
       setOpen(false);
       toast.success(
         (result.tool_ids ?? []).length > 0
-          ? `"${kit.name}" added — ${(result.tool_ids ?? []).length === 1 ? "1 tool" : `${(result.tool_ids ?? []).length} tools`} attached.`
+          ? `"${kit.name}" added. ${(result.tool_ids ?? []).length === 1 ? "1 tool" : `${(result.tool_ids ?? []).length} tools`} attached.`
           : `"${kit.name}" added.`,
       );
     } catch (error) {
@@ -274,7 +274,7 @@ export function AddKitDialog({
               label="Name prefix"
               htmlFor={`${uid}-prefix`}
               required
-              hint="Names what this kit adds — add it twice under two prefixes for two of the same job."
+              hint="Names what this kit adds. Add it twice under two prefixes for two of the same job."
               error={!prefixValid ? "Lower case letters, digits and _, starting with a letter." : undefined}
             >
               <Input
@@ -321,7 +321,7 @@ export function AddKitDialog({
             ) : null}
             {requires.secretNames.length > 0 && !draft.credentialId ? (
               <p className="text-label text-text-secondary">
-                Added without a key; the calls run unauthenticated until an admin adds one.
+                Added without a key. The calls run unauthenticated until an admin adds one.
               </p>
             ) : null}
 
@@ -342,7 +342,7 @@ export function AddKitDialog({
                   </Select>
                   {connections.length === 0 ? (
                     <p className="mt-1 text-label text-text-secondary">
-                      No connected app of this kind yet — connect one under Tools → Apps.
+                      No connected app of this kind yet. Connect one under Tools → Apps.
                     </p>
                   ) : null}
                 </Field>
@@ -419,7 +419,7 @@ export function AddKitDialog({
             ) : null}
 
             {kit.test_case ? (
-              <Field inline label="Add the sample conversation" htmlFor={`${uid}-test-case`} hint="Tries the kit offline — its tools answer from fakes.">
+              <Field inline label="Add the sample conversation" htmlFor={`${uid}-test-case`} hint="Tries the kit offline. Its tools answer from fakes.">
                 <Switch
                   id={`${uid}-test-case`}
                   checked={draft.addTestCase}
@@ -445,7 +445,7 @@ export function AddKitDialog({
                             {STATUS_LABEL[change.status]}
                           </StatusPill>
                           <span className="font-medium text-foreground">{change.label || change.id}</span>
-                          {change.note ? <span className="text-text-secondary">— {change.note}</span> : null}
+                          {change.note ? <span className="text-text-secondary">{change.note}</span> : null}
                         </li>
                       ))}
                     </ul>

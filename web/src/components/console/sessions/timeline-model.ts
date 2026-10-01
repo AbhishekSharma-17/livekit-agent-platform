@@ -1,5 +1,5 @@
 import type { SessionDetailOut, SessionEventOut } from "@/contracts/lkap-contracts";
-import { toMillis } from "@/lib/format";
+import { EMPTY_VALUE, toMillis } from "@/lib/format";
 
 import type { EventPayload, TimelineEventKind, TimelineFilter } from "./detail/types";
 import { sessionOriginMs } from "./session-model";
@@ -326,7 +326,7 @@ export function buildTimeline(
 
 /** "03:07" from the session start ("−00:02" before it, "1:02:03" past an hour). */
 export function formatOffset(at: number, origin: number): string {
-  if (!Number.isFinite(at) || !Number.isFinite(origin)) return "—";
+  if (!Number.isFinite(at) || !Number.isFinite(origin)) return EMPTY_VALUE;
   const diff = at - origin;
   const sign = diff < 0 ? "−" : "";
   const total = Math.floor(Math.abs(diff) / 1000);

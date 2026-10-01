@@ -529,7 +529,7 @@ export const qaFieldSchema = z
     name: z
       .string()
       .min(1, "Name is required")
-      .regex(/^[a-z][a-z0-9_]{0,47}$/, "Lowercase letters, numbers, underscore; must start with a letter"),
+      .regex(/^[a-z][a-z0-9_]{0,47}$/, "Lowercase letters, numbers and underscore. Must start with a letter"),
     type: z.enum(["text", "number", "boolean", "select"]),
     options: z.array(z.string().min(1, "Can't be empty").max(100, "100 characters max")).max(50, "50 max"),
     description: z.string().max(500, "500 characters max"),
@@ -1085,7 +1085,7 @@ export const httpToolFormSchema = z.object({
   name: z
     .string()
     .min(1, "Name is required")
-    .regex(/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/, "Use letters, numbers, underscore; start with a letter or underscore"),
+    .regex(/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/, "Use letters, numbers or underscore. Start with a letter or underscore"),
   description: z.string().min(1, "Description is required"),
   parametersJson: z.string().refine((value) => {
     try {

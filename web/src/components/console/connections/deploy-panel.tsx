@@ -69,7 +69,7 @@ function WorkerEnvSnippets({ connectionId }: { connectionId: string }) {
     <Section
       id="connection-deploy"
       title="Worker settings"
-      description="What an external worker for this connection needs. Secrets are <NAME> placeholders: the api never returns them."
+      description="What an external worker for this connection needs. Secrets are <NAME> placeholders. The api never returns them."
     >
       <SectionRow className="flex flex-col gap-3">
         <SegmentedControl<WorkerEnvFormat> label="Snippet format" value={format} onValueChange={setFormat} options={FORMATS} />

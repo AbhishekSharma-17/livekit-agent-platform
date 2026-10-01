@@ -17,7 +17,7 @@ const EMBEDDER_LABELS: Record<string, string> = {
 
 const EMBEDDER_HELP: Record<string, string> = {
   "fastembed-embedding": "Runs on the api, no key needed. The first upload downloads a small local model.",
-  "openai-embedding": "Uses your OpenAI credential; embeddings are sent to OpenAI.",
+  "openai-embedding": "Uses your OpenAI credential, and embeddings are sent to OpenAI.",
 };
 
 export function embedderLabel(embedderId: string): string {

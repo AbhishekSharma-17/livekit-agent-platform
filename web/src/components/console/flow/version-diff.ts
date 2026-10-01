@@ -8,6 +8,8 @@
  * `_t: "a"` with `"i"` (new index) and `"_i"` (old index) keys.
  */
 
+import { EMPTY_VALUE } from "@/lib/format";
+
 export type DiffKind = "added" | "removed" | "changed" | "moved";
 
 export interface DiffRow {
@@ -55,7 +57,7 @@ export function diffRows(delta: unknown, base = ""): DiffRow[] {
 
 /** Compact one-line rendering of a value for a diff row. */
 export function preview(value: unknown, max = 140): string {
-  if (value === undefined) return "—";
+  if (value === undefined) return EMPTY_VALUE;
   const text = typeof value === "string" ? value : JSON.stringify(value);
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }

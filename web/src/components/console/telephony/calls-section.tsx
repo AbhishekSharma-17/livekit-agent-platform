@@ -14,7 +14,7 @@ import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared
 import { Section, SectionRow } from "@/components/shared/section";
 import { StatusPill } from "@/components/shared/status-chip";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
-import { formatDuration } from "@/lib/format";
+import { EMPTY_VALUE, formatDuration } from "@/lib/format";
 import type { CallOut } from "@/contracts/lkap-contracts";
 
 import { CallControls } from "./call-controls";
@@ -22,7 +22,7 @@ import { useCalls } from "./hooks";
 import { AMD_RESULT_LABEL, callStatusMeta, TRANSFER_MODE_LABEL } from "./model";
 
 function duration(call: CallOut): string {
-  if (!call.answered_at) return "—";
+  if (!call.answered_at) return EMPTY_VALUE;
   const end = call.ended_at ? Date.parse(call.ended_at) : Date.now();
   return formatDuration(end - Date.parse(call.answered_at));
 }
@@ -94,7 +94,7 @@ export function CallsSection() {
       header: "When",
       cell: (call) => {
         const at = call.started_at ?? call.answered_at ?? call.ended_at;
-        return at ? <RelativeTime iso={at} className="text-label" /> : <span className="text-label">—</span>;
+        return at ? <RelativeTime iso={at} className="text-label" /> : <span className="text-label">{EMPTY_VALUE}</span>;
       },
     },
     {
@@ -150,7 +150,7 @@ export function CallsSection() {
             Open
           </Link>
         ) : (
-          <span className="text-label text-text-secondary">—</span>
+          <span className="text-label text-text-secondary">{EMPTY_VALUE}</span>
         ),
     },
     {
@@ -178,7 +178,7 @@ export function CallsSection() {
             variant="plain"
             icon={PhoneIcon}
             title="No calls yet"
-            description="Inbound calls appear once a number is routed; place one from an agent's Test call menu."
+            description="Inbound calls appear once a number is routed. Place one from an agent's Test call menu."
           />
         </SectionRow>
       ) : (

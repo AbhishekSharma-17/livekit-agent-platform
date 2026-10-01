@@ -509,9 +509,9 @@ export function KnowledgeConnectionTestResultView({
       ) : null}
       {result.dimension_expected !== null && result.dimension_expected !== undefined ? (
         <p className="text-caption text-text-secondary">
-          Vector width: knowledge bases here use {result.dimension_expected}
+          Vector width. Knowledge bases here use {result.dimension_expected}
           {result.dimension_found !== null && result.dimension_found !== undefined
-            ? `, this target holds ${result.dimension_found}`
+            ? `, and this target holds ${result.dimension_found}`
             : ""}
           .
         </p>

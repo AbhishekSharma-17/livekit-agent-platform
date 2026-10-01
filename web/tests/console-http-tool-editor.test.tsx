@@ -263,7 +263,7 @@ describe("HttpToolEditorDialog", () => {
 
       await waitFor(() =>
         expect(
-          screen.getAllByText(/has silent_reply on, which would swallow its background announcement; turn one of them off/),
+          screen.getAllByText(/has silent_reply on, which would swallow its background announcement\. Turn one of them off/),
         ).not.toHaveLength(0),
       );
       expect(saveButton.disabled).toBe(true);
@@ -277,7 +277,7 @@ describe("HttpToolEditorDialog", () => {
       fireEvent.click(getByText("New HTTP tool"));
 
       // The draft defaults to POST, so the note is visible without touching the Method field.
-      expect(getByText("This tool changes something; the agent asks before running it twice.")).toBeTruthy();
+      expect(getByText("This tool changes something. The agent asks before running it twice.")).toBeTruthy();
     });
   });
 });

@@ -106,7 +106,7 @@ export function ConnectionChip({ agent: _agent }: { agent: AgentOut }) {
           className="inline-flex min-w-0 items-center gap-1 rounded-sm text-xs font-medium text-warning-text underline-offset-3 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Icon as={TriangleAlertIcon} size="sm" />
-          <span className="truncate">No worker is running for “{current.name}” — calls won&apos;t be answered. Start one</span>
+          <span className="truncate">No worker is running for “{current.name}”. Calls won&apos;t be answered. Start one</span>
         </Link>
       ) : null}
     </>

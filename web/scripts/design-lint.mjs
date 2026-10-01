@@ -16,6 +16,9 @@
  *   legacy-token     a legacy token alias (text-muted-foreground, bg-brand-soft,
  *                    shadow-md, rounded-xl, var(--danger) …) instead of its spec
  *                    name (docs/ui/AUDIT.md section 4, decision O2)
+ *   em-dash          an em dash (or \u2014, &mdash;, &#8212;) in JSX text or a
+ *                    string literal: the house copy style has none (UI-R2b).
+ *                    Comments are blanked first, so only code-side text counts
  *
  * Today's violations are listed, per rule and per file, in
  * `scripts/design-lint-allowlist.txt`. The allowlist is a ratchet: a file may
@@ -51,6 +54,8 @@ export const RULES = {
   "css-comment": "CSS comment hazard: a stray */ or a nested /* can break the stylesheet",
   "token-bridge": "@theme bridge points at an undefined token",
   "legacy-token": "Legacy token alias: use the spec name (docs/ui/AUDIT.md section 4)",
+  "em-dash":
+    "Em dash in user-facing text: split the sentence, or use a comma, parentheses, \"to\" for a range, or \" · \" in a meta line (EMPTY_VALUE in src/lib/format.ts for an empty cell)",
 };
 
 /**
@@ -191,6 +196,7 @@ export function buildMatchers(colourNames) {
         "g",
       ),
     },
+    { rule: "em-dash", re: /\u2014|\\u2014|&mdash;|&#8212;|&#x2014;/gi },
   ];
 }
 

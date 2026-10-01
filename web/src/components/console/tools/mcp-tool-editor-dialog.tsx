@@ -524,7 +524,7 @@ export function McpToolEditorDialog({
                 label="Start from a preset"
                 htmlFor={`${uid}-preset`}
                 optional
-                hint="Fills in a known server's address and auth options — edit anything below before saving."
+                hint="Fills in a known server's address and auth options. Edit anything below before saving."
               >
                 <SearchableSelect
                   id={`${uid}-preset`}
@@ -579,7 +579,7 @@ export function McpToolEditorDialog({
                 <Field
                   label="Headers"
                   htmlFor={`${uid}-headers`}
-                  hint={"JSON; values may use {{ secret.NAME }}."}
+                  hint={"JSON. Values may use {{ secret.NAME }}."}
                   error={errors.headersJson}
                 >
                   <Textarea
@@ -604,7 +604,7 @@ export function McpToolEditorDialog({
                 {draft.authKind === "own_oauth" ? (
                   <>
                     <p className="rounded bg-muted px-3 py-2 text-label text-text-secondary">
-                      Register an app with the vendor first — its return address is the api&apos;s own address
+                      Register an app with the vendor first. Its return address is the api&apos;s own address
                       (not this console&apos;s) with <code className="font-mono">/v1/oauth/mcp/callback</code>{" "}
                       appended. Once you have a client id, save this server, then use Sign in below.
                     </p>
@@ -667,7 +667,7 @@ export function McpToolEditorDialog({
               label="Allowed tools"
               htmlFor={`${uid}-allowed-tools`}
               optional
-              hint="Comma-separated; blank allows every tool the server exposes."
+              hint="Comma-separated. Blank allows every tool the server exposes."
             >
               <Input
                 id={`${uid}-allowed-tools`}
@@ -720,7 +720,7 @@ export function McpToolEditorDialog({
             <div className="flex flex-col gap-2 border-t border-border pt-4">
               <h3 className="text-body font-semibold text-foreground">How each tool runs</h3>
               <p className="text-label text-text-secondary">
-                Left at &quot;Blocking&quot; until edited — an MCP tool never runs in the background unless it opts in here.
+                Left at &quot;Blocking&quot; until edited. An MCP tool never runs in the background unless it opts in here.
               </p>
               {optionRows.length > 0 ? (
                 <Table>
@@ -743,7 +743,7 @@ export function McpToolEditorDialog({
                           <TableCell className="font-mono text-caption">{name}</TableCell>
                           <TableCell>
                             <Select value={option.mode} onValueChange={(v) => patchOption(name, { mode: v as McpOptionDraft["mode"] })}>
-                              <SelectTrigger id={`${rowId}-mode`} className="w-36" aria-label={`${name} — runs`}>
+                              <SelectTrigger id={`${rowId}-mode`} className="w-36" aria-label={`${name}: runs`}>
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -755,13 +755,13 @@ export function McpToolEditorDialog({
                           </TableCell>
                           <TableCell>
                             <Switch
-                              aria-label={`${name} — announce progress`}
+                              aria-label={`${name}: announce progress`}
                               checked={option.report_progress}
                               onCheckedChange={(v) => patchOption(name, { report_progress: v })}
                             />
                             {option.mode !== "blocking" && !option.report_progress ? (
                               <p className="mt-1 max-w-40 text-caption leading-tight text-warning-text">
-                                No progress messages — the agent won&apos;t announce this tool.
+                                No progress messages. The agent won&apos;t announce this tool.
                               </p>
                             ) : null}
                           </TableCell>
@@ -770,7 +770,7 @@ export function McpToolEditorDialog({
                               value={option.cancellable}
                               onValueChange={(v) => patchOption(name, { cancellable: v as CancellableDraft })}
                             >
-                              <SelectTrigger id={`${rowId}-cancellable`} className="w-28" aria-label={`${name} — can be cancelled`}>
+                              <SelectTrigger id={`${rowId}-cancellable`} className="w-28" aria-label={`${name}: can be cancelled`}>
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -785,7 +785,7 @@ export function McpToolEditorDialog({
                               value={option.on_duplicate}
                               onValueChange={(v) => patchOption(name, { on_duplicate: v as DuplicateDraft })}
                             >
-                              <SelectTrigger id={`${rowId}-duplicate`} className="w-40" aria-label={`${name} — repeated calls`}>
+                              <SelectTrigger id={`${rowId}-duplicate`} className="w-40" aria-label={`${name}: repeated calls`}>
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -817,7 +817,7 @@ export function McpToolEditorDialog({
                 </Table>
               ) : (
                 <p className="text-label text-text-secondary">
-                  No tool names yet — add one below, or list them in &quot;Allowed tools&quot; above.
+                  No tool names yet. Add one below, or list them in &quot;Allowed tools&quot; above.
                 </p>
               )}
               {allowedToolNames.length === 0 ? (
@@ -872,7 +872,7 @@ export function McpToolEditorDialog({
                               className={`size-3.5 shrink-0 transition-transform duration-(--duration-fast) ${openContextRow === name ? "rotate-90" : ""}`}
                               aria-hidden="true"
                             />
-                            {`Tool context — ${name}`}
+                            {`Tool context: ${name}`}
                           </Button>
                         </CollapsibleTrigger>
                         <CollapsibleContent className="flex flex-col gap-5 rounded border border-border p-3 pt-4">

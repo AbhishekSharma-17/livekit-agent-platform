@@ -260,7 +260,7 @@ describe("connection notes", () => {
   it("says what a self-hosted connection lacks, in plain words", () => {
     const byId = Object.fromEntries(connectionNotes(DGX).map((note) => [note.id, note]));
     expect(byId.inference.text).toBe("Cloud only. Here each part needs its own provider key.");
-    expect(byId.turn_detector.text).toBe("LiveKit hosts it on Cloud only; here it runs inside the agent's worker.");
+    expect(byId.turn_detector.text).toBe("LiveKit hosts it on Cloud only. Here it runs inside the agent's worker.");
     expect(byId.noise.text).toBe("LiveKit's own noise filter is Cloud only.");
     expect(byId.phone.text).toBe("Phone calls use LiveKit Cloud telephony, which this connection doesn't have.");
     expect(Object.values(byId).every((note) => note.limited)).toBe(true);

@@ -30,6 +30,7 @@ import type { Assumption, EstimateLine } from "@/contracts/lkap-contracts";
 import { cn } from "@/lib/utils";
 
 import { useDraftCostEstimate } from "./editor-context";
+import { EMPTY_VALUE } from "@/lib/format";
 
 /**
  * The Cost estimate dialog (docs/v4/COSTS.md §5 item 1, R-V4-50): everything
@@ -48,7 +49,7 @@ export interface CostEstimateDialogProps {
 }
 
 function bandText(low: string, mid: string, high: string): string {
-  return `≈ ${mid}/min · estimate — typically ${low}–${high}`;
+  return `≈ ${mid}/min · estimate, typically ${low} to ${high}`;
 }
 
 export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogProps) {
@@ -76,7 +77,7 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
           <DialogHeader>
             <DialogTitle>Cost estimate</DialogTitle>
             <DialogDescription>
-              What this agent is estimated to cost, at list prices — an estimate, not a bill.
+              What this agent is estimated to cost, at list prices. An estimate, not a bill.
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="flex flex-col gap-6">
@@ -87,19 +88,20 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
                 <>
                   <p className="text-stat font-semibold tracking-[-0.02em] text-foreground tabular-nums">
                     {bandText(
-                      formatUsd(perMinute.low) ?? "—",
-                      formatUsd(perMinute.mid) ?? "—",
-                      formatUsd(perMinute.high) ?? "—",
+                      formatUsd(perMinute.low) ?? EMPTY_VALUE,
+                      formatUsd(perMinute.mid) ?? EMPTY_VALUE,
+                      formatUsd(perMinute.high) ?? EMPTY_VALUE,
                     )}
                   </p>
                   {perSession ? (
                     <p className="text-caption text-text-secondary tabular-nums">
-                      ≈ {formatUsd(perSession.mid) ?? "—"} for a {estimate?.session_minutes ?? "—"}-minute call · estimate
+                      ≈ {formatUsd(perSession.mid) ?? EMPTY_VALUE}{" "}
+                      {typeof estimate?.session_minutes === "number" ? `for a ${estimate.session_minutes}-minute call` : "per call"} · estimate
                     </p>
                   ) : null}
                 </>
               ) : (
-                <p className="text-sm text-text-secondary">Nothing here is priced yet — add a price below to see a figure.</p>
+                <p className="text-sm text-text-secondary">Nothing here is priced yet. Add a price below to see a figure.</p>
               )}
             </section>
 
@@ -117,7 +119,7 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
               </div>
               {!canUseAverages ? (
                 <p className="text-xs text-text-secondary">
-                  Needs 10 ended sessions with usage — this workspace has {sessionsSampled}.
+                  Needs 10 ended sessions with usage. This workspace has {sessionsSampled}.
                 </p>
               ) : settings.workspaceAverages ? (
                 <p className="text-xs text-text-secondary">
@@ -173,7 +175,7 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
                   {unpricedLines.map((line, index) => (
                     <li key={`${line.slot}-${index}`} className="flex items-center justify-between gap-2 text-label">
                       <span className="text-text-secondary">
-                        {line.label} — {line.provider_id}
+                        {line.label} · {line.provider_id}
                         {line.model ? ` ${line.model}` : ""}
                       </span>
                       {isAdmin ? (
@@ -192,7 +194,7 @@ export function CostEstimateDialog({ open, onOpenChange }: CostEstimateDialogPro
             ) : null}
 
             <p className="text-xs text-pretty text-text-secondary">
-              List prices at the entry tier as of {estimate?.as_of ?? "today"}; OpenRouter prices live; your own
+              List prices at the entry tier as of {estimate?.as_of ?? "today"}, OpenRouter prices live, and your own
               prices where set. Estimates are not bills.
             </p>
           </DialogBody>

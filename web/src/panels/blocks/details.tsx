@@ -21,7 +21,7 @@ import { StatusChip } from "@/components/shared/status-chip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { DetailsItem, DetailsBlockState } from "@/contracts/lkap-contracts";
-import { formatDateTime, formatRelative } from "@/lib/format";
+import { EMPTY_VALUE, formatDateTime, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MAX_CALLER_EDIT_CHARS, useCallerEdit } from "@/panels/blocks/notebook/use-caller-edit";
 import { PanelEmpty } from "@/panels/generic/blocks";
@@ -64,7 +64,7 @@ export function formatDetailsValue(item: Pick<DetailsItem, "value" | "type">): s
       if (typeof value === "string" && BARE_DATE.test(value)) return value;
       if (typeof value !== "string" && typeof value !== "number") return String(value);
       const text = formatDateTime(value);
-      return text === "—" ? String(value) : text;
+      return text === EMPTY_VALUE ? String(value) : text;
     }
     default:
       return String(value);

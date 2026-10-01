@@ -230,7 +230,7 @@ function tokenize(text: string): Token[] {
     if (wordMatch) {
       if (!KEYWORDS.has(wordMatch[0].toLowerCase())) {
         throw new ConditionError(
-          `'${wordMatch[0]}' is not something a condition understands; name a variable as var.<name> and put text in quotes`,
+          `'${wordMatch[0]}' is not something a condition understands. Name a variable as var.<name> and put text in quotes`,
           index,
         );
       }
@@ -819,7 +819,7 @@ function checkPattern(pattern: string, position: number): void {
   }
   if (hasNestedRepeat(pattern)) {
     throw new ConditionError(
-      "this pattern repeats a group that already repeats, which can take very long; simplify it",
+      "this pattern repeats a group that already repeats, which can take very long. Simplify it",
       position,
     );
   }

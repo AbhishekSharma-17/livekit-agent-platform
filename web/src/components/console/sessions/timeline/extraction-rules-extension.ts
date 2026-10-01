@@ -92,7 +92,7 @@ export const EXTRACTION_RULES_EVENT_KINDS: TimelineEventKind[] = [
       if (skipped.length > 0) parts.push(`couldn't: ${skipped.join(", ")}`);
       const trigger = typeof payload.trigger === "string" ? payload.trigger : null;
       if (trigger && TRIGGER_LABEL[trigger]) parts.push(TRIGGER_LABEL[trigger]);
-      return parts.length > 0 ? parts.join(" — ") : null;
+      return parts.length > 0 ? parts.join(" · ") : null;
     },
   },
 ];

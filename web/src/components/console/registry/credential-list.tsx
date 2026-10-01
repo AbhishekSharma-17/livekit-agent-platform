@@ -36,7 +36,7 @@ import { useCan } from "@/components/console/shared/permission";
 import { RowsSkeleton } from "@/components/console/registry/rows-skeleton";
 import { EnableComposioDialog } from "@/components/console/tools/apps/enable-composio-dialog";
 import { appsErrorMessage, composioStatusChip, useComposioStatus } from "@/components/console/tools/apps/use-composio";
-import { pluralize } from "@/lib/format";
+import { EMPTY_VALUE, pluralize } from "@/lib/format";
 import { ApiError } from "@/lib/api";
 import type { AgentOut, CredentialOut, ProviderSpec, ToolOut } from "@/contracts/lkap-contracts";
 
@@ -294,7 +294,7 @@ export function CredentialList() {
       <PageHeader
         back={{ href: "/console/providers", label: "Back to providers" }}
         title="Credentials"
-        description="Vendor keys your agents and tools use: encrypted at rest, and only a fingerprint is ever shown."
+        description="Vendor keys your agents and tools use. They are encrypted at rest, and only a fingerprint is ever shown."
         actions={rows.length > 0 ? addButton : undefined}
       />
       {rows.length > 0 && !credentialsQuery.isLoading && !credentialsQuery.isError ? (
@@ -360,7 +360,7 @@ function CredentialIdentity({
  * exactly what made the key look LLM-only.
  */
 function CredentialKind({ spec, registry }: { spec: ProviderSpec | undefined; registry: ProviderSpec[] }) {
-  if (!spec) return <span className="text-label text-text-secondary">—</span>;
+  if (!spec) return <span className="text-label text-text-secondary">{EMPTY_VALUE}</span>;
   const { usedBy } = credentialDisplay(spec, registry);
   if (usedBy.length <= 1) {
     return <span className="text-label text-text-secondary">{KIND_LABEL[spec.kind]}</span>;
@@ -695,8 +695,8 @@ function DeleteCredentialDialog({
                       {agent.name}
                     </Link>
                   </React.Fragment>
-                ))}{" "}
-                — change those agents first.
+                ))}
+                . Change those agents first.
               </p>
             ) : (
               <p>{conflict}</p>

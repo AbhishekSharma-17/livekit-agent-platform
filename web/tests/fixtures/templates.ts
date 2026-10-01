@@ -522,7 +522,7 @@ export const TEMPLATES: TemplatesResponse = {
                 0.0,
                 0.0
               ],
-              "greeting": "Thanks for calling Acme Dental. I can book, move or cancel an appointment — how can I help?",
+              "greeting": "Thanks for calling Acme Dental. I can book, move or cancel an appointment. How can I help?",
               "greeting_mode": "say"
             },
             {
@@ -618,7 +618,7 @@ export const TEMPLATES: TemplatesResponse = {
                 0.0,
                 840.0
               ],
-              "farewell": "No problem — call back any time and we'll find a slot. Goodbye!",
+              "farewell": "No problem. Call back any time and we'll find a slot. Goodbye!",
               "disposition": "not_booked",
               "webhook_event": true
             }
@@ -835,7 +835,7 @@ export const TEMPLATES: TemplatesResponse = {
         "order": 30,
         "pack_id": "generic",
         "instructions": "You are a visual assistant. The caller can turn on their camera or share their screen, and you describe what you see and help with it.\n\n- When the caller mentions something visual and neither the camera nor a screen share is on, ask them to turn on the camera or share the screen.\n- Describe concretely: objects, text, numbers, labels, colours and the state of things (on or off, open or closed, an error or a warning). Keep each description to two or three sentences unless asked for more.\n- Read text aloud exactly when asked, including error messages, model numbers and serial numbers.\n- Call pin_frame with a short caption when the caller says \"keep this\", \"save this\" or \"pin this\", and when something matters: an error message, a serial number, a meter reading, damage.\n- Call push_note for facts worth remembering later in the call (a serial number, a reading, a step the caller already tried).\n- Call describe_current_frame when you need a closer look before answering.\n- Never claim to see something that is not in the frame. If the image is blurry, dark or cut off, say so and ask the caller to move closer or adjust the light.\n- Call set_status with a short word for what you are doing, for example \"looking\" or \"reading\".",
-        "greeting": "Hi! Turn on your camera or share your screen and I'll tell you what I see — or just ask.",
+        "greeting": "Hi! Turn on your camera or share your screen and I'll tell you what I see, or just ask.",
         "pipeline": {
           "mode": "cascaded",
           "stt": {
@@ -1018,7 +1018,7 @@ export const TEMPLATES: TemplatesResponse = {
         "id": "phone_agent",
         "name": "Phone agent",
         "tagline": "Answers a phone number with a keypad menu, takes messages and scores every call.",
-        "description": "A telephony starter: a keypad menu, answers from a small FAQ, takes a message, transfers to a person once you add a destination, and scores every call with QA. Attach a number and a dispatch rule to put it on the phone; until then, try it in the browser or a text chat.",
+        "description": "A telephony starter: a keypad menu, answers from a small FAQ, takes a message, transfers to a person once you add a destination, and scores every call with QA. Attach a number and a dispatch rule to put it on the phone. Until then, try it in the browser or a text chat.",
         "category": "phone",
         "chips": [
           "telephony",
@@ -1394,7 +1394,7 @@ export const TEMPLATES: TemplatesResponse = {
                 0.0,
                 840.0
               ],
-              "farewell": "Perfect — a specialist will email you within one business day to confirm the demo.",
+              "farewell": "Perfect. A specialist will email you within one business day to confirm the demo.",
               "disposition": "qualified",
               "webhook_event": true
             },
@@ -1406,7 +1406,7 @@ export const TEMPLATES: TemplatesResponse = {
                 0.0,
                 980.0
               ],
-              "farewell": "Thanks — I'll send over some material and we can pick this up when the timing is right.",
+              "farewell": "Thanks. I'll send over some material and we can pick this up when the timing is right.",
               "disposition": "nurture",
               "webhook_event": true
             },
@@ -1418,7 +1418,7 @@ export const TEMPLATES: TemplatesResponse = {
                 0.0,
                 1120.0
               ],
-              "rubric_prompt": "Score 1–5: were all qualification questions asked, was the routing decision consistent with the answers, was the tone consultative, did the agent avoid pressure."
+              "rubric_prompt": "Score 1 to 5. Were all qualification questions asked, was the routing decision consistent with the answers, was the tone consultative, did the agent avoid pressure."
             }
           ],
           "edges": [
@@ -1663,7 +1663,7 @@ export const TEMPLATES: TemplatesResponse = {
         "order": 60,
         "pack_id": "generic",
         "instructions": "You run a short customer feedback survey by voice. There are five questions; ask them in this order, one at a time:\n\n1. What is your name?\n2. On a scale of 1 to 5, how satisfied are you with our service overall?\n3. Would you recommend us to a friend or colleague? Yes or no.\n4. What is one thing we should improve?\n5. Is there anything else you'd like to tell us?\n\nHow to run it:\n- Keep it friendly and quick. Acknowledge each answer in a few words.\n- Accept partial answers (\"somewhere around four\" is a 4). If the respondent skips a question, move on.\n- Call set_status with \"in_progress\" when you start.\n- After the last question, call request_form with the fields name, satisfaction (number 1 to 5), recommend (yes or no) and comments, prefilled with the answers, so the respondent can correct them on screen.\n- When the form comes back, call table_append with one row for the Responses table (name, satisfaction, recommend, comments), then set_status \"completed\".\n- Thank the respondent, say goodbye and call end_call.",
-        "greeting": "Hi! This is a two-minute feedback survey — five quick questions. Ready?",
+        "greeting": "Hi! This is a two-minute feedback survey with five quick questions. Ready?",
         "builtin_tools_disabled": [
           "pin_frame",
           "describe_current_frame",

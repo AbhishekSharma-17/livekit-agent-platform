@@ -100,12 +100,12 @@ const LABELS: Record<string, string> = {
 };
 
 const HINTS: Record<string, string> = {
-  id: "Fixed once created — the model's path tools are named after it (go_to_<id>).",
+  id: "Fixed once created. The model's path tools are named after it (go_to_<id>).",
   position: "Drag the node on the canvas to move it.",
   instructions: "What the agent does in this step. Type @ to insert a variable.",
   tools: "Only the agent's own tools can be used in a step.",
   kb_ids:
-    "A step searches what the Global node lists plus what is picked here; when no step lists anything, every step searches all of the agent's knowledge bases.",
+    "A step searches what the Global node lists plus what is picked here. When no step lists anything, every step searches all of the agent's knowledge bases.",
   extract: "Variables filled from the conversation when the call leaves this step.",
   max_turns: "After this many caller turns without moving on, the first path is taken.",
   providers: "Cascaded pipelines only. Same provider as the pipeline (same key) or a provider that needs no key.",
@@ -484,7 +484,7 @@ function KbScopeNote({
     return (
       <p id={id} data-kb-scope="none" className="text-label text-warning-text">
         {isGlobal
-          ? "Adds no knowledge base to the steps; each step searches only its own picks."
+          ? "Adds no knowledge base to the steps. Each step searches only its own picks."
           : "This step searches no knowledge base."}
       </p>
     );

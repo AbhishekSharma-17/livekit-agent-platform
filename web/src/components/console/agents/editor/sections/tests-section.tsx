@@ -147,7 +147,7 @@ export function TestsSection() {
         {isDirty && fields.length > 0 ? (
           <SectionRow>
             <p className="text-label text-warning-text">
-              Save your changes first — a run always plays the last saved version of this agent.
+              Save your changes first. A run always plays the last saved version of this agent.
             </p>
           </SectionRow>
         ) : null}

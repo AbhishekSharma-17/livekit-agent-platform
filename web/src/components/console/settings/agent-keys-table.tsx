@@ -17,11 +17,12 @@ import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "@/comp
 import { RowsSkeleton } from "./settings-card";
 import { AGENT_KEY_CLIENTS, CALLS_WRITE_SCOPE } from "./snippets";
 import { useAgentKeys, useActiveWorkspace, useInvalidateSettings } from "./use-settings-queries";
+import { EMPTY_VALUE } from "@/lib/format";
 
 const CLIENT_LABEL: Record<string, string> = Object.fromEntries(AGENT_KEY_CLIENTS.map((c) => [c.id, c.label]));
 
 function clientLabel(client: string | null): string {
-  if (!client) return "—";
+  if (!client) return EMPTY_VALUE;
   return CLIENT_LABEL[client] ?? client;
 }
 

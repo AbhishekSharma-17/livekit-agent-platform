@@ -15,6 +15,7 @@ import type { AuditOut } from "./api-types";
 import { useRememberedChoice } from "@/components/shared/list-search";
 import { RowsSkeleton } from "./settings-card";
 import { isAgentActivityRow, useActiveWorkspace, useAgentActivityPage, useAgentKeys } from "./use-settings-queries";
+import { EMPTY_VALUE } from "@/lib/format";
 
 const PAGE_SIZE = 100;
 
@@ -97,18 +98,18 @@ export function AgentActivityTable() {
       header: "Key",
       cell: (row) => {
         const key = agentKeys.find((k) => k.id === row.actor_id);
-        return <span className="truncate text-label text-foreground">{key?.name ?? row.actor_id ?? "—"}</span>;
+        return <span className="truncate text-label text-foreground">{key?.name ?? row.actor_id ?? EMPTY_VALUE}</span>;
       },
     },
     {
       id: "client",
       header: "Client",
-      cell: (row) => <span className="text-caption text-text-secondary">{clientPayload(row).name ?? "—"}</span>,
+      cell: (row) => <span className="text-caption text-text-secondary">{clientPayload(row).name ?? EMPTY_VALUE}</span>,
     },
     {
       id: "tool",
       header: "Tool",
-      cell: (row) => <span className="font-mono text-caption text-text-secondary">{clientPayload(row).tool ?? "—"}</span>,
+      cell: (row) => <span className="font-mono text-caption text-text-secondary">{clientPayload(row).tool ?? EMPTY_VALUE}</span>,
     },
     {
       id: "action",
@@ -125,7 +126,7 @@ export function AgentActivityTable() {
       interactive: true,
       cell: (row) => {
         const href = targetHref(row);
-        const label = row.target_id ? `${row.target_type} ${row.target_id.slice(0, 8)}` : row.target_type || "—";
+        const label = row.target_id ? `${row.target_type} ${row.target_id.slice(0, 8)}` : row.target_type || EMPTY_VALUE;
         if (!href) return <span className="text-caption text-text-secondary">{label}</span>;
         return (
           <Link href={href} className="text-caption text-brand underline-offset-[3px] hover:underline">
@@ -195,7 +196,7 @@ export function AgentActivityTable() {
             return (
               <div className="space-y-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-label font-medium text-foreground">{key?.name ?? row.actor_id ?? "—"}</span>
+                  <span className="truncate text-label font-medium text-foreground">{key?.name ?? row.actor_id ?? EMPTY_VALUE}</span>
                   <RelativeTime iso={row.ts} className="shrink-0 text-caption text-text-secondary" />
                 </div>
                 <div className="truncate font-mono text-caption text-text-secondary">{clientPayload(row).tool ?? row.action}</div>

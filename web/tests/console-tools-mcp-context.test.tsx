@@ -89,7 +89,7 @@ describe("McpToolEditorDialog — per-tool context (V6-11)", () => {
     );
     fireEvent.click(getByText("Edit server"));
 
-    fireEvent.click(await screen.findByText("Tool context — lookup_invoice"));
+    fireEvent.click(await screen.findByText("Tool context: lookup_invoice"));
 
     // requires_vars
     fireEvent.change(screen.getByPlaceholderText("policy_no"), { target: { value: "account_id" } });
@@ -103,9 +103,9 @@ describe("McpToolEditorDialog — per-tool context (V6-11)", () => {
 
     // bindings: no agent panel loaded, so the default kind is "status" — switch to "var".
     fireEvent.click(screen.getByText("Add a binding"));
-    fireEvent.click(screen.getByLabelText("Binding 1 — goes to"));
+    fireEvent.click(screen.getByLabelText("Binding 1: goes to"));
     fireEvent.click(await screen.findByRole("option", { name: "A variable" }));
-    fireEvent.change(screen.getByLabelText("Binding 1 — variable name"), { target: { value: "account_email" } });
+    fireEvent.change(screen.getByLabelText("Binding 1: variable name"), { target: { value: "account_email" } });
 
     fireEvent.click(getByText("Save server"));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
@@ -181,12 +181,12 @@ describe("McpToolEditorDialog — per-tool context (V6-11)", () => {
       <McpToolEditorDialog agentId="agent_1" tool={EXISTING_TOOL} secretBagSpec={undefined} onSaved={onSaved} trigger={<button>Edit server</button>} />,
     );
     fireEvent.click(getByText("Edit server"));
-    fireEvent.click(await screen.findByText("Tool context — lookup_invoice"));
+    fireEvent.click(await screen.findByText("Tool context: lookup_invoice"));
 
     fireEvent.change(screen.getByPlaceholderText("argument_name"), { target: { value: "invoice_id" } });
     fireEvent.click(screen.getByRole("button", { name: "Add a fixed value" }));
 
-    const valueInput = screen.getByLabelText("invoice_id — value") as HTMLInputElement;
+    const valueInput = screen.getByLabelText("invoice_id: value") as HTMLInputElement;
     fireEvent.change(valueInput, { target: { value: "INV-1" } });
 
     fireEvent.click(getByText("Save server"));

@@ -57,7 +57,7 @@ export function EmptyState({
         {icon ? <span className="text-text-tertiary">{renderIcon(icon, "md")}</span> : null}
         <p className="min-w-0 flex-1">
           <span className="font-medium text-foreground">{title}</span>
-          {description ? <span> — {description}</span> : null}
+          {description ? <span>. {description}</span> : null}
         </p>
         {action || secondary ? (
           <div className="flex items-center gap-2">

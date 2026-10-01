@@ -313,13 +313,13 @@ export function gatedDifferences(
   if (askedMode !== "cascaded" && gotMode === "cascaded" && pipeline.realtime) {
     const providerId = pipeline.realtime.provider_id;
     notes.push(
-      `Running on LiveKit Inference — add a ${vendorOf(providerId, providers)} key for ${purposeOf(providerId, "realtime voice")}.`,
+      `Running on LiveKit Inference. Add a ${vendorOf(providerId, providers)} key for ${purposeOf(providerId, "realtime voice")}.`,
     );
   }
   if (pipeline.image_gen && !config.pipeline?.image_gen) {
     const providerId = pipeline.image_gen.provider_id;
     notes.push(
-      `Running on LiveKit Inference — add a ${vendorOf(providerId, providers)} key for ${purposeOf(providerId, "image generation")}.`,
+      `Running on LiveKit Inference. Add a ${vendorOf(providerId, providers)} key for ${purposeOf(providerId, "image generation")}.`,
     );
   }
   if (item.template.recording?.enabled && !config.recording?.enabled) {

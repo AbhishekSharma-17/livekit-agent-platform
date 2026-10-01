@@ -186,7 +186,7 @@ export function VersionHistoryBody({ agent, onDone }: { agent: AgentOut; onDone:
         onOpenChange={setConfirming}
         destructive={false}
         title={`Restore version ${selected}?`}
-        description={`Its configuration is validated and saved as version ${agent.config_version + 1}. Nothing is deleted — you can restore the current version the same way.${dirty ? " Unsaved changes in the editor are discarded." : ""}`}
+        description={`Its configuration is validated and saved as version ${agent.config_version + 1}. Nothing is deleted. You can restore the current version the same way.${dirty ? " Unsaved changes in the editor are discarded." : ""}`}
         confirmLabel="Restore"
         busyLabel="Restoring…"
         onConfirm={onRestore}

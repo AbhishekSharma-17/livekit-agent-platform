@@ -11,6 +11,7 @@ import { BLOCK_COMPONENTS, Block, LAZY_BLOCK_TYPES } from "@/panels/blocks";
 import { BLOCK_CATALOG, BLOCK_TYPES, blockStateOf, blockTitle, initialBlockState } from "@/panels/blocks/catalog";
 import { latestSegmentFor, TOPIC_UI_CAPTIONS, useCaptionsStream } from "@/panels/composite/captions-stream";
 import { coerceForm, formFields } from "@/panels/blocks/form";
+import { formatDetailsValue } from "@/panels/blocks/details";
 import { formatCell } from "@/panels/blocks/table";
 import { resolveDocument } from "@/panels/blocks/document";
 import {
@@ -519,6 +520,9 @@ describe("table block", () => {
     expect(formatCell(1450.5, "number")).toBe("1,450.5");
     expect(formatCell(true, "boolean")).toBe("Yes");
     expect(formatCell("2026-09-21", "date")).toBe("2026-09-21");
+    // An unparsable date shows as written, never as the console's empty value.
+    expect(formatCell("next Tuesday", "date")).toBe("next Tuesday");
+    expect(formatDetailsValue({ value: "next Tuesday", type: "date" })).toBe("next Tuesday");
     expect(formatCell(null, "string")).toBe("—");
     expect(formatCell({ a: 1 }, "string")).toBe('{"a":1}');
   });

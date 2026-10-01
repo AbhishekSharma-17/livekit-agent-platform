@@ -280,7 +280,7 @@ export function ActionsDialog({
               <div className="flex items-start gap-2 rounded border border-destructive-border bg-destructive-subtle p-2.5">
                 <Checkbox id="actions-destructive-confirm" checked={confirmDestructive} onCheckedChange={(v) => setConfirmDestructive(v === true)} className="mt-0.5" />
                 <Label htmlFor="actions-destructive-confirm" className="text-label font-normal text-destructive-text">
-                  I understand — one or more picked actions delete, remove or move money.
+                  I understand that one or more picked actions delete, remove or move money.
                 </Label>
               </div>
             ) : null}

@@ -123,7 +123,7 @@ export function StageView({
   const [selfViewLarge, setSelfViewLarge] = useState(false);
   const [videoExpanded, setVideoExpanded] = useState(false);
   const caption = audioBlocked
-    ? "Muted by your browser — tap to enable sound"
+    ? "Muted by your browser. Tap to enable sound"
     : AGENT_STATE_CAPTION[agentState];
   const meterState = toMeterState(agentState);
   const failed = agentState === "failed";

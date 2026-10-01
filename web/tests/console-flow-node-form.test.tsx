@@ -113,7 +113,7 @@ describe("NodeForm knowledge field", () => {
     const field = renderKbField(node(nodes, "ask"), kbScopeFor(node(nodes, "ask"), nodes, AGENT_KBS));
     expect(
       within(field).getByText(
-        "A step searches what the Global node lists plus what is picked here; when no step lists anything, every step searches all of the agent's knowledge bases.",
+        "A step searches what the Global node lists plus what is picked here. When no step lists anything, every step searches all of the agent's knowledge bases.",
       ),
     ).toBeTruthy();
   });

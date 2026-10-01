@@ -142,7 +142,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
             variant="ghost"
             size="sm"
             className="h-7 px-2 text-xs"
-            aria-label={`Execution — ${label}`}
+            aria-label={`Execution: ${label}`}
           >
             Execution
           </Button>
@@ -173,7 +173,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
       <Section
         id="tools-builtin"
         title="Built-in tools"
-        description="Available to every agent; turn off the ones this agent shouldn't use."
+        description="Available to every agent. Turn off the ones this agent shouldn't use."
       >
         {BUILTIN_GROUPS.map((group) => {
           const disabledReason =
@@ -320,7 +320,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
                 htmlFor={maxToolStepsId}
                 hint={
                   stepsWarning
-                    ? `Read tools run "${executionDefault}" and each announcement spends a step; use ${MIN_TOOL_STEPS_FOR_BACKGROUND} or more.`
+                    ? `Read tools run "${executionDefault}" and each announcement spends a step. Use ${MIN_TOOL_STEPS_FOR_BACKGROUND} or more.`
                     : "How many tool calls the model may chain before it must reply."
                 }
               >
@@ -546,7 +546,7 @@ export function ToolsTab({ agent }: { agent: AgentOut }) {
         </Section>
       ) : null}
 
-      <Section id="tools-pack" title="Pack tools" description="Provided by the agent's pack; not editable here.">
+      <Section id="tools-pack" title="Pack tools" description="Provided by the agent's pack. Not editable here.">
         <SectionRow>
           {packsQuery.isLoading ? (
             <Skeleton className="h-6 w-48" />
@@ -653,7 +653,7 @@ function AllowedHostsEditor({
       <Field
         label="Add a site"
         htmlFor={id}
-        hint="Only pages on these sites — no https:// and no path."
+        hint="Only pages on these sites, with no https:// and no path."
         error={shownError ?? undefined}
       >
         <div className="flex max-w-md gap-2">
@@ -702,7 +702,7 @@ function AllowedHostsEditor({
           ))}
         </ul>
       ) : (
-        <p className="text-label text-text-secondary">No sites allowed yet: the agent can&apos;t read any web page.</p>
+        <p className="text-label text-text-secondary">No sites allowed yet. The agent can&apos;t read any web page.</p>
       )}
     </div>
   );
@@ -745,7 +745,7 @@ function NotifyTeamCard({
         inline
         label="Tell your team"
         htmlFor={`${uid}-enabled`}
-        hint="Posts a short summary to a webhook — Slack or a generic JSON endpoint — for example when the agent escalates to a person."
+        hint="Posts a short summary to a webhook (Slack or a generic JSON endpoint), for example when the agent escalates to a person."
       >
         <Switch
           id={`${uid}-enabled`}
@@ -818,7 +818,7 @@ function NotifyTeamCard({
             inline
             label="Include the recent conversation"
             htmlFor={`${uid}-transcript`}
-            hint="Off by default: a transcript may hold personal details."
+            hint="Off by default. A transcript may hold personal details."
           >
             <Switch
               id={`${uid}-transcript`}

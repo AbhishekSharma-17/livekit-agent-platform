@@ -231,7 +231,7 @@ describe("KnowledgeTab re-rank picker gains connection re-rankers (V5-24)", () =
     // "multiple elements" failure.
     expect(
       screen.getByText(
-        "Calls a hosted service over the network to rescore results — usually adds 100–300 ms to the search tool's reply.",
+        "Calls a hosted service over the network to rescore results. Usually adds 100 to 300 ms to the search tool's reply.",
       ),
     ).toBeTruthy();
   });
@@ -251,7 +251,7 @@ describe("KnowledgeTab re-rank picker gains connection re-rankers (V5-24)", () =
     expect(option?.getAttribute("data-disabled")).not.toBeNull();
     expect(
       screen.getByText(
-        'A hosted re-ranker works only with the search tool — turn off "Add the best matches to every turn" above to use one.',
+        'A hosted re-ranker works only with the search tool. Turn off "Add the best matches to every turn" above to use one.',
       ),
     ).toBeTruthy();
   });

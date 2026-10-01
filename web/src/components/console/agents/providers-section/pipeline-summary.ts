@@ -342,7 +342,7 @@ export function connectionNotes(connection: ConnectionFacts | null | undefined):
     label: "LiveKit Inference",
     limited: !inference,
     text: inference
-      ? "Available: listening, thinking and speaking can run with no provider key."
+      ? "Available. Listening, thinking and speaking can run with no provider key."
       : "Cloud only. Here each part needs its own provider key.",
   });
 
@@ -353,7 +353,7 @@ export function connectionNotes(connection: ConnectionFacts | null | undefined):
     limited: !hosted,
     text: hosted
       ? "Hosted by LiveKit."
-      : "LiveKit hosts it on Cloud only; here it runs inside the agent's worker.",
+      : "LiveKit hosts it on Cloud only. Here it runs inside the agent's worker.",
   });
 
   const nc = caps.noise_cancellation_tier ?? "none";
@@ -365,7 +365,7 @@ export function connectionNotes(connection: ConnectionFacts | null | undefined):
       nc === "krisp"
         ? "LiveKit's noise filter is available."
         : nc === "ai_coustics"
-          ? "LiveKit's own noise filter is Cloud only; ai-coustics works here."
+          ? "LiveKit's own noise filter is Cloud only. ai-coustics works here."
           : "LiveKit's own noise filter is Cloud only.",
   });
 
@@ -392,5 +392,5 @@ export function avatarConnectionNote(connection: ConnectionFacts | null | undefi
 export function noiseConnectionNote(connection: ConnectionFacts | null | undefined): string | null {
   const tier = connection?.capabilities?.noise_cancellation_tier;
   if (!connection || tier === undefined || tier === "krisp") return null;
-  return "LiveKit's own noise filter works on LiveKit Cloud only; the choices here that need it are marked.";
+  return "LiveKit's own noise filter works on LiveKit Cloud only. The choices here that need it are marked.";
 }

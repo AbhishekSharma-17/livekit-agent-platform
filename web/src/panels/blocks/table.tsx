@@ -10,7 +10,7 @@
 import * as React from "react";
 
 import type { TableBlockState, TableColumn } from "@/contracts/lkap-contracts";
-import { formatDateTime } from "@/lib/format";
+import { EMPTY_VALUE, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PanelEmpty } from "@/panels/generic/blocks";
 
@@ -32,7 +32,7 @@ export function formatCell(value: unknown, type: TableColumn["type"] = "string")
       // A bare `YYYY-MM-DD` is a calendar date: show it as written, no timezone shift.
       if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
       const text = formatDateTime(value);
-      return text === "—" || text === "" ? String(value) : text;
+      return text === EMPTY_VALUE || text === "" ? String(value) : text;
     }
     default:
       return typeof value === "object" ? JSON.stringify(value) : String(value);

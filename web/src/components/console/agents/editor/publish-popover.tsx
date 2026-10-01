@@ -31,13 +31,13 @@ function testsFailingMessage(details: PublishGateRefusal): string {
   const needed = Math.round(details.min_pass_ratio * 100);
   switch (details.reason) {
     case "missing":
-      return `This version hasn't been tested yet. Run its tests first — publishing needs ${needed}% of cases to pass.`;
+      return `This version hasn't been tested yet. Run its tests first. Publishing needs ${needed}% of cases to pass.`;
     case "running":
       return "Its tests are still running. Wait for them to finish, then publish.";
     case "failing": {
       const got = details.pass_ratio != null ? Math.round(details.pass_ratio * 100) : null;
       return got != null
-        ? `Only ${got}% of its tests passed; publishing needs ${needed}%.`
+        ? `Only ${got}% of its tests passed. Publishing needs ${needed}%.`
         : `Its last test run didn't reach ${needed}% passing.`;
     }
     case "error":

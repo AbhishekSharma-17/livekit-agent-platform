@@ -318,7 +318,7 @@ function RowActions({
         description={
           (connection.knowledge_base_count ?? 0) > 0
             ? `${connection.knowledge_base_count} knowledge base(s) still store their vectors here. Delete or move those first.`
-            : "The data stays in your own account; only the connection is removed here."
+            : "The data stays in your own account. Only the connection is removed here."
         }
         confirmLabel="Delete connection"
         onConfirm={() => onDelete(connection)}

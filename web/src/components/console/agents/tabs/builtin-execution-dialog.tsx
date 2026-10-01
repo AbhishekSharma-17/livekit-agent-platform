@@ -154,7 +154,7 @@ export function BuiltinExecutionDialog({
       <DialogContent size="md" aria-describedby={`${uid}-description`} data-tool-name={name}>
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
           <DialogHeader>
-            <DialogTitle>Execution — {label}</DialogTitle>
+            <DialogTitle>Execution: {label}</DialogTitle>
             <DialogDescription id={`${uid}-description`}>
               How &quot;{label}&quot; behaves while it runs. Left at &quot;Agent default&quot;, it follows the
               agent&apos;s &quot;Read tools run&quot; setting (Instructions & voice → Conversation).
@@ -169,9 +169,9 @@ export function BuiltinExecutionDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="default">Agent default</SelectItem>
-                  <SelectItem value="blocking">Blocking — wait for the result</SelectItem>
-                  <SelectItem value="background">In the background — always</SelectItem>
-                  <SelectItem value="auto">Automatic — background only if slow</SelectItem>
+                  <SelectItem value="blocking">Blocking (wait for the result)</SelectItem>
+                  <SelectItem value="background">In the background (always)</SelectItem>
+                  <SelectItem value="auto">Automatic (background only if slow)</SelectItem>
                 </SelectContent>
               </Select>
             </Field>
@@ -182,7 +182,7 @@ export function BuiltinExecutionDialog({
                   label="What the agent says first"
                   htmlFor={`${uid}-announce`}
                   optional
-                  hint='Its own words; default "Working on <name>."'
+                  hint='Its own words. Default: "Working on <name>."'
                 >
                   <Input
                     id={`${uid}-announce`}
@@ -257,7 +257,7 @@ export function BuiltinExecutionDialog({
               label="Fillers while waiting"
               htmlFor={`${uid}-fillers`}
               optional
-              hint="One phrase per line, up to five. Spoken as written; needs a voice."
+              hint="One phrase per line, up to five. Spoken as written. Needs a voice."
             >
               <Textarea
                 id={`${uid}-fillers`}

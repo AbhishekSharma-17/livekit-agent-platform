@@ -61,7 +61,7 @@ export function RequiresVarsField({
           {values.map((name) => (
             <li key={name} className="flex items-center gap-1 rounded-pill border border-border bg-muted py-0.5 pr-1 pl-2.5 text-caption">
               <span className="font-mono">{name}</span>
-              <span className="sr-only"> — {variableLabel(name)}</span>
+              <span className="sr-only">, {variableLabel(name)}</span>
               <button
                 type="button"
                 onClick={() => remove(name)}

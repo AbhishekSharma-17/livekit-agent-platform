@@ -240,7 +240,7 @@ export function ProvidersTab() {
 
   return (
     <div className="flex flex-col gap-8">
-      <Group title="How it talks" description="Pick how speech flows through the agent. You can switch later; the other mode's choices are kept until you save.">
+      <Group title="How it talks" description="Pick how speech flows through the agent. You can switch later. The other mode's choices are kept until you save.">
         <Controller
           control={control}
           name="config.pipeline.mode"
@@ -325,13 +325,13 @@ const MODES: { value: Exclude<PipelineMode, "half_cascade">; title: string; desc
   {
     value: "cascaded",
     title: "Cascaded",
-    description: "Separate speech-to-text, language model and text-to-speech. Most flexible; works with LiveKit Inference without keys.",
+    description: "Separate speech-to-text, language model and text-to-speech. Most flexible, and works with LiveKit Inference without keys.",
     icon: WaypointsIcon,
   },
   {
     value: "realtime",
     title: "Realtime",
-    description: "One speech-to-speech model (Gemini Live, GPT Realtime). Lowest latency; can watch the camera live.",
+    description: "One speech-to-speech model (Gemini Live, GPT Realtime). Lowest latency, and can watch the camera live.",
     icon: AudioWaveformIcon,
   },
 ];
@@ -374,7 +374,7 @@ function ModeCards({ value, onChange }: { value: PipelineMode; onChange: (next: 
       </div>
       {value === "half_cascade" ? (
         <p className="rounded bg-info-subtle px-3 py-2 text-label text-info-text">
-          This agent uses half-cascade: a realtime model thinks, a separate voice speaks. Pick a card above to switch.
+          This agent uses half-cascade (a realtime model thinks, a separate voice speaks). Pick a card above to switch.
         </p>
       ) : null}
     </div>
@@ -386,7 +386,7 @@ function VisionNote({ onShowVisionModels }: { onShowVisionModels: () => void }) 
     <div className="flex items-start gap-2 rounded bg-warning-subtle px-3 py-2 text-label leading-[1.125rem] text-warning-text">
       <Icon as={EyeOffIcon} size="sm" className="mt-0.5" />
       <p className="text-pretty">
-        This model can&apos;t see images; pick one marked Vision to use the camera.{" "}
+        This model can&apos;t see images. Pick one marked Vision to use the camera.{" "}
         <button
           type="button"
           onClick={onShowVisionModels}

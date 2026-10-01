@@ -49,7 +49,7 @@ export function WhisperBox({ sessionId }: { sessionId: string }) {
     } catch (error) {
       const message =
         error instanceof ApiError && error.code === "no_agent"
-          ? "No agent is in the room right now — the guidance wasn't delivered."
+          ? "No agent is in the room right now. The guidance wasn't delivered."
           : errorMessage(error);
       setNotice({ tone: "danger", message });
     }
@@ -65,7 +65,7 @@ export function WhisperBox({ sessionId }: { sessionId: string }) {
       <div>
         <h3 className="text-body font-medium text-foreground">Guide the agent</h3>
         <p className="text-text-secondary text-caption">
-          Written guidance only the agent sees — the caller never hears or sees it. Every message is logged.
+          Written guidance only the agent sees. The caller never hears or sees it. Every message is logged.
         </p>
       </div>
       <Field label="Message to the agent" htmlFor="live-whisper-text" hint={`${trimmed.length}/${MAX_WHISPER_CHARS}`}>

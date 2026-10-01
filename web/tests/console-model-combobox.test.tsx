@@ -357,7 +357,7 @@ describe("ProviderSlotEditor — custom ids", () => {
       <SlotHarness initial={{ provider_id: "openrouter-llm", credential_id: CREDENTIAL.id, model: OPENROUTER_KEY, fields: {} }} />,
     );
     // The stored bad id is reported inline, value-free, and nothing is asked about it.
-    expect(await screen.findByText(/Can't use this model id: it looks like an API key/)).toBeTruthy();
+    expect(await screen.findByText(/Can't use this model id\. It looks like an API key/)).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(calls.some((c) => /\/models\//.test(c.url))).toBe(false);
     expect(anyCallCarries(calls, OPENROUTER_KEY)).toBe(false);

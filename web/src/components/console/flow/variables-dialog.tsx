@@ -63,7 +63,7 @@ export function VariablesDialog({
         <DialogHeader>
           <DialogTitle>Flow variables</DialogTitle>
           <DialogDescription>
-            Values the agent collects during the call. Steps fill them on exit; any text field can use them with
+            Values the agent collects during the call. Steps fill them on exit, and any text field can use them with
             @. They end up on the session and in the session.ended webhook.
           </DialogDescription>
         </DialogHeader>

@@ -43,9 +43,9 @@ type TestState = { kind: "idle" } | { kind: "testing" } | { kind: "done"; result
 export function testSummary(result: AppKeyTestOut): string {
   const name = result.project_name || result.account_name;
   const count = result.toolkits_count;
-  if (name && count != null) return `Connected to ${name} — ${count} apps available`;
+  if (name && count != null) return `Connected to ${name} · ${count} apps available`;
   if (name) return `Connected to ${name}`;
-  if (count != null) return `Key works — ${count} apps available`;
+  if (count != null) return `Key works · ${count} apps available`;
   return "Key works";
 }
 
@@ -149,7 +149,7 @@ export function EnableComposioDialog({
           <DialogDescription id="enable-composio-description">
             {mode === "enable"
               ? "Paste your Composio API key to browse and connect apps from this console."
-              : "Paste the new key. Every connection and tool keeps working — nothing else changes."}
+              : "Paste the new key. Every connection and tool keeps working. Nothing else changes."}
           </DialogDescription>
         </DialogHeader>
 
@@ -157,7 +157,7 @@ export function EnableComposioDialog({
           {saved ? (
             <div className="flex flex-col gap-2">
               <Alert tone="success" title={mode === "enable" ? "Composio enabled" : "Key rotated"}>
-                Stored securely; you won&apos;t see it again.
+                Stored securely. You won&apos;t see it again.
               </Alert>
             </div>
           ) : (
@@ -166,7 +166,7 @@ export function EnableComposioDialog({
                 label="Composio API key"
                 htmlFor="enable-composio-key"
                 required
-                hint="From your Composio project's settings. Stored securely; you won't see it again."
+                hint="From your Composio project's settings. Stored securely. You won't see it again."
               >
                 <Input
                   id="enable-composio-key"

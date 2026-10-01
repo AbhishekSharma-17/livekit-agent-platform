@@ -59,7 +59,7 @@ export function RawEventsView({
       <EmptyState
         icon={BracesIcon}
         title="No events recorded"
-        description="The agent posts events while the call runs; this session has none."
+        description="The agent posts events while the call runs. This session has none."
       />
     );
   }

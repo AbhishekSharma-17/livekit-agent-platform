@@ -115,7 +115,7 @@ export function LanguagesCard() {
     <Section
       id="conversation-languages"
       title="Languages"
-      description="Other languages the agent may speak besides its default; with more than one, it can switch mid-call."
+      description="Other languages the agent may speak besides its default. With more than one, it can switch mid-call."
     >
       <SectionRow className="flex flex-col divide-y divide-border">
         {languages.length === 0 ? (
@@ -159,7 +159,7 @@ export function LanguagesCard() {
           hint={
             canSwitchMidCall
               ? "Follows the caller when they speak one of the languages above."
-              : "Add another language above first — there's nothing to detect between yet."
+              : "Add another language above first. There's nothing to detect between yet."
           }
         >
           <Controller

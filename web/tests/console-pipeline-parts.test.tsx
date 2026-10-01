@@ -218,7 +218,7 @@ describe("providers section: the pipeline summary", () => {
     );
     expect(screen.getByText("What LiveKit Cloud has that this connection doesn't")).toBeTruthy();
     expect(screen.getByText(/Cloud only\. Here each part needs its own provider key\./)).toBeTruthy();
-    expect(screen.getByText(/LiveKit hosts it on Cloud only; here it runs inside the agent's worker\./)).toBeTruthy();
+    expect(screen.getByText(/LiveKit hosts it on Cloud only\. Here it runs inside the agent's worker\./)).toBeTruthy();
     expect(screen.getByText(/LiveKit's own noise filter is Cloud only\./)).toBeTruthy();
     expect(screen.getByText(/Phone calls use LiveKit Cloud telephony/)).toBeTruthy();
   });

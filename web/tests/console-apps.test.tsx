@@ -298,7 +298,7 @@ describe("AppGallery", () => {
     await waitFor(() => expect(isDisabled(connectButton)).toBe(false));
     fireEvent.click(connectButton);
     const dialog = await screen.findByRole("dialog", { name: "Connect Google Calendar" });
-    await within(dialog).findByText("Managed — one click");
+    await within(dialog).findByText("Managed (one click)");
     fireEvent.click(within(dialog).getByRole("button", { name: "Connect" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -323,7 +323,7 @@ describe("ConnectAppDialog", () => {
     renderWithClient(<ControlledConnectDialog toolkit={{ slug: "googlecalendar", name: "Google Calendar" }} />);
 
     const dialog = await screen.findByRole("dialog", { name: "Connect Google Calendar" });
-    await within(dialog).findByText("Managed — one click");
+    await within(dialog).findByText("Managed (one click)");
     fireEvent.click(within(dialog).getByRole("button", { name: "Connect" }));
 
     await waitFor(() => expect(openSpy).toHaveBeenCalledWith("https://backend.composio.dev/consent", "_blank", "noopener"));
@@ -346,7 +346,7 @@ describe("ConnectAppDialog", () => {
     });
     renderWithClient(<ControlledConnectDialog toolkit={{ slug: "googlecalendar", name: "Google Calendar" }} />);
     const dialog = await screen.findByRole("dialog", { name: "Connect Google Calendar" });
-    await within(dialog).findByText("Managed — one click");
+    await within(dialog).findByText("Managed (one click)");
     fireEvent.click(within(dialog).getByRole("button", { name: "Connect" }));
 
     expect(await within(dialog).findByText("Failed")).toBeTruthy();

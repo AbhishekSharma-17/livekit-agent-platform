@@ -125,9 +125,9 @@ describe("ProviderToolEditorDialog — session values, read-back, bindings, fixe
     fireEvent.click(screen.getByRole("button", { name: "Add a fixed value" }));
 
     // Default type is "Text"; switch it to "Number" and set the value.
-    fireEvent.click(screen.getByLabelText("duration_minutes — type"));
+    fireEvent.click(screen.getByLabelText("duration_minutes: type"));
     fireEvent.click(await screen.findByRole("option", { name: "Number" }));
-    fireEvent.change(screen.getByLabelText("duration_minutes — value"), { target: { value: "45" } });
+    fireEvent.change(screen.getByLabelText("duration_minutes: value"), { target: { value: "45" } });
 
     fireEvent.click(screen.getByText("Save"));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());

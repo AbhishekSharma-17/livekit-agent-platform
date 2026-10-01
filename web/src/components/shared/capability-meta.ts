@@ -41,12 +41,12 @@ export const CAPABILITY_META: Record<ConnectionCapabilityKey, ConnectionCapabili
   inference: {
     icon: CloudIcon,
     label: "Inference",
-    help: "LiveKit Inference is reachable — STT/LLM/TTS slots can run with no vendor key.",
+    help: "LiveKit Inference is reachable. STT/LLM/TTS slots can run with no vendor key.",
   },
   sip: {
     icon: PhoneIcon,
     label: "SIP",
-    help: "The SIP service answers — trunks and dispatch rules can be configured.",
+    help: "The SIP service answers. Trunks and dispatch rules can be configured.",
   },
   egress: {
     icon: VideoIcon,
@@ -108,13 +108,13 @@ export function connectionCapabilityChips(caps: ConnectionCapabilities | undefin
  * a flag that came back `false`.
  */
 export const CAPABILITY_FALSE_REASON: Record<ConnectionCapabilityKey, string> = {
-  inference: "Not reachable on this connection — self-hosted deployments need their own STT/LLM/TTS keys.",
-  sip: "Not reachable — deploy the SIP service on this LiveKit project and re-test.",
-  egress: "Not reachable — deploy the Egress service on this LiveKit project and re-test.",
-  ingress: "Not reachable — deploy the Ingress service on this LiveKit project and re-test.",
+  inference: "Not reachable on this connection. Self-hosted deployments need their own STT/LLM/TTS keys.",
+  sip: "Not reachable. Deploy the SIP service on this LiveKit project and re-test.",
+  egress: "Not reachable. Deploy the Egress service on this LiveKit project and re-test.",
+  ingress: "Not reachable. Deploy the Ingress service on this LiveKit project and re-test.",
   cloud_hosting: "Only LiveKit Cloud projects accept a cloud-hosted deploy bundle.",
   noise_cancellation: "No noise-cancellation tier detected for this connection.",
-  turn_detector: "No hosted turn-detector model for this connection; the worker falls back to a local one.",
+  turn_detector: "No hosted turn-detector model for this connection, so the worker falls back to a local one.",
 };
 
 export type VerificationTone = "verified" | "unverified";

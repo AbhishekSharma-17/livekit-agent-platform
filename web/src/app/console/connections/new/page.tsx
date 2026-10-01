@@ -15,7 +15,7 @@ export default function NewConnectionPage() {
       <PageHeader
         back={{ href: "/console/connections", label: "Back to connections" }}
         title="New connection"
-        description="Test the details before you save: nothing is stored until the test passes."
+        description="Test the details before you save. Nothing is stored until the test passes."
       />
       <RequireWrite min="admin" title="You can't add connections" description="Ask an admin to add connections.">
         <ConnectionCreateForm />

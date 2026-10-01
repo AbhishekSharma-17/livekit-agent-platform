@@ -183,10 +183,10 @@ function SessionScene({ params }: { params: Record<string, string> }) {
       transcript={
         <ul data-testid="preview-transcript" className="flex flex-col gap-3 overflow-y-auto p-4 text-sm">
           <li className="text-text-secondary">
-            <span className="text-foreground font-medium">{agent.name}</span> — Hi, thanks for calling. Can you tell me what happened?
+            <span className="text-foreground font-medium">{agent.name}</span>: Hi, thanks for calling. Can you tell me what happened?
           </li>
           <li className="text-text-secondary">
-            <span className="text-foreground font-medium">You</span> — There was a small kitchen fire this morning.
+            <span className="text-foreground font-medium">You</span>: There was a small kitchen fire this morning.
           </li>
         </ul>
       }
@@ -497,12 +497,12 @@ function PrimitivesScene() {
     <div data-testid="preview-primitives" className="mx-auto max-w-4xl px-6 py-8">
       <PageHeader
         title="Shared primitives"
-        description="Every WP-0 export in every state — used by the capture script's tokens proof, not shipped UI."
+        description="Every WP-0 export in every state. Used by the capture script's tokens proof, not shipped UI."
         breadcrumbs={[{ label: "Preview", href: "/console/preview/panels" }, { label: "Primitives" }]}
         actions={<Button variant="brand">Primary action</Button>}
       />
 
-      <Section id="state-meter" title="StateMeter" description="Every meter state, xs–lg.">
+      <Section id="state-meter" title="StateMeter" description="Every meter state, xs to lg.">
         <SectionRow className="flex flex-wrap items-center gap-6">
           {METER_STATES.map((state: MeterState) => (
             <div key={state} className="flex flex-col items-center gap-1.5">
@@ -624,7 +624,7 @@ function PrimitivesScene() {
           <EmptyState
             icon={AGENTS_ICON}
             title="No agents yet"
-            description="Start from a starter template — blank, knowledge, receptionist and more."
+            description="Start from a starter template: blank, knowledge, receptionist and more."
             action={<Button variant="brand">New agent</Button>}
           />
         </SectionRow>

@@ -423,13 +423,13 @@ export function Styleguide() {
                 </div>
                 <div className="flex flex-col gap-2">
                   <OptionCard name="sg-mode" value="voice" title="Voice" description="Callers talk to the agent on the phone or web." defaultChecked />
-                  <OptionCard name="sg-mode" value="text" title="Text" description="Callers type; the agent answers in text." />
+                  <OptionCard name="sg-mode" value="text" title="Text" description="Callers type, and the agent answers in text." />
                   <OptionCard name="sg-mode" value="video" title="Video" description="Voice plus a camera or screen share." aside={<Badge tone="warning">Beta</Badge>} />
                 </div>
               </div>
             </Specimen>
 
-            <Specimen id="select" title="Select and combobox" description="One custom select replaces every native one; long lists use the searchable combobox.">
+            <Specimen id="select" title="Select and combobox" description="One custom select replaces every native one. Long lists use the searchable combobox.">
               <FieldRow>
                 <Field label="Trunk" htmlFor="sg-trunk">
                   <SimpleSelect
@@ -451,7 +451,7 @@ export function Styleguide() {
               </FieldRow>
             </Specimen>
 
-            <Specimen id="navigation" title="Segmented control and tabs" description="Segmented controls filter or switch modes; tabs split one object into sections.">
+            <Specimen id="navigation" title="Segmented control and tabs" description="Segmented controls filter or switch modes. Tabs split one object into sections.">
               <SegmentedControl
                 label="Filter sessions"
                 value={filter}
@@ -490,7 +490,7 @@ export function Styleguide() {
               </Row>
             </Specimen>
 
-            <Specimen id="alerts" title="Alerts" description="Danger alerts are announced assertively; everything else politely.">
+            <Specimen id="alerts" title="Alerts" description="Danger alerts are announced assertively, and everything else politely.">
               <div className="flex flex-col gap-2.5">
                 {ALERT_TONES.map((tone) => (
                   <Alert key={tone} tone={tone} title={tone === "danger" ? "Couldn't reach the server" : undefined}>
@@ -586,7 +586,7 @@ export function Styleguide() {
               </Table>
             </Specimen>
 
-            <Specimen id="states" title="Empty, no matches, loading and progress" description="Every screen designs each state; nothing is ever blank.">
+            <Specimen id="states" title="Empty, no matches, loading and progress" description="Every screen designs each state, so nothing is ever blank.">
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <EmptyState
                   icon={UsersIcon}
@@ -631,7 +631,7 @@ export function Styleguide() {
               </div>
             </Specimen>
 
-            <Specimen id="overlays" title="Dialogs, menus, popovers, tooltips and toasts" description="Dialogs only: there are no side drawers. Destructive steps use an alert dialog.">
+            <Specimen id="overlays" title="Dialogs, menus, popovers, tooltips and toasts" description="Dialogs only. There are no side drawers. Destructive steps use an alert dialog.">
               <Row>
                 <Dialog>
                   <DialogTrigger asChild>
@@ -726,7 +726,7 @@ export function Styleguide() {
                   <TooltipContent>Supplementary detail only, never essential.</TooltipContent>
                 </Tooltip>
               </Row>
-              <Row label="Toasts (success and info leave after 6 s; errors and warnings stay)">
+              <Row label="Toasts (success and info leave after 6 s, and errors and warnings stay)">
                 <Button onClick={() => toast.success("Agent saved.")}>Success</Button>
                 <Button onClick={() => toast.info("A new version is available.")}>Info</Button>
                 <Button onClick={() => toast.warning("Your key expires in 3 days.")}>Warning</Button>
@@ -744,10 +744,10 @@ export function Styleguide() {
                   <ul className="flex max-w-[52ch] list-disc flex-col gap-1.5 pl-5 text-body text-text-secondary">
                     <li>
                       <span className="font-medium text-foreground">Always dark.</span> It feels like a phone call and
-                      ignores the theme setting; the preview theme above does not change it.
+                      ignores the theme setting. The preview theme above does not change it.
                     </li>
                     <li>
-                      <span className="font-medium text-foreground">16 px body text,</span> not 14 px: callers read it at
+                      <span className="font-medium text-foreground">16 px body text,</span> not 14 px. Callers read it at
                       arm&rsquo;s length, often on a phone.
                     </li>
                     <li>

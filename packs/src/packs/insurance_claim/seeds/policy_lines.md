@@ -12,7 +12,7 @@ for an owner-occupied home. Water damage coverage usually depends on whether
 the water loss was sudden and accidental versus long-term seepage, and
 whether flood (a separate policy) was the actual cause. A water backup and
 sump overflow endorsement, when on file, extends coverage to water that backs
-up through drains or a failed sump pump — ask whether that endorsement is
+up through drains or a failed sump pump. Ask whether that endorsement is
 listed before assuming a basement flood is covered.
 
 ## Personal auto

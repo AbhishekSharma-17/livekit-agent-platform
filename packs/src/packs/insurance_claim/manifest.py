@@ -51,10 +51,10 @@ DEFAULT_GREETING = "I can start the claim while we talk. First, are you and ever
 #: V6-22 (D-V6-21): the pack ships one more release for the agents already made from it; new
 #: agents start from the "Claims intake" starter (generic pack, blocks and tool kits).
 DESCRIPTION = (
-    "A live voice intake agent for a first notice of loss (FNOL) team: verifies the "
+    "A live voice intake agent for a first notice of loss (FNOL) team. It verifies the "
     "policy, extracts and classifies the claim, tracks a document checklist, tapes "
     "camera evidence and an incident sketch into a shared notebook, and escalates "
-    "safety concerns. Legacy: kept for existing agents; new agents start from the "
+    "safety concerns. Legacy: kept for existing agents. New agents start from the "
     "Claims intake starter."
 )
 

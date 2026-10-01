@@ -516,7 +516,8 @@ async def post_materialise(
     summary="Compare an app action tool with Composio's current version",
     description=(
         "Reads the action's current inputs from Composio and lists the fields added, removed or changed "
-        "since the tool was created. Nothing changes unless `apply=true`, which writes the new inputs "
+        "since the tool was created, and whether Composio has deprecated it. Nothing changes unless "
+        "`apply=true`, which writes the new inputs "
         "and version to the tool and, when its app has several accounts, puts the account's name in "
         "front of the description."
     ),
@@ -536,18 +537,30 @@ async def post_refresh_schema(
     toolkit = str(definition.get("toolkit") or "") or None
     adapter, _ = await service.workspace_adapter(db, vault, factory, ctx.workspace_id)
     try:
-        listed = await adapter.list_tools(toolkit=toolkit, tool_slugs=[slug], limit=1)
+        # V6-36: a pinned action Composio has since deprecated still resolves, and says so.
+        listed = await adapter.list_tools(
+            toolkit=toolkit, tool_slugs=[slug], limit=1, include_deprecated=True
+        )
     except ToolProviderError as exc:
         raise service.api_error(exc) from exc
-    items = [service.action_out(item) for item in listed.get("items", []) if isinstance(item, dict)]
-    action = next((item for item in items if item.slug.upper() == slug.upper()), None)
-    if action is None:
+    raw = next(
+        (
+            item
+            for item in listed.get("items", [])
+            if isinstance(item, dict) and str(item.get("slug") or "").upper() == slug.upper()
+        ),
+        None,
+    )
+    if raw is None:
         raise NotFoundError(f"Composio no longer lists the action '{slug}'")
+    action = service.action_out(raw)
     # R-V5-13: a tool of an app that has gained another account learns its label here.
     records = await service.list_connection_records(db, vault, ctx.workspace_id)
     conn = next((c for c in records if c.id == definition.get("connection_id")), None)
     account = service.account_naming(records, conn) if conn is not None else None
-    result = materialise.refresh_result(tool, action, apply=apply, account=account)
+    result = materialise.refresh_result(
+        tool, action, apply=apply, account=account, deprecated=raw.get("is_deprecated") is True
+    )
     if apply:
         # S5-43: rewriting a tool's inputs and description is audited.
         service.record(

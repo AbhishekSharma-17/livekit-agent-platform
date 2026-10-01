@@ -82,6 +82,14 @@ class ComposioWorld:
     action_results: dict[str, Any] = field(default_factory=dict)
     #: ``endpoint -> answer`` (or a callable of the connected account id) for ``proxy`` (V6-35).
     proxy_results: dict[str, Any] = field(default_factory=dict)
+    #: V6-36: Composio stops returning ``user_id`` on account reads (it stays stored, so the
+    #: ``user_ids`` list filter and the alias rule still see it).
+    hide_user_id: bool = False
+    #: V6-36: the ``user_ids`` filter of ``list_connections`` is ignored (a vendor regression).
+    list_ignores_user_filter: bool = False
+    #: V6-36: how a key-based create answers (``status`` is deprecated there): ``"status"``
+    #: (today), ``"connection_data"`` (only ``connectionData.val.status``) or ``"bare"`` (id only).
+    key_answer: str = "status"
     #: Where session MCP urls point (a test sets another host to exercise the pin).
     session_url_base: str = "https://backend.composio.dev/tool_router"
     _ids: itertools.count[int] = field(default_factory=lambda: itertools.count(1))
@@ -140,6 +148,13 @@ class ComposioWorld:
                         "Alias already in use for this user and toolkit", status=409
                     )
         account["alias"] = alias or None
+
+    def shown(self, account: dict[str, Any]) -> dict[str, Any]:
+        """An account as a read returns it (without ``user_id`` once Composio drops it)."""
+        out = copy.deepcopy(account)
+        if self.hide_user_id:
+            out.pop("user_id", None)
+        return dict(out)
 
     def calls_of(self, method: str) -> list[Call]:
         """Every recorded call of one adapter method."""
@@ -228,6 +243,7 @@ class FakeComposio:
         tool_slugs: list[str] | None = None,
         cursor: str | None = None,
         limit: int = 50,
+        include_deprecated: bool = False,
     ) -> dict[str, Any]:
         self._enter(
             "list_tools",
@@ -237,8 +253,11 @@ class FakeComposio:
             tool_slugs=tool_slugs,
             cursor=cursor,
             limit=limit,
+            include_deprecated=include_deprecated,
         )
         items = copy.deepcopy(self.world.tools.get(toolkit or "", []))
+        if not include_deprecated:
+            items = [i for i in items if i.get("is_deprecated") is not True]
         if tool_slugs:
             items = [i for i in items if i["slug"] in tool_slugs]
         if important:
@@ -293,6 +312,7 @@ class FakeComposio:
             "user_id": subject,
             "status": "INITIATED",
             "auth_config": {"id": auth_config_id},
+            "toolkit": {"slug": self._config_toolkit(auth_config_id)},
         }
         try:
             self.world.claim_alias(account_id, alias)
@@ -329,13 +349,26 @@ class FakeComposio:
             "user_id": subject,
             "status": "ACTIVE",
             "auth_config": {"id": auth_config_id},
+            "toolkit": {"slug": self._config_toolkit(auth_config_id)},
         }
         try:
             self.world.claim_alias(account_id, alias)
         except ToolProviderError:
             del self.world.accounts[account_id]
             raise
+        match self.world.key_answer:
+            case "connection_data":
+                return {
+                    "id": account_id,
+                    "connectionData": {"authScheme": auth_scheme, "val": {"status": "ACTIVE"}},
+                }
+            case "bare":
+                return {"id": account_id}
         return {"id": account_id, "status": "ACTIVE", "redirect_url": None}
+
+    def _config_toolkit(self, auth_config_id: str) -> str:
+        config = next((c for c in self.world.auth_configs if c["id"] == auth_config_id), None)
+        return str(config["toolkit"]["slug"]) if config else ""
 
     async def update_connection(self, connected_account_id: str, *, alias: str) -> dict[str, Any]:
         self._enter("update_connection", connected_account_id=connected_account_id, alias=alias)
@@ -350,7 +383,31 @@ class FakeComposio:
         account = self.world.accounts.get(connected_account_id)
         if account is None:
             raise ToolProviderNotFoundError("Connected account not found", status=404)
-        return dict(copy.deepcopy(account))
+        return self.world.shown(account)
+
+    async def list_connections(
+        self,
+        *,
+        user_ids: list[str] | None = None,
+        connected_account_ids: list[str] | None = None,
+        auth_config_ids: list[str] | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        self._enter(
+            "list_connections",
+            user_ids=user_ids,
+            connected_account_ids=connected_account_ids,
+            auth_config_ids=auth_config_ids,
+            limit=limit,
+        )
+        items = [
+            account
+            for account in self.world.accounts.values()
+            if (self.world.list_ignores_user_filter or not user_ids or account.get("user_id") in user_ids)
+            and (not connected_account_ids or account["id"] in connected_account_ids)
+            and (not auth_config_ids or account.get("auth_config", {}).get("id") in auth_config_ids)
+        ]
+        return {"items": [self.world.shown(a) for a in items[:limit]], "next_cursor": None}
 
     async def delete_connection(self, connected_account_id: str) -> None:
         self._enter("delete_connection", connected_account_id=connected_account_id)

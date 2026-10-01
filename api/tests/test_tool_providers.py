@@ -760,6 +760,127 @@ async def test_callback_consumed_by_a_failure_cannot_be_retried(
     assert await _connection_status(admin_client) == "failed"
 
 
+# ---------------------------------------------------------------- V6-36: owner without user_id
+async def _signed_in(
+    admin_client: httpx.AsyncClient, world: ComposioWorld, **body: Any
+) -> tuple[str, str, str]:
+    """A started sign-in the human has finished at Composio: ``(connection id, flow, account id)``."""
+    out = await _connect(admin_client, **body)
+    flow = _flow_query(world)["flow"]
+    account = list(world.accounts)[-1]
+    world.complete(account)
+    return str(out["connection_id"]), flow, account
+
+
+async def test_callback_with_user_id_present_and_matching_needs_no_list_call(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    _, flow, account = await _signed_in(admin_client, world)
+
+    response = await _callback(client, flow=flow, status="success", connected_account_id=account)
+
+    assert response.headers["location"] == CONSOLE_OK
+    assert world.calls_of("list_connections") == []
+
+
+async def test_callback_without_user_id_is_verified_through_the_owner_filter(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+) -> None:
+    """V6-36: Composio stops returning ``user_id`` on the read; the connect still completes."""
+    world.hide_user_id = True
+    connection_id, flow, account = await _signed_in(admin_client, world)
+
+    response = await _callback(client, flow=flow, status="success", connected_account_id=account)
+
+    assert response.headers["location"] == CONSOLE_OK
+    listed = world.calls_of("list_connections")
+    assert len(listed) == 1
+    assert listed[0].kwargs["user_ids"] == [f"ws:{WS}"]
+    assert listed[0].kwargs["connected_account_ids"] == [account]
+    assert await _connection_status(admin_client) == "active"
+    assert [row.target_id for row in await _audit_rows(database, "apps.connect.ok")] == [connection_id]
+
+    replay = await _callback(client, flow=flow, status="success", connected_account_id=account)
+
+    assert replay.headers["location"] == CONSOLE_ERROR
+    assert await _failed_reason(database) == "bad_nonce"
+
+
+@pytest.mark.parametrize(
+    ("case", "reason"),
+    [
+        ("owner_elsewhere", "subject_unverified"),
+        ("list_fails", "verify_failed"),
+        ("present_mismatch", "subject_mismatch"),
+        ("other_auth_config", "auth_config_mismatch"),
+        ("other_toolkit", "toolkit_mismatch"),
+        ("read_names_another_account", "account_mismatch"),
+    ],
+)
+async def test_callback_refuses_an_account_it_cannot_tie_to_the_subject(
+    case: str,
+    reason: str,
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+) -> None:
+    world.hide_user_id = case in ("owner_elsewhere", "list_fails")
+    _, flow, account = await _signed_in(admin_client, world)
+    stored = world.accounts[account]
+    match case:
+        case "owner_elsewhere":
+            stored["user_id"] = "ws:another-workspace"
+        case "list_fails":
+            world.failures["list_connections"] = ToolProviderUnavailableError("down", status=503)
+        case "present_mismatch":
+            stored["user_id"] = "ws:another-workspace"
+        case "other_auth_config":
+            stored["auth_config"] = {"id": "ac_someone_elses"}
+        case "other_toolkit":
+            stored["toolkit"] = {"slug": "gmail"}
+        case "read_names_another_account":
+            stored["id"] = "ca_someone_else"
+
+    response = await _callback(client, flow=flow, status="success", connected_account_id=account)
+
+    assert response.headers["location"] == CONSOLE_ERROR
+    assert await _failed_reason(database) == reason
+    assert await _connection_status(admin_client) == "failed"
+    assert not await _audit_rows(database, "apps.connect.ok")
+
+
+async def test_callback_cannot_bind_another_rows_account_or_use_its_state(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+    database: Database,
+) -> None:
+    """A foreign state: one sign-in's flow with another's account, or another row's nonce."""
+    world.hide_user_id = True
+    first_id, first_flow, _ = await _signed_in(admin_client, world, label="Work")
+    _, second_flow, second_account = await _signed_in(admin_client, world, label="Personal")
+    second_nonce = second_flow.split(".", 1)[1]
+
+    crossed = await _callback(
+        client, flow=f"{first_id}.{second_nonce}", status="success", connected_account_id=second_account
+    )
+    swapped = await _callback(client, flow=first_flow, status="success", connected_account_id=second_account)
+
+    assert crossed.headers["location"] == CONSOLE_ERROR
+    assert swapped.headers["location"] == CONSOLE_ERROR
+    reasons = [row.payload["reason"] for row in await _audit_rows(database, "apps.connect.failed")]
+    assert reasons == ["bad_nonce", "account_mismatch"]
+    assert world.calls_of("list_connections") == []
+    assert not await _audit_rows(database, "apps.connect.ok")
+
+
 # ============================================================================ connect (keys)
 async def test_api_key_connect_forwards_the_key_once_and_keeps_no_trace(
     admin_client: httpx.AsyncClient,
@@ -865,6 +986,30 @@ async def test_keyless_app_connects_locally(
     assert refused.status_code == 422
 
 
+@pytest.mark.parametrize(
+    ("answer", "reads_account"),
+    [("status", False), ("connection_data", False), ("bare", True)],
+)
+async def test_api_key_connect_reads_the_status_without_the_deprecated_field(
+    answer: str,
+    reads_account: bool,
+    admin_client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+) -> None:
+    """V6-36: ``status`` on the create answer is deprecated; the account itself is the fallback."""
+    world.key_answer = answer
+
+    response = await admin_client.post(
+        f"{BASE}/connections",
+        json={"toolkit": "acmecrm", "method": "api_key", "fields": {"api_key": APP_SECRET}},
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["status"] == "active"
+    assert bool(world.calls_of("get_connection")) is reads_account
+
+
 # ============================================================================ status refresh
 @pytest.mark.parametrize(
     ("vendor", "expected", "needs_reconnect"),
@@ -917,6 +1062,33 @@ async def test_refresh_does_not_call_composio_for_a_sign_in_in_flight(
 
     assert body["status"] == "initiated"
     assert world.calls_of("get_connection") == []
+
+
+async def test_refresh_keeps_an_existing_account_active_once_user_id_is_gone(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    """V6-36: a stored connection keeps working (no forced reconnect) and costs no extra call."""
+    connection_id, flow, account = await _signed_in(admin_client, world)
+    await _callback(client, flow=flow, status="success", connected_account_id=account)
+    world.hide_user_id = True
+
+    body = (await admin_client.get(f"{BASE}/connections/{connection_id}")).json()
+
+    assert body["status"] == "active" and body["needs_reconnect"] is False
+    assert world.calls_of("list_connections") == []
+
+
+async def test_refresh_fails_an_account_whose_auth_config_changed(
+    admin_client: httpx.AsyncClient, client: httpx.AsyncClient, world: ComposioWorld, key_id: str
+) -> None:
+    connection_id, flow, account = await _signed_in(admin_client, world)
+    await _callback(client, flow=flow, status="success", connected_account_id=account)
+    world.hide_user_id = True
+    world.accounts[account]["auth_config"] = {"id": "ac_someone_elses"}
+
+    body = (await admin_client.get(f"{BASE}/connections/{connection_id}")).json()
+
+    assert body["status"] == "failed" and body["needs_reconnect"] is True
 
 
 # ============================================================================ disconnect / reconnect
@@ -1441,6 +1613,53 @@ async def test_adapter_network_failure_is_unavailable() -> None:
         await ComposioAdapter(client, VALID_KEY).session_info()
 
 
+async def test_adapter_uses_the_current_tool_search_and_owner_filter_parameters() -> None:
+    """V6-36: ``GET /tools`` takes ``query`` (``search`` is deprecated there) and the owner of
+    an account is read through the ``user_ids`` filter of ``GET /connected_accounts``."""
+    build, seen = _recording({})
+    adapter = build(VALID_KEY)
+
+    await adapter.list_tools(toolkit="gmail", search="send", include_deprecated=True)
+    await adapter.list_connections(user_ids=["ws:w1"], connected_account_ids=["ca_1"], limit=10)
+
+    assert [(r.method, r.url.path) for r in seen] == [
+        ("GET", "/api/v3.1/tools"),
+        ("GET", "/api/v3.1/connected_accounts"),
+    ]
+    assert dict(seen[0].url.params) == {
+        "toolkit_slug": "gmail",
+        "query": "send",
+        "include_deprecated": "true",
+        "limit": "50",
+    }
+    assert dict(seen[1].url.params) == {"user_ids": "ws:w1", "connected_account_ids": "ca_1", "limit": "10"}
+
+
+@pytest.mark.parametrize(("header", "expected"), [("12", 12.0), ("0.5", 0.5), ("soon", None), (None, None)])
+async def test_adapter_reads_retry_after_on_a_429(header: str | None, expected: float | None) -> None:
+    headers = {"retry-after": header} if header is not None else {}
+    build, _ = _recording(
+        {
+            ("GET", "/api/v3.1/toolkits"): httpx.Response(
+                429, json={"error": {"message": "Rate limit exceeded"}}, headers=headers
+            )
+        }
+    )
+
+    with pytest.raises(ToolProviderRateLimitedError) as caught:
+        await build(VALID_KEY).list_toolkits()
+
+    assert caught.value.retry_after_s == expected
+
+
+def test_a_composio_429_tells_the_caller_when_to_retry() -> None:
+    error = service.api_error(ToolProviderRateLimitedError("slow down", status=429, retry_after_s=12))
+
+    assert error.status_code == 429
+    assert error.details["retry_after_s"] == 12.0
+    assert "retry_after_s" not in service.api_error(ToolProviderRateLimitedError("x", status=429)).details
+
+
 # ============================================================================ pure rules
 @pytest.mark.parametrize(
     ("slug", "tags", "risk"),
@@ -1690,6 +1909,27 @@ async def test_refresh_schema_refuses_a_non_provider_tool(
     response = await admin_client.post(f"{BASE}/tools/{tool_id}/refresh-schema")
 
     assert response.status_code == 404
+
+
+async def test_refresh_schema_still_finds_and_flags_an_action_composio_deprecated(
+    admin_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
+    world: ComposioWorld,
+    key_id: str,
+) -> None:
+    """V6-36: the picker hides deprecated actions; a tool already pinned to one says so."""
+    connection_id = await _active_calendar(admin_client, client, world)
+    picked = await _pick(admin_client, connection_id, "GOOGLECALENDAR_FIND_FREE_SLOTS")
+    tool_id = picked["tools_created"][0]
+    world.tools["googlecalendar"][0]["is_deprecated"] = True
+
+    actions = (await admin_client.get(f"{BASE}/toolkits/googlecalendar/actions")).json()["items"]
+    refreshed = await admin_client.post(f"{BASE}/tools/{tool_id}/refresh-schema")
+
+    assert "GOOGLECALENDAR_FIND_FREE_SLOTS" not in {item["slug"] for item in actions}
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["deprecated"] is True
+    assert world.calls_of("list_tools")[-1].kwargs["include_deprecated"] is True
 
 
 # ------------------------------------------------------------------------ provider bindings

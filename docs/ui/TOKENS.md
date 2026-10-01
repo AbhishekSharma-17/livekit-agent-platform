@@ -121,6 +121,9 @@ At the shipped 70% / 65% the same pairs read 5.46 and 5.47. Returning to the spe
 already does for End call, and move the hover step (for example 61%), or accept the shipped values as the
 dark palette.
 
+**Decision O1 (UI-R1): accepted.** 70% and 65% are the dark palette for the destructive solid and hover. The spec
+values are not coming back.
+
 **Icon rule.** `globals.css` carries the spec's literal rule, `.lucide { width:16px; height:16px;
 stroke-width:1.75px; flex:none }`. The `Icon` wrapper sizes through `size-*` utilities, which beat the
 base-layer rule; no icon sets its own stroke width.

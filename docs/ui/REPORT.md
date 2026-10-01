@@ -105,8 +105,7 @@ The console, the sign-in and public pages, and the caller page (`web/`) now foll
 - The vendor-mark tint and the stage letterbox: both allowlisted, with reasons.
 
 **Deferred**
-- **Legacy token aliases are not deleted.** `panels/**` (about 210 uses) and `agents-ui/**` (56) read them, and about 50 uses remain in 24 other files (F1, O2).
-- **One `GatedButton` remains:** Test model in `registry/model-test-panel.tsx` (F2, O3).
+- **Legacy token aliases stay defined** because `panels/**` (about 210 uses), `agents-ui/**` (56) and the vendored `components/ui/**` read them. Everything else moved to the spec names in UI-R1, and the design lint's `legacy-token` rule now keeps it that way (O2).
 
 ## 3. Open product decisions
 
@@ -120,10 +119,14 @@ The console, the sign-in and public pages, and the caller page (`web/`) now foll
 | D6 | Overview stats | Adopted |
 | D7 | Sheets | Adopted: dialogs only, plus the D3 sheet |
 | D8 | Phone tab bar | Adopted, per role |
-| D9 | Forgot password | **Open**: needs an API endpoint |
+| D9 | Forgot password | Out of scope (UI-R1): it needs an API endpoint first |
 | D10 | Sign-in showcase | Adopted: quiet showcase |
 | D11 | Phone input size | Adopted: 16 px on phones |
-| D12 | Permissions | Adopted, with one leftover (O3) |
+| D12 | Permissions | Adopted; the last leftover (O3) closed in UI-R1 |
+
+Outcomes of the new decisions (UI-R1): **O1** keep 70% / 65% as the dark palette; **O2** migrate and lint;
+**O3** hide Test model for viewers; **O4** keep "Disabled"; **O5** no bell, out of scope; **O6** a development-only
+view-as switch. Section 6 has the details.
 
 | # | New decision | Evidence | Options |
 |---|---|---|---|
@@ -164,8 +167,44 @@ Package-level product questions raised along the way (kept here so none is lost)
 
 ## 5. Follow-ups
 
-- **F1** Migrate about 50 legacy alias uses outside `ui/`, `agents-ui/` and `panels/`, then add a lint rule.
-- **F2** Move Test model off `GatedButton`, then delete the shim.
+- **F1** Done in UI-R1 (O2): 47 uses in 22 files migrated, and a `legacy-token` lint rule added.
+- **F2** Done in UI-R1 (O3): Test model is hidden for viewers, and `GatedButton` is deleted.
 - **F3** Check the settings-tabs hydration warning under `next start`.
 - **F4** Done 2026-10-01: re-run against the dev server serving the merged code — 40 routes × 2 themes × 3 widths reached, 0 horizontal overflow, 0 console errors on the final pass (a first pass hit dev-server connection resets on 6 routes, which passed on re-run; the intermittent settings-tabs hydration warning (F3) appeared once).
 - **F5** For the panels owner: axe `scrollable-region-focusable` on `src/panels/blocks/chart.tsx:74`, the chart block's scroll region (filled state).
+
+## 6. UI-R1: accent, service icons, navigation and the open decisions
+
+**Accent (D1).** Indigo at hue 280 replaces teal, by the spec 2.2 recipe. Info stays at hue 250 and success stays
+green; a token test holds the accent at least 10 CIEDE2000 from both. Values and ratios are in `docs/ui/TOKENS.md`.
+`--chart-4` stays teal, and the `theme-color` and manifest mirrors follow the new brand.
+
+**Decisions.**
+- **O1** The dark destructive solid and hover stay at 70% and 65%. That is the accepted dark palette (TOKENS.md).
+- **O2** Legacy alias uses outside `components/ui/`, `agents-ui/` and `panels/` are gone, and the design lint forbids them
+  there. The aliases stay defined for those trees.
+- **O3** Test model follows the permission pattern (`useWriteGate`). Viewers don't see it, and `GatedButton` is deleted.
+- **O4** "Disabled" stays, paired with "Enabled".
+- **O5** No notifications bell. There is no notification feed, so it is out of scope.
+- **O6** A development-only "view as" switch sits in the account menu under "Development". It shows only under
+  `next dev` with the admin bypass (the break-glass user). It is kept per browser and lowers the role the console
+  renders for, never what the server allows. A top bar tag names the role while it is lowered. The render check runs
+  every console route as owner, builder and viewer through it.
+- **D9** Forgot password stays out until the API has an endpoint for it.
+
+**Service marks.** `VendorMark` draws each third-party service's official mark in monochrome `currentColor`, from one
+table (`components/shared/vendor-marks.ts`). Simple Icons (`simple-icons`, CC0) comes first and Lobe Icons
+(`@lobehub/icons-static-svg`, MIT, copied per icon by `scripts/gen-lobehub-marks.mjs`) second. Anything else falls back
+to the monogram. Marks sit beside the name and are decorative, except in stacks with no printed name. Marks now
+show on provider rows and pickers, keys, knowledge connections, the agents list, the summary rail, template previews,
+connected apps, Tools rows, connections (LiveKit), SIP trunks (the carrier), kits (the apps they work with), model ids
+from a gateway (the maker) and the setup checklist. None of this reaches `/s/[slug]`.
+
+**Tools page.** Rows lead with a human title (`gmail_send_email` reads "Send email") and a leading mark. The technical
+name stays small, in mono, and searchable. The name column gives way, so the other columns always fit.
+
+**Agents icon.** `Headset` replaces `Bot` for voice and video agents everywhere (`AGENTS_ICON`). `Bot` stays only on
+the Settings "AI agents" tab, which is about coding agents over MCP.
+
+**Knowledge connections** moved from Settings to `/console/knowledge?tab=connections`. The knowledge base list stays the
+default, and `/console/settings?tab=knowledge-connections` redirects to the new place.

@@ -4,7 +4,7 @@ Thanks for your interest. Issues and pull requests are welcome.
 
 ## Setup
 
-- Python 3.12 with [uv](https://docs.astral.sh/uv/); Node 20+ with pnpm.
+- Python 3.12 with [uv](https://docs.astral.sh/uv/) and Node 20+ with pnpm.
 - Each Python package (`contracts`, `api`, `agent`, `packs`, `supervisor`,
   `testing`, `mcp`) is its own uv project: `cd <package> && uv sync`.
 - Web: `cd web && pnpm install`.
@@ -26,7 +26,7 @@ commit the generated files.
 ## Adding a model to the registry
 
 The registry's model lists (`contracts/src/lkap_contracts/providers.py`) are
-suggestions, not an allowlist: any id a vendor accepts already works as a
+suggestions, not an allowlist. Any id a vendor accepts already works as a
 custom id. A model is promoted to a registry `ModelSpec` only when all three
 hold:
 
@@ -37,7 +37,7 @@ hold:
    the exact id, and put the provider, the id, the latency, the cost and the
    detected capabilities in the pull request.
 3. **The pull request edits `providers.py` only.** Add the id to `models`.
-   Changing `default_model` needs a second piece of evidence: a text-chat
+   Changing `default_model` needs a second piece of evidence, a text-chat
    session on a dev stack that used the new default.
 
 Two more rules:
@@ -46,7 +46,7 @@ Two more rules:
   recorded session that used vision. Vendor metadata alone is not enough.
 - A `default_model` is never a `:free`, `auto` or preview id.
 
-This process never touches `VERIFIED_IDS`; that list records live
+This process never touches `VERIFIED_IDS`. That list records live
 provider-level calls.
 
 To check drift locally, run
@@ -60,7 +60,7 @@ never an error.
 ## Conventions
 
 - Typed Python (mypy `--strict`) and Pydantic v2 models for all data.
-- No side drawers in the web UI: use dialogs. An ESLint rule enforces this.
+- No side drawers in the web UI. Use dialogs. An ESLint rule enforces this.
 - No secrets in code, docs, tests or commit messages.
 
 By contributing, you agree that your contributions are licensed under the

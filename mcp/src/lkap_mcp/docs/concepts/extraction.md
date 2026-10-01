@@ -2,24 +2,24 @@
 
 An agent can **capture facts from the conversation while it talks** and
 **react to them with rules**, with no code. Both are off for every existing
-agent; switch them on with `agent_update(patch={"extraction": {...},
+agent. Switch them on with `agent_update(patch={"extraction": {...},
 "rules": [...]})` and check the result with `agent_validate`.
 
 ## Extraction (`ExtractionConfig`)
 
-- `enabled` — off by default.
-- `fields` — up to 30 `ExtractionField`s: a flow variable (`name`, `type`
+- `enabled`: off by default.
+- `fields`: up to 30 `ExtractionField`s: a flow variable (`name`, `type`
   `string|number|boolean|enum|date|phone|email`, `description`, `options`,
   `required`) plus `label` (what the panel shows), `hint` (guidance for the
   extraction model), `sensitive` (never written into an event) and `show_in`
   (`details:<block_id>`, `details:<block_id>.<key>`, or
   `notebook:<block_id>.<section_id>` for a notebook's details or text section).
-- `triggers` — one of each kind: `every_n_turns` with `n` (the default: every
+- `triggers`: one of each kind: `every_n_turns` with `n` (the default: every
   caller turn), `tool` with `tools` (after one of them returns), `node_exit`
-  with `nodes` (when a flow step ends; empty means any step), `manual` (the
+  with `nodes` (when a flow step ends, empty means any step), `manual` (the
   agent gets the `extract_now` built-in).
-- `min_turn_chars` — shorter caller turns ("yes", "okay") do not count.
-- `still_needed` — `checklist` lists the required fields not captured yet on
+- `min_turn_chars`: shorter caller turns ("yes", "okay") do not count.
+- `still_needed`: `checklist` lists the required fields not captured yet on
   the panel's checklist (items `need_<field>`), ticking them as values arrive.
 
 The extraction runs **in the background** on the agent's workflow model (the
@@ -27,7 +27,7 @@ The extraction runs **in the background** on the agent's workflow model (the
 seconds, skipped when the conversation has not changed, never delaying the
 reply. Values go into the session's **variables**, the same store
 `{{ var.<name> }}` placeholders, `requires_vars`, result bindings and flows
-use. An empty answer never erases a value; a flow step's own `extract` wins
+use. An empty answer never erases a value. A flow step's own `extract` wins
 for the names it lists.
 
 ## Rules (`Rule`)
@@ -55,7 +55,7 @@ Rules run after each extraction, after each batch of tool results and after a
 ## What is recorded
 
 Each extraction run records an `extraction` session event (field names and
-whether each is set; values only when the agent keeps sessions in full, and
+whether each is set, values only when the agent keeps sessions in full, and
 never for a sensitive field). Each firing records a `rule_fired` event (the
 rule id and its action kinds, never a value).
 

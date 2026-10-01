@@ -95,13 +95,13 @@ def register(registry: Registry) -> None:
         confirm: bool = False,
         plan: bool = False,
     ) -> ToolResult:
-        """Place an outbound phone call with an agent (needs confirm; the workspace dial policy applies)."""
+        """Place an outbound phone call with an agent (needs confirm, the workspace dial policy applies)."""
         body = {"agent_id": agent_id, "to_e164": to_e164, "trunk_id": trunk_id, "variables": variables or {}}
         if plan:
             return planned(request("POST", "/v1/calls", body))
         if not confirm:
             return ToolResult.needs_confirmation(
-                f"dial {to_e164} with agent {agent_id}; this places a real call"
+                f"dial {to_e164} with agent {agent_id}. This places a real call"
             )
         return ToolResult.success(await client.post("/v1/calls", body))
 

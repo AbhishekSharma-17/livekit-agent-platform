@@ -1,6 +1,6 @@
 # Recipe: a plain voice assistant
 
-Goal: the smallest possible agent, when there's no pack-specific need — a
+Goal: the smallest possible agent, when there's no pack-specific need. A
 good default when the user just says "build me a voice assistant".
 
 ## 1. Create it

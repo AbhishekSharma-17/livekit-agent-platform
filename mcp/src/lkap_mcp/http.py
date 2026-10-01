@@ -135,7 +135,7 @@ class NoSession(ApiFailure):
         super().__init__(
             None,
             "no_session",
-            "this call does not belong to a live MCP session; reconnect (initialize a new session)",
+            "this call does not belong to a live MCP session. Reconnect (initialize a new session)",
         )
 
 
@@ -370,7 +370,7 @@ class SessionRegistry(Registry):
                 # the session ends after this call, so say so rather than report success.
                 return ToolResult.fail(
                     "unauthorized",
-                    "the API key was revoked or expired during this call; this MCP session is closed",
+                    "the API key was revoked or expired during this call. This MCP session is closed",
                     status=401,
                     hint=ERROR_HINTS["unauthorized"],
                 )
@@ -620,8 +620,8 @@ class HttpSessions:
             raise RuntimeError("HttpSessions.run() is not active")
         if self._key_sessions(key_hash) >= self.settings.max_sessions_per_key:
             raise _rate_limited(
-                f"this API key already has {self.settings.max_sessions_per_key} open MCP sessions; "
-                "close one (or wait for it to go idle) first",
+                f"this API key already has {self.settings.max_sessions_per_key} open MCP sessions. "
+                "Close one (or wait for it to go idle) first",
                 retry_after_s=60.0,
                 request_id=request_id,
             )
@@ -662,14 +662,14 @@ class HttpSessions:
                 raise Refusal(
                     401,
                     "unauthorized",
-                    "the API key is unknown, revoked or expired; mint an agent key in the console",
+                    "the API key is unknown, revoked or expired. Mint an agent key in the console",
                     headers={"WWW-Authenticate": 'Bearer realm="lkap"'},
                     request_id=request_id,
                 )
             raise Refusal(
                 502,
                 "api_unavailable",
-                "the LKAP api did not confirm this key; retry shortly",
+                "the LKAP api did not confirm this key. Retry shortly",
                 request_id=request_id,
             )
         await server.ensure_registered()
@@ -895,7 +895,7 @@ class McpEndpoint:
             return
         session = self.sessions.get(session_id)
         if session is None:
-            raise Refusal(404, "session_not_found", "unknown or ended MCP session; initialize a new one")
+            raise Refusal(404, "session_not_found", "unknown or ended MCP session. Initialize a new one")
         if not hmac.compare_digest(session.key_hash, hashed):
             raise Refusal(403, "session_key_mismatch", "this MCP session was opened with a different API key")
         await self.sessions.serve(session, scope, receive, send)

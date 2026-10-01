@@ -11,7 +11,7 @@ real, capped vendor call, so it spends a little vendor money.
 ```json
 { "provider_id": "openrouter-llm", "kind": "models", "query": "gemini", "limit": 10 }
 ```
-`query` searches the cached list; add `"search_vendor": true` to ask
+`query` searches the cached list. Add `"search_vendor": true` to ask
 OpenRouter's own search. Each item's `meta` shows pricing, context length and
 modalities (`input_modalities` containing `image` means it sees images).
 Labels are `Untrusted` vendor text.
@@ -38,7 +38,7 @@ Read `ok`, `latency_ms`, `detected` (for an LLM, `tools` is true when the forced
 tool call came back) and `cost_estimate_usd` (or `cost_note` when no price is
 on file). `sample` and `message` are `Untrusted`. A text-to-speech model needs
 the slot's voice in `fields` (`{"voice_id": "<voice>"}` for `elevenlabs-tts`).
-A second run within 10 minutes answers `cached=true`; pass `"force": true`
+A second run within 10 minutes answers `cached=true`. Pass `"force": true`
 to run it again. A `rate_limited` error carries `retry_after`.
 
 ## 4. Declare what the probe cannot tell
@@ -61,7 +61,7 @@ merged view.
 After a passing test with the current key, the "not tested" warning is gone.
 Then run a real turn: `chat_start(...)` and `chat_send(...)` as in
 `lkap_describe("recipe", "test-and-publish")`. A pass proves the vendor
-accepts the id, not that the LiveKit plugin builds it; the first session
+accepts the id, not that the LiveKit plugin builds it. The first session
 does that.
 
 ## Related concepts

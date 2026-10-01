@@ -2,7 +2,7 @@
 
 Goal: let an agent find a customer, order or policy in a spreadsheet the
 user already has, show it on the panel and read back only what the caller
-needs — no API, no key.
+needs, with no API and no key.
 
 You need from the user: the spreadsheet saved as CSV (or JSON), and which
 column holds the reference callers give (a customer number, an order
@@ -13,12 +13,12 @@ number, a phone number).
 `dataset_create(...)`
 ```json
 {
-  "name": "Demo — Customers",
+  "name": "Demo · Customers",
   "key_columns": { "Customer Number": "string", "Phone": "phone" },
   "file_path": "~/customers.csv"
 }
 ```
-It waits for the import; note the returned `id`. A `phone` key matches the
+It waits for the import. Note the returned `id`. A `phone` key matches the
 same number written with or without a country code.
 
 ## 2. Add the lookup kit

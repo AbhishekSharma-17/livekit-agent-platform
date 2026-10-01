@@ -11,7 +11,7 @@ flow.
 { "name": "Return policy", "description": "Customer-facing return and refund rules" }
 ```
 
-## 2. Add content — pick one source
+## 2. Add content: pick one source
 
 Pasted text:
 
@@ -25,7 +25,7 @@ Pasted text:
 }
 ```
 
-A url the api fetches itself (never the MCP process — see
+A url the api fetches itself (never the MCP process. See
 `lkap_explain("knowledge")` for why that boundary matters):
 
 `kb_add_document(...)`
@@ -42,8 +42,8 @@ A local file (stdio mode only):
 
 ## 3. Check it's ready
 
-`wait=true` already returns the final `KbDocumentOut`; if `status` came back
-`"failed"`, read `error` — an unsupported content type or a blocked url are
+`wait=true` already returns the final `KbDocumentOut`. If `status` came back
+`"failed"`, read `error`. An unsupported content type or a blocked url are
 the common causes.
 
 ## 4. Try a search before attaching

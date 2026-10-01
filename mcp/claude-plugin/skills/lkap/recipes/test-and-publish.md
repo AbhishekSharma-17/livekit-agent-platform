@@ -10,7 +10,7 @@ session over the LiveKit room rather than reading the config and guessing.
 { "agent_id_or_slug": "<agent>", "wait_for_greeting": true }
 ```
 If this comes back `ok=false, code="no_worker"`, there is no ready worker on
-the agent's connection yet — follow `next_steps` (start a worker for an
+the agent's connection yet. Follow `next_steps` (start a worker for an
 `external` connection, or `connection_fleet(action="start")` for a
 `supervised` one) before trying again.
 
@@ -20,7 +20,7 @@ the agent's connection yet — follow `next_steps` (start a worker for an
 ```json
 { "chat_id": "<chat id>", "text": "My basement flooded during last night's storm, policy H0-44721." }
 ```
-Read the reply and the `events` list — a knowledge-base hit or a tool call
+Read the reply and the `events` list. A knowledge-base hit or a tool call
 should show up here if the agent is wired the way you expect. Send at least
 one more turn to see how it follows up.
 
@@ -83,7 +83,7 @@ relevancy, accuracy). For a failed case, read the conversation:
 { "id_or_slug": "<agent>", "include_transcripts": true }
 ```
 A run whose `status` is `error` did not play its cases (no worker, no usable
-model): fix what `error` names and run again — it says nothing about the agent.
+model): fix what `error` names and run again. It says nothing about the agent.
 
 ## 7. Publish
 

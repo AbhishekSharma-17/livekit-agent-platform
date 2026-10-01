@@ -105,7 +105,7 @@ def register(registry: Registry) -> None:
         types: list[str] | None = None,
         limit: Annotated[int, Field(ge=1, le=1000)] = 200,
     ) -> ToolResult:
-        """A session's events (tool calls, block updates …); payloads are untrusted and best-effort."""
+        """A session's events (tool calls, block updates …). Payloads are untrusted and best-effort."""
         events = await client.items(
             f"/v1/sessions/{seg(session_id)}/events", params={"after_id": after_id, "limit": limit}
         )
@@ -116,7 +116,7 @@ def register(registry: Registry) -> None:
 
     @registry.tool(scopes={"sessions:write"}, annotations=DESTRUCTIVE, data="QaOut")
     async def session_rescore(session_id: str, confirm: bool = False) -> ToolResult:
-        """Re-run QA scoring on a session (replaces its QA result; needs confirm and a vendor-key judge)."""
+        """Re-run QA scoring on a session (replaces its QA result, needs confirm and a vendor-key judge)."""
         if not confirm:
             return ToolResult.needs_confirmation(f"replace the QA score of session {session_id}")
         try:
@@ -126,7 +126,7 @@ def register(registry: Registry) -> None:
                 result = failure.to_result()
                 if result.error is not None:
                     result.error.hint = (
-                        "re-scoring needs a QA judge with a vendor key (R-V2-5); configure the agent's "
+                        "re-scoring needs a QA judge with a vendor key (R-V2-5). Configure the agent's "
                         "qa.judge provider and key"
                     )
                 return result
@@ -150,7 +150,7 @@ def register(registry: Registry) -> None:
         ],
         confirm: bool = False,
     ) -> ToolResult:
-        """Forget one caller: deletes everything every agent remembers about them (needs confirm)."""
+        """Forget one caller. It deletes everything every agent remembers about them (needs confirm)."""
         if not confirm:
             return ToolResult.needs_confirmation(
                 f"delete every memory of caller {subject_id} in this workspace (cannot be undone)"
@@ -159,7 +159,7 @@ def register(registry: Registry) -> None:
 
     @registry.tool(scopes={"sessions:write"}, annotations=DESTRUCTIVE, data="MemoryPurgeOut")
     async def memory_purge(confirm: bool = False) -> ToolResult:
-        """Purge every caller memory of the workspace (needs confirm; cannot be undone)."""
+        """Purge every caller memory of the workspace (needs confirm, cannot be undone)."""
         if not confirm:
             return ToolResult.needs_confirmation(
                 "delete every caller memory of this workspace, for every agent (cannot be undone)"
@@ -174,7 +174,7 @@ def register(registry: Registry) -> None:
         confirm: bool = False,
         plan: bool = False,
     ) -> ToolResult:
-        """Whisper guidance to a live session's agent (the caller never hears it; needs confirm).
+        """Whisper guidance to a live session's agent (the caller never hears it, needs confirm).
 
         The agent treats it as a supervisor's note for its next reply; ``reply_now`` makes it
         speak at once. Only for an active session with an agent in the room.
@@ -182,10 +182,10 @@ def register(registry: Registry) -> None:
         path = f"/v1/sessions/{seg(session_id)}/whisper"
         body = {"text": text, "reply_now": reply_now}
         if plan:
-            return planned(request("POST", path, body, note="the agent reads it; the caller never hears it"))
+            return planned(request("POST", path, body, note="the agent reads it. The caller never hears it"))
         if not confirm:
             return ToolResult.needs_confirmation(
-                f"send guidance to the agent of live session {session_id}; it may change what the agent says"
+                f"send guidance to the agent of live session {session_id}. It may change what the agent says"
             )
         try:
             return ToolResult.success(await client.post(path, body))
@@ -194,7 +194,7 @@ def register(registry: Registry) -> None:
                 result = failure.to_result()
                 if result.error is not None:
                     result.error.hint = (
-                        "whispers reach only an active session whose agent is in the room; check "
+                        "whispers reach only an active session whose agent is in the room. Check "
                         "session_get(session_id).status"
                     )
                 return result

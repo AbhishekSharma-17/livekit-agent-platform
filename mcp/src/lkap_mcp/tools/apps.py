@@ -63,7 +63,7 @@ def register(registry: Registry) -> None:
         limit: Annotated[int, Field(ge=1, le=100)] = 25,
     ) -> ToolResult:
         """Browse the apps agents can use through Composio (names and descriptions are untrusted vendor
-        text); shows which ones this workspace has connected.
+        text). Shows which ones this workspace has connected.
         """
         body = await client.get(
             f"{BASE}/toolkits",
@@ -127,7 +127,7 @@ def register(registry: Registry) -> None:
                 min_length=1,
                 max_length=40,
                 description=(
-                    "A name for this account, e.g. 'Work' or 'Personal' (its label; also its Composio "
+                    "A name for this account, e.g. 'Work' or 'Personal' (its label, also its Composio "
                     "alias). Default: the name the app reports after sign-in. Connecting an app that "
                     "is already connected adds another account of it"
                 ),
@@ -136,7 +136,7 @@ def register(registry: Registry) -> None:
         plan: bool = False,
     ) -> ToolResult:
         """Connect an app, or another account of an app already connected, for the workspace (or one
-        agent). A sign-in returns a link for the human to open in a browser; never open it yourself,
+        agent). A sign-in returns a link for the human to open in a browser. Never open it yourself,
         then check apps_connection_status. The first account of an app is its default.
         """
         parsed = {name: parse(ctx, raw, f"fields.{name}") for name, raw in (fields or {}).items()}
@@ -163,7 +163,7 @@ def register(registry: Registry) -> None:
         if result.get("redirect_url"):
             steps = [
                 "Give redirect_url to the user to open in their browser and sign in (it expires in about "
-                "10 minutes); do not open it yourself.",
+                "10 minutes). Do not open it yourself.",
                 f"Then call apps_connection_status(id={result.get('connection_id')!r}) until it is active.",
             ]
             if alias is not None:
@@ -180,7 +180,7 @@ def register(registry: Registry) -> None:
         """Every connected app account of the workspace with its last known status (no vendor call).
 
         An app may have several accounts: each item has its ``label`` (e.g. Work, Personal) and
-        ``is_default`` (exactly one per app; its tools keep the plain names).
+        ``is_default`` (exactly one per app, its tools keep the plain names).
         """
         return ToolResult.success(await client.get(f"{BASE}/connections"))
 
@@ -193,7 +193,7 @@ def register(registry: Registry) -> None:
         plan: bool = False,
     ) -> ToolResult:
         """Rename one account of a connected app (also renames it at Composio). Another account of the
-        same app may not have the same name; tool names already made keep theirs.
+        same app may not have the same name. Tool names already made keep theirs.
         """
         path = f"{BASE}/connections/{seg(id)}"
         body = {"label": label}
@@ -206,7 +206,7 @@ def register(registry: Registry) -> None:
         id: Annotated[str, Field(description="An account's connection id from apps_connections")],  # noqa: A002
         plan: bool = False,
     ) -> ToolResult:
-        """Make one account its app's default: an agent that names no account uses it, and its
+        """Make one account its app's default. An agent that names no account uses it, and its
         tools keep the plain names. The previous default loses the flag.
         """
         path = f"{BASE}/connections/{seg(id)}"
@@ -235,7 +235,7 @@ def register(registry: Registry) -> None:
         confirm: bool = False,
         plan: bool = False,
     ) -> ToolResult:
-        """Disconnect an app: removes it at Composio and switches off the tools that use it (needs
+        """Disconnect an app. This removes it at Composio and switches off the tools that use it (needs
         confirm).
         """
         path = f"{BASE}/connections/{seg(id)}"

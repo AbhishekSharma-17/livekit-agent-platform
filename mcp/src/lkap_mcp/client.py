@@ -38,14 +38,14 @@ _HEADER_VALUE = re.compile(r"[^A-Za-z0-9._@+:/-]")
 
 #: Hints the tools add to well-known api error codes (§4 conventions).
 ERROR_HINTS: dict[str, str] = {
-    "blocked_destination": "the api's network guard refused this host; public hosts only",
+    "blocked_destination": "the api's network guard refused this host. Public hosts only",
     "unauthorized": (
-        "the API key is missing, revoked or expired; mint a new agent key in the console "
+        "the API key is missing, revoked or expired. Mint a new agent key in the console "
         "(Settings -> AI agents)"
     ),
-    "rate_limited": "the api rate-limited this key; wait and retry",
+    "rate_limited": "the api rate-limited this key. Wait and retry",
     "api_unreachable": "check LKAP_API_URL and that the api is running",
-    "unexpected_redirect": "nothing was changed; check the id or path (an empty id ends the path in '/')",
+    "unexpected_redirect": "nothing was changed. Check the id or path (an empty id ends the path in '/')",
 }
 
 
@@ -164,8 +164,8 @@ def redirect_failure(method: str, path: str, response: httpx.Response) -> ApiFai
     return ApiFailure(
         response.status_code,
         "unexpected_redirect",
-        f"the api answered {method} {path} with {response.status_code} {response.reason_phrase}{where}; "
-        "the request was not carried out",
+        f"the api answered {method} {path} with {response.status_code} {response.reason_phrase}{where}. "
+        "The request was not carried out",
         {"location": location} if location else None,
     )
 

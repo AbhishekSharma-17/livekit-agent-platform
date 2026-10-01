@@ -90,7 +90,7 @@ def register(registry: Registry) -> None:
     async def pricing_quote(
         provider_id: Annotated[str, Field(description="A registry id, e.g. livekit-inference-tts")],
         model: Annotated[
-            str | None, Field(description="The model id; default: the entry's default model")
+            str | None, Field(description="The model id. Default: the entry's default model")
         ] = None,
     ) -> ToolResult:
         """The prices LKAP would use for one provider/model, with source and date, and its ≈ $/min share."""

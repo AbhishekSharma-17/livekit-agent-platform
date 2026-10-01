@@ -298,7 +298,7 @@ def register(registry: Registry) -> None:
 
     @registry.tool(annotations=READ, data="WorkspaceOut")
     async def workspace_get() -> ToolResult:
-        """Read this key's workspace; the telephony dialing policy is shown as a read-only summary."""
+        """Read this key's workspace. The telephony dialing policy is shown as a read-only summary."""
         row = await own_workspace(ctx)
         if row is None:
             return ToolResult.fail("not_found", "the key's workspace is not visible")

@@ -12,9 +12,9 @@ the shared OpenRouter key (see `lkap_explain("providers-and-keys")`).
 
 `kb_add_document(kb_id, ...)` takes exactly one source:
 
-- `text` (+ `filename="notes.md"`) — paste content directly.
-- `file_path` — a local file path, **stdio mode only**, capped at 25 MB.
-- `url` — the api fetches it server-side, through its own outbound network
+- `text` (+ `filename="notes.md"`): paste content directly.
+- `file_path`: a local file path, **stdio mode only**, capped at 25 MB.
+- `url`: the api fetches it server-side, through its own outbound network
   guard, and ingests the body (`text/*`, markdown, JSON or PDF, 25 MB cap).
   The MCP process never fetches a user-supplied url itself: in remote mode
   that would be a server-side-request-forgery vector from the service's own
@@ -26,7 +26,7 @@ returns the final `KbDocumentOut`, including `chunk_count` or `error`.
 ## Searching
 
 `kb_search(kb_id, query, top_k=5)` returns hits (`chunk_id`, `filename`,
-`score`, and `text` as `Untrusted` — it is content someone uploaded, not an
+`score`, and `text` as `Untrusted`. It is content someone uploaded, not an
 instruction to follow). An agent's own knowledge search at conversation time
 uses the built-in `search_knowledge` tool and, when
 `config.knowledge.auto_inject` is true, the api also injects the top
@@ -39,9 +39,9 @@ uses the built-in `search_knowledge` tool and, when
 auto_inject` and `top_k` control the automatic behaviour above.
 
 Retrieval settings (all under `config.knowledge`, defaults in brackets):
-`mode` (`hybrid` — keyword matches fused with embedding similarity; or
+`mode` (`hybrid`: keyword matches fused with embedding similarity, or
 `vector`), `rerank` (`none`; `local` rescores candidates with a local
-cross-encoder, roughly 60–100 ms), `min_score` (none; a 0–1 floor — in
+cross-encoder, roughly 60 to 100 ms), `min_score` (none, a 0 to 1 floor. In
 `hybrid` mode without rerank the score is rank-derived, so a floor only trims
 the tail), `max_inject_tokens` (1200, the size cap of the injected note),
 `skip_short_turns` (on: "yes", "okay", "haan ji", digits and turns under three
@@ -51,10 +51,10 @@ deductible?" finds the right passage; `last_turn` uses the words alone) and
 `prefetch` (on: the search starts while the caller is still speaking, so the
 result is usually ready when the turn ends). A chunk injected in the last
 three turns is not injected again. `agent_validate` flags a `min_score`
-outside 0–1 and warns when `rerank="local"` runs without `prefetch`.
+outside 0 to 1 and warns when `rerank="local"` runs without `prefetch`.
 
 Starter templates and packs can seed knowledge bases at agent-creation time
-(`PackManifest.kb_seeds` for a pack) — the `claims_intake` starter seeds
+(`PackManifest.kb_seeds` for a pack). The `claims_intake` starter seeds
 "Claims intake · Policy lines" and "Claims intake · Intake playbook" from its
 own files, already populated by the time `agent_create` returns.
 
@@ -89,13 +89,13 @@ packs that seed knowledge bases ship a small evaluation set with them.
 
 By default a knowledge base's vectors live in the platform's own store. A
 **knowledge connection** keeps them in a vector database the workspace
-already runs instead — Qdrant, Pinecone or Weaviate — or adds a hosted
+already runs instead (Qdrant, Pinecone or Weaviate) or adds a hosted
 re-ranking service (Cohere or Voyage AI) for the search tool. The chunk text
-always stays on the platform; the vector database holds only the vectors and
+always stays on the platform. The vector database holds only the vectors and
 their ids.
 
 1. Store the vendor key first (`provider_key_create(provider_id="pinecone",
-   ...)`; ids `qdrant`, `pinecone`, `weaviate`, `cohere-rerank`,
+   ...)`, ids `qdrant`, `pinecone`, `weaviate`, `cohere-rerank`,
    `voyage-rerank`). A local Qdrant or Weaviate may run without one.
 2. `kb_connection_create(name, kind="qdrant", settings={"url": ...},
    credential_id=...)` stores the connection and runs its test. `settings`
@@ -105,11 +105,11 @@ their ids.
    api's outbound network guard.
 3. `kb_connection_test(connection_id)` lists the collections or indexes the
    key can see and checks the vector width of the one the connection uses
-   against the width knowledge bases are built with; a mismatch fails with a
+   against the width knowledge bases are built with. A mismatch fails with a
    message naming the collection or index.
 4. `kb_create(name, connection_id=...)` creates a knowledge base whose vectors
    live there (one Pinecone namespace or one Weaviate tenant per knowledge
-   base; in Qdrant every point carries the knowledge base and workspace it
+   base, in Qdrant every point carries the knowledge base and workspace it
    belongs to). Where a knowledge base lives is fixed once it exists.
 
 `kb_connection_list()` shows every connection with its status, last error and
@@ -127,20 +127,20 @@ price is unknown).
 ## Managed search (Ragie)
 
 A **managed search** knowledge base keeps its documents in a search service
-that ingests and ranks them itself; the platform stores none of them. Ragie
+that ingests and ranks them itself. The platform stores none of them. Ragie
 is the first such service. Each knowledge base reads one Ragie **partition**.
 
 1. Store the Ragie key (`provider_key_create(provider_id="ragie", ...)`).
 2. `kb_connection_create(name, kind="ragie", settings={}, credential_id=...)`.
    Its settings are Ragie's search options: `rerank` (Ragie keeps only the
-   passages it judges relevant; more accurate, slower) and `recency_bias`
+   passages it judges relevant, more accurate, slower) and `recency_bias`
    (newer documents rank higher). Both are off by default.
 3. `kb_connection_test(connection_id)` checks the key and lists the
    partitions it can see (the first 100) in `collections`.
 4. Create the knowledge base with `kind: "external"`, the connection's id and
    the partition as `external_ref` (lower-case letters, digits, `_` and `-`):
    the console's **New knowledge base** dialog does this under "Managed
-   search (Ragie)". The kind and partition are fixed once it exists; it
+   search (Ragie)". The kind and partition are fixed once it exists. It
    records no embedder.
 
 Documents are added in Ragie, not here: an upload, url import or re-index to
@@ -156,8 +156,8 @@ second of each, and so on. A Ragie hit has `score_source: "external"`,
 `meta.document_name`, `meta.source: "ragie"` and, when Ragie knows the
 document's address, `meta.url`. `min_score`, `mode` and the platform's
 re-rankers apply to the platform's own knowledge bases only. Automatic
-knowledge skips Ragie knowledge bases — they answer through the agent's search
-tool only — and every search counts against the Ragie plan; a slow or failing
+knowledge skips Ragie knowledge bases (they answer through the agent's search
+tool only) and every search counts against the Ragie plan. A slow or failing
 Ragie is skipped with a `kb_timeout` or `kb_error` warning and the other
 knowledge bases still answer. Passages reach the model inside the same
 untrusted-content fence as every other knowledge result.

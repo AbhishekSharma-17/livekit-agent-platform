@@ -3,7 +3,7 @@
 An agent can remember returning callers across sessions. It is **off by
 default** and switched on per agent with `agent_update(patch={"memory":
 {"enabled": true}})`. The memory is read **once**, before the greeting, and
-written **once**, after the session ends; nothing happens during the call.
+written **once**, after the session ends. Nothing happens during the call.
 
 ## Who is remembered
 
@@ -17,16 +17,16 @@ same caller has a different id in another workspace.
 
 ## Settings (`MemoryConfig`)
 
-- `enabled` — off by default; while off nothing is read or written.
-- `scope` — `agent` (only this agent's memories) or `workspace` (shared with
+- `enabled`: off by default. While off nothing is read or written.
+- `scope`: `agent` (only this agent's memories) or `workspace` (shared with
   every agent of the workspace that also uses `workspace`).
-- `retention_days` — memories are deleted this many days after the caller's
+- `retention_days`: memories are deleted this many days after the caller's
   last remembered session (90 by default).
-- `consent_line` — a sentence the agent says early in a call that will be
+- `consent_line`: a sentence the agent says early in a call that will be
   remembered.
-- `max_recall_tokens` — how much recalled text is added to the agent's
+- `max_recall_tokens`: how much recalled text is added to the agent's
   instructions (400 by default, about four characters a token).
-- `verbatim` — store the caller's own lines without a model picking out the
+- `verbatim`: store the caller's own lines without a model picking out the
   facts. Off: after the call, the agent's language model (OpenAI or
   OpenRouter with a key) extracts short facts; `agent_validate` warns when
   there is no such model.
@@ -51,7 +51,7 @@ again. Both need confirmation and cannot be undone. They call
 ## The backend
 
 The memories are kept by Mem0 (open source), installed on the server as the
-api's `memory` extra; without it `session_memory` shows a recall status of
+api's `memory` extra. Without it `session_memory` shows a recall status of
 `unavailable` and nothing is stored. The session timeline records
 `memory_recalled`, `memory_stored` and `memory_forgotten` events.
 

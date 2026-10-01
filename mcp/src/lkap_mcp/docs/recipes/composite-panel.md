@@ -5,7 +5,7 @@ instead of the default four-block layout.
 
 ## 1. Design the block list
 
-Pick from the block types (`lkap_explain("panels-and-blocks")`); a
+Pick from the block types (`lkap_explain("panels-and-blocks")`). A
 support-triage agent might want a checklist, a table it appends to, and the
 transcript with tool calls visible:
 
@@ -54,11 +54,11 @@ where the caller is might add the newer blocks instead:
 ```
 
 The agent gets `request_choice` / `resolve_choice`, `set_details` and
-`show_text` for them; the `steps` block follows the agent's flow on its own
+`show_text` for them. The `steps` block follows the agent's flow on its own
 (give it `"source": "manual"` and it gets `set_steps` instead).
 
 To keep the card and the recap in one place, add a `layout` block that shows
-them as tabs (the two blocks stay in the list; the layout only claims them):
+them as tabs (the two blocks stay in the list, the layout only claims them):
 `{"id": "claim_tabs", "type": "layout", "config": {"kind": "tabs", "children":
 [{"block_id": "claim_details", "label": "Claim"}, {"block_id": "recap", "label":
 "Recap"}]}}`.
@@ -82,13 +82,13 @@ sections that the caller may write in too, and a gallery). The agent gets
 { "id_or_slug": "<agent>" }
 ```
 A bad key for a block type comes back as an issue at
-`panel.blocks[i].config.<key>` — every block schema forbids unknown keys, so
+`panel.blocks[i].config.<key>`, because every block schema forbids unknown keys, so
 a typo is caught here rather than silently ignored.
 
 ## 3. See it live
 
 Test with `chat_start`/`chat_send`, or open the (unpublished) session url
-directly — a draft agent's panel still renders for anyone who can reach the
+directly. A draft agent's panel still renders for anyone who can reach the
 console.
 
 ## Related concepts

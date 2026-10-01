@@ -32,7 +32,7 @@ Note the app's `slug` and its `auth` list (`oauth_managed`, `api_key`, …).
 The result's `redirect_url` is for the **user**: ask them to open it in their
 browser and sign in (it expires in about ten minutes). Never open it
 yourself. For an app that takes a key instead, use `"method": "api_key"` with
-`"fields": { "api_key": "env:APP_KEY" }` — it connects at once.
+`"fields": { "api_key": "env:APP_KEY" }`. It connects at once.
 
 ## 4. Wait until it is active
 
@@ -49,7 +49,7 @@ again.
 ```json
 { "toolkit": "googlecalendar", "important": true }
 ```
-Prefer `read` actions for a first agent; ask the user before any
+Prefer `read` actions for a first agent. Ask the user before any
 `destructive` one.
 
 `apps_add_tools(...)`

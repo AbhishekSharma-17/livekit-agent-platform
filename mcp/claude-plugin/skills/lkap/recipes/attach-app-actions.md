@@ -6,7 +6,7 @@ through Composio (see the `connect-an-app` recipe first). Needs a key with
 
 ## 1. Find the connection and its actions
 
-`apps_connections()` — note the `id` of an `active` connection.
+`apps_connections()`: note the `id` of an `active` connection.
 
 `apps_actions(...)`
 ```json
@@ -27,9 +27,9 @@ moves money) needs the user's explicit go-ahead.
 ```
 Each action becomes one tool named `<app>_<action>` (e.g.
 `googlecalendar_find_free_slots`) with its inputs pinned, and is attached to
-the agent as a new config version; the agent's `tools.apps.mode` becomes
+the agent as a new config version. The agent's `tools.apps.mode` becomes
 `actions`. Reads run while the conversation continues ("Let me look that
-up"); actions that change something wait for their result. Picking the same
+up"). Actions that change something wait for their result. Picking the same
 action again reuses its tool.
 
 ## 3. Check and try it
@@ -40,7 +40,7 @@ action again reuses its tool.
 ```
 Then `chat_start` and `chat_send` a message that needs the action. If the
 app's sign-in has expired the agent says the app needs to be reconnected by
-an admin — reconnect it in the console's Tools, Apps.
+an admin. Reconnect it in the console's Tools, Apps.
 
 ## Optional: an app server or a tool finder
 
@@ -55,11 +55,11 @@ an admin — reconnect it in the console's Tools, Apps.
   apps from a conversation (`router.manage_connections`) is refused for now:
   an admin connects apps under Tools, Apps. Turning `server` or `router` on,
   reviewing a destructive action or naming accounts needs an admin key
-  (`providers:write`); a Builder key gets a 403.
-- `off` removes the server or finder; attached action tools stay.
+  (`providers:write`). A Builder key gets a 403.
+- `off` removes the server or finder. Attached action tools stay.
 
 Saving provisions the server or finder and attaches it as a managed MCP
-server (shown read-only in the agent's tools); changing the settings
+server (shown read-only in the agent's tools). Changing the settings
 replaces it, and `off` or deleting the agent removes it. `denied_actions`
 lists actions it must never run.
 

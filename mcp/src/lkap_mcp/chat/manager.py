@@ -384,7 +384,7 @@ class ChatManager:
         raise ChatError(
             "no_worker",
             "no ready worker is registered for the agent's LiveKit connection, so no agent would "
-            "join; no session was started",
+            "join. No session was started",
             next_steps=steps,
             details={"connection_id": str(connection_id), "deployment_mode": mode},
         )
@@ -557,7 +557,7 @@ class ChatManager:
             await self._discard(chat)
             raise ChatError(
                 "chat_disconnected",
-                "the room disconnected (the agent left or the session ended); the chat is closed",
+                "the room disconnected (the agent left or the session ended). The chat is closed",
                 next_steps=["session_get(session_id) for the transcript", "chat_start to open a new chat"],
                 details={"session_id": chat.session_id, "turns": chat.turn_index},
             )

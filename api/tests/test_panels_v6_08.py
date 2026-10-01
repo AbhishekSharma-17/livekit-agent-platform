@@ -81,7 +81,7 @@ def test_a_layout_over_existing_blocks_is_fine() -> None:
     [
         ([{"block_id": "missing"}], "there is no block 'missing' on this panel"),
         ([{"block_id": "card"}, {"block_id": "card"}], "'card' is listed twice in this layout"),
-        ([{"block_id": "other"}], "'other' is a layout; a layout cannot hold another layout"),
+        ([{"block_id": "other"}], "'other' is a layout. A layout cannot hold another layout"),
         ([{"block_id": "tabs"}], "a layout cannot hold itself"),
     ],
 )

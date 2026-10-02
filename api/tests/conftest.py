@@ -31,6 +31,7 @@ from lkap_contracts.migrate import default_panel_for
 from lkap_contracts.packs import PackManifest
 from sqlalchemy.engine import make_url
 
+from lkap_api.auth.ratelimit import InMemoryRateLimiter
 from lkap_api.bootstrap import bootstrap
 from lkap_api.db.guard import tenant_scope_guard
 from lkap_api.db.session import Database
@@ -317,6 +318,20 @@ def _client(app: FastAPI, headers: dict[str, str] | None = None) -> httpx.AsyncC
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://api.test", headers=headers
     )
+
+
+@pytest.fixture
+def frozen_rate_limiter(app: FastAPI) -> InMemoryRateLimiter:
+    """The app's rate limiter on a clock that never moves.
+
+    A bucket refills continuously (one token per 6 s at 10 per minute, per 2 s
+    at 30), so a test that spends a bucket and expects the next call refused
+    races the real clock: under the full suite's load the burst can take longer
+    than one refill and let that call through. A frozen clock refills nothing.
+    """
+    limiter = InMemoryRateLimiter(clock=lambda: 0.0)
+    app.state.rate_limiter = limiter
+    return limiter
 
 
 @pytest.fixture

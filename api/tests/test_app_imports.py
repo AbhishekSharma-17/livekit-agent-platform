@@ -31,11 +31,15 @@ def test_lkap_api_main_imports_cleanly_in_a_fresh_interpreter() -> None:
     # a stray `LKAP_ENV=prod` or similar in the ambient environment must not
     # turn this into a test of production validation instead of the import.
     env = {"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", ""), **REQUIRED_ENV}
+    # The timeout only guards against a hang; a cycle fails fast with ImportError.
+    # A cold import of the whole app (lancedb alone is ~7 s) took 17 to 30 s on a
+    # loaded machine, so the old 30 s guard was a race. 240 s stays under CI's
+    # per-test `--timeout=300`, so a real hang still fails here, with this message.
     result = subprocess.run(
         [sys.executable, "-c", "import lkap_api.main"],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=240,
         env=env,
     )
     assert result.returncode == 0, result.stderr

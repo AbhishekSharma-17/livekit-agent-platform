@@ -472,10 +472,10 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-37 | Opus | 9 | merged | f2098557 | DGX cutover done 2026-10-03 | #350 to #353 |
 | V6-38 | Sonnet | 9 | merged | 24334710 | | #360 to #364 |
 | V6-39 | Sonnet | 9 | merged | 72e6b5b3 | none | #370 |
-| V6-40 | Opus | 10 | planned | | | |
+| V6-40 | Opus | 10 | running | | | |
 | V6-41 | Opus | 10 | merged | 298434e7 | | #380, #381 |
 | V6-42 | Sonnet | 10 | merged | 7476f3d9 | | #385 to #389 |
-| V6-43 | Opus | 10 | planned | | | |
+| V6-43 | Opus | 10 | running | | | |
 | V6-44 | Opus | 11 | planned | | | |
 | V6-45 | Opus | 11 | planned | | | |
 | V6-46 | Opus | 11 | planned | | | |

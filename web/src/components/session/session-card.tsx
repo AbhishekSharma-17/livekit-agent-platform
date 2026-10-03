@@ -12,6 +12,7 @@
  */
 import * as React from "react";
 
+import { LkapLogo } from "@/components/shared/lkap-logo";
 import { cn } from "@/lib/utils";
 
 export interface SessionCardProps {
@@ -42,15 +43,35 @@ export function SessionCard({
   );
 }
 
+/**
+ * A quiet "Powered by LKAP" line under the caller-page cards. Plain text with
+ * the mark (not a link), so a caller is never led away from their call.
+ */
+export function PoweredByLkap({ className }: { className?: string }) {
+  return (
+    <p
+      data-testid="powered-by-lkap"
+      className={cn("text-text-tertiary inline-flex items-center gap-1.5 text-caption", className)}
+    >
+      Powered by
+      <LkapLogo variant="mark" size="sm" />
+      <span className="text-text-secondary font-semibold">LKAP</span>
+    </p>
+  );
+}
+
 export function SessionCardScreen({
   top,
   children,
   className,
+  attribution = true,
 }: {
   /** Full-bleed chrome above the card (the test-mode bar). */
   top?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  /** Show "Powered by LKAP" under the card. On by default. */
+  attribution?: boolean;
 }) {
   return (
     <div className="flex min-h-dvh flex-col">
@@ -62,6 +83,7 @@ export function SessionCardScreen({
         )}
       >
         {children}
+        {attribution ? <PoweredByLkap /> : null}
       </main>
     </div>
   );

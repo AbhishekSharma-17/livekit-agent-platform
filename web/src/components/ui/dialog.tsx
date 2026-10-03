@@ -133,6 +133,9 @@ function DialogContent({
           // instead of pushing the header or footer off a short screen.
           !panel &&
             "grid grid-cols-[minmax(0,1fr)] gap-4 overflow-y-auto overscroll-contain p-5 sm:w-[min(calc(100vw-32px),560px)] sm:p-6",
+          // A footer (direct child or inside a form) sits flush with the bottom edge: the
+          // content drops its bottom padding instead of the footer pulling itself down.
+          "has-[[data-slot=dialog-footer]]:pb-0 sm:has-[[data-slot=dialog-footer]]:pb-0",
           panel && "flex flex-col gap-0 overflow-hidden p-0",
           panel && DIALOG_PANEL_WIDTH[size],
           className
@@ -188,7 +191,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "sticky bottom-0 z-10 -mx-5 -mb-5 mt-2 flex flex-col-reverse gap-2 rounded-b-dialog border-t border-border bg-muted px-5 py-3 sm:-mx-6 sm:-mb-6 sm:flex-row sm:flex-wrap sm:justify-end sm:px-6 group-data-[layout=panel]/dialog:static group-data-[layout=panel]/dialog:mx-0 group-data-[layout=panel]/dialog:mt-0 group-data-[layout=panel]/dialog:mb-0 group-data-[layout=panel]/dialog:shrink-0 group-data-[layout=panel]/dialog:pb-[max(0.75rem,env(safe-area-inset-bottom))]",
+        "sticky bottom-0 z-10 -mx-5 mt-2 flex flex-col-reverse gap-2 rounded-b-dialog border-t border-border bg-muted px-5 py-3 sm:-mx-6 sm:flex-row sm:flex-wrap sm:justify-end sm:px-6 group-data-[layout=panel]/dialog:static group-data-[layout=panel]/dialog:mx-0 group-data-[layout=panel]/dialog:mt-0 group-data-[layout=panel]/dialog:mb-0 group-data-[layout=panel]/dialog:shrink-0 group-data-[layout=panel]/dialog:pb-[max(0.75rem,env(safe-area-inset-bottom))]",
         className
       )}
       {...props}

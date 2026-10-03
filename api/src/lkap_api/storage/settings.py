@@ -26,6 +26,11 @@ class StorageSettings(BaseSettings):
     storage_access_key: str | None = None
     storage_secret_key: str | None = None
     storage_public_base_url: str | None = None
+    #: ``LKAP_STORAGE_PUBLIC_ENDPOINT_URL`` (V6-37): the S3 endpoint as browsers reach it
+    #: (an HTTPS proxy in front of the store). When set, presigned links are signed for it,
+    #: while uploads and reads keep using ``LKAP_STORAGE_ENDPOINT_URL``. Unset = sign for
+    #: the internal endpoint, as before.
+    storage_public_endpoint_url: str | None = None
     #: Signing key for local-backend signed URLs; falls back to `master_key`
     #: (`lkap_api.settings.Settings.master_key`) when unset, passed in by the
     #: caller rather than read here (this settings object has no master key).

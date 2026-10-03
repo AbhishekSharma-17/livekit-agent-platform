@@ -141,6 +141,9 @@ Themes: **S** speech and pricing · **I** LiveKit Inference · **P** panels · *
 | V6-32 | S+P | Provider keys: one vendor key shared by its STT and TTS entries (Deepgram TTS refused the Deepgram key), OpenRouter key tags without the non-streaming speech entries, the credentials page showing tested/created/last-used truthfully | Opus | 8 | V6-31 merged (user request 2026-09-30) |
 | V6-33 | P | Console clarity: each pipeline part labelled by its job (listens, decides when you have finished, thinks, speaks, draws, filters noise), a one-line pipeline summary per agent incl. which part ends the turn and where it runs, Cloud vs self-hosted differences, a one-line "what this model does" in the pickers | Sonnet | 8 | V6-32 merged (user request 2026-09-30) |
 | V6-34 | S | Low-latency turn taking (`docs/research-v6/low-latency-stack.md` follow-ups): Silero minimum silence exposed, a fast turn preset, STT-native end of turn and Flux options for LiveKit Inference STT, Inworld TTS-2 Flash listed, OpenRouter sticky routing hints | Opus | 8 | research committed (user request 2026-09-30) |
+| V6-37 | S | Data stores for a single-node deployment. A SQLite to Postgres copy tool with tests, an optional public endpoint for presigned storage links, and the Postgres (pgvector), Valkey and SeaweedFS recipe. | Opus | 9 | V6 closed (user request 2026-10-03) |
+| V6-38 | P | UI-R6. Logos wherever the console names a company or product (AI coding agents, MCP clients, providers), from the recovered commit 95ef43c plus the unfinished list. | Sonnet | 9 | none |
+| V6-39 | X | Copy-rule pass on `docs/DEPLOYMENT-AND-HANDOFF.md` and `docs/v6/_asks.md` (no em dashes, no statements joined by a colon or semicolon), refreshed facts, and the duplicate rows of asks #328 to #333 removed. | Sonnet | 9 | none |
 
 **Parallel-safe pairs and groups** (disjoint exclusive files, contracts commits still serialised in the listed order):
 
@@ -451,6 +454,9 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-32 | Opus | 8 | merged | 0007ed4 | | #313 to #318 |
 | V6-33 | Sonnet | 8 | merged | a4b9df7 | | #323 to #325 |
 | V6-34 | Opus | 8 | merged | 45c029f | | #326 to #333 |
+| V6-37 | Opus | 9 | running | | | |
+| V6-38 | Sonnet | 9 | running | | | |
+| V6-39 | Sonnet | 9 | running | | | |
 
 Migrations applied to the dev DB (the coordinator appends: id · date · backup path in the scratchpad, never in the repo): `v6_002_datasets` · 2026-09-28 · backup `lkap.db.pre-v6_002` (U-V6-3). `v6_001` not applied (V6-05 deferred). `v6_003_credential_last_used` · 2026-09-30 · backup `lkap.db.pre-v6_003` (U-V6-3).
 

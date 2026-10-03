@@ -183,6 +183,15 @@ describe("ConnectionOverview (V6-03, D-V6-14: the LiveKit Inference credits line
 });
 
 describe("ConnectionCreateForm", () => {
+  it("leads the LiveKit Cloud type card with LiveKit's mark, and keeps the Self-hosted icon", () => {
+    renderWithClient(<ConnectionCreateForm />);
+    const cloud = screen.getByText("LiveKit Cloud").closest("label")!;
+    expect(cloud.querySelector('[data-slot="vendor-mark"]')?.getAttribute("data-mark")).toBe("livekit");
+    expect(cloud.querySelector('[data-slot="vendor-mark"]')?.getAttribute("aria-hidden")).toBe("true");
+    const selfHosted = screen.getByText("Self-hosted").closest("label")!;
+    expect(selfHosted.querySelector('[data-slot="vendor-mark"]')).toBeNull();
+  });
+
   it("keeps Save disabled until Test connection passes, then shows the capability chips from the response", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

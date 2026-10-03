@@ -103,6 +103,26 @@ describe("CostTab — estimate vs actual (V4-16)", () => {
     expect(screen.getAllByText("$0.2100").length).toBeGreaterThan(0);
   });
 
+  it("leads a cost line's provider, and a maker/model id's maker, with a decorative mark", () => {
+    const session = baseSession({
+      cost: {
+        total_usd: "0.30",
+        lines: [
+          { provider_id: "livekit-inference-stt", model: "deepgram/nova-3", unit: "audio_s_in", quantity: "60", unit_price_usd: "0.005", cost_usd: "0.30" },
+          { provider_id: "custom-tts", model: "voice-1", unit: "chars", quantity: "500", note: "no price" },
+        ],
+      },
+    });
+    const { container } = renderTab(session);
+    const rows = [...container.querySelectorAll("tbody tr")];
+    const marks = (row: Element) => [...row.querySelectorAll('[data-slot="vendor-mark"]')].map((m) => m.getAttribute("data-mark"));
+    expect(marks(rows[0])).toEqual(["livekit", "deepgram"]);
+    expect(rows[0].textContent).toContain("livekit-inference-stt");
+    expect(rows[0].textContent).toContain("deepgram/nova-3");
+    expect(marks(rows[1])).toEqual([]); // an unknown provider and a bare model print alone
+    for (const mark of container.querySelectorAll('[data-slot="vendor-mark"]')) expect(mark.getAttribute("aria-hidden")).toBe("true");
+  });
+
   it("keeps 'no price' the literal for an unpriced line even with drivers present", () => {
     const session = baseSession({
       cost: {

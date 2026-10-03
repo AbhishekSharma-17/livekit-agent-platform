@@ -4,7 +4,7 @@ import path from "node:path";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { VendorMark } from "@/components/shared/vendor-mark";
+import { VendorMark, VendorName } from "@/components/shared/vendor-mark";
 import { MONOGRAM_ONLY, VENDOR_MARKS, vendorKey, vendorMarkFor } from "@/components/shared/vendor-marks";
 
 /**
@@ -115,6 +115,49 @@ const SERVICES: Expected[] = [
   ["Microsoft", "microsoft", "lobehub"],
 ];
 
+/**
+ * AI coding agents and MCP clients (Settings, AI agents): the console's client
+ * ids, the labels it prints, and the `clientInfo` names the products send in the
+ * MCP handshake (recorded as a key's last client and an audit row's client).
+ */
+const AGENT_CLIENTS: Expected[] = [
+  // Claude Code and Claude Desktop show the Claude mark
+  ["claude-code", "claude", "simple-icons"],
+  ["Claude Code", "claude", "simple-icons"],
+  ["Claude Desktop", "claude", "simple-icons"],
+  ["claude-ai", "claude", "simple-icons"],
+  ["codex", "codex", "lobehub"],
+  ["Codex CLI", "codex", "lobehub"],
+  ["codex-mcp-client", "codex", "lobehub"],
+  ["cursor", "cursor", "simple-icons"],
+  ["Cursor", "cursor", "simple-icons"],
+  ["cursor-vscode", "cursor", "simple-icons"],
+  ["GitHub Copilot", "githubcopilot", "simple-icons"],
+  ["Windsurf", "windsurf", "simple-icons"],
+  ["windsurf-client", "windsurf", "simple-icons"],
+  ["Zed", "zedindustries", "simple-icons"],
+  ["Cline", "cline", "simple-icons"],
+  ["JetBrains", "jetbrains", "simple-icons"],
+  ["Gemini CLI", "geminicli", "lobehub"],
+  ["gemini-cli-mcp-client", "geminicli", "lobehub"],
+  ["Goose", "goose", "lobehub"],
+  // ChatGPT's own app icon is the OpenAI blossom
+  ["ChatGPT", "openai", "lobehub"],
+  ["MCP", "modelcontextprotocol", "simple-icons"],
+  ["Model Context Protocol", "modelcontextprotocol", "simple-icons"],
+  ["mcp-remote", "modelcontextprotocol", "simple-icons"],
+  // The brand page forbids recolouring the icon or giving it a background, so the monogram on purpose
+  ["Visual Studio Code", null],
+  ["vscode", null],
+  ["VS Code", null],
+  // Not named or offered anywhere in the console, so not looked up. A bare "continue" key would also mark tools named continue_*
+  ["Continue", null],
+  // Microsoft Copilot is a different product from GitHub Copilot, so "copilot" alone never borrows the GitHub mark
+  ["Copilot", null],
+  // A client the console does not know keeps the monogram
+  ["my-script", null],
+];
+
 /** Provider ids, which some rows hold instead of a label. */
 const PROVIDER_IDS: Expected[] = [
   ["deepgram-stt", "deepgram", "simple-icons"],
@@ -149,7 +192,7 @@ const PROVIDER_IDS: Expected[] = [
 ];
 
 describe("vendorMarkFor", () => {
-  it.each([...REGISTRY, ...SERVICES, ...PROVIDER_IDS])("%s → %s (%s)", (vendor, slug, source) => {
+  it.each([...REGISTRY, ...SERVICES, ...AGENT_CLIENTS, ...PROVIDER_IDS])("%s → %s (%s)", (vendor, slug, source) => {
     const mark = vendorMarkFor(vendor);
     expect(mark?.slug ?? null).toBe(slug);
     expect(mark?.source).toBe(source);
@@ -178,9 +221,10 @@ describe("vendorMarkFor", () => {
 });
 
 describe("monogram-only brands", () => {
-  it("pins no brand today, and any key added later never resolves to a mark, as a label or an id prefix", () => {
+  it("pins only Visual Studio Code, and a pinned key never resolves to a mark, as a label or an id prefix", () => {
     // Slack, Twilio, Salesforce and Microsoft Outlook left the list once the workspace owner approved their marks.
     for (const key of ["slack", "twilio", "salesforce", "outlook", "microsoftoutlook"]) expect(MONOGRAM_ONLY.has(key), key).toBe(false);
+    expect([...MONOGRAM_ONLY].sort()).toEqual(["visualstudiocode", "vscode"]);
     for (const key of MONOGRAM_ONLY) {
       expect(vendorMarkFor(key)).toBeNull();
       expect(vendorMarkFor(`${key}-integration`)).toBeNull();
@@ -373,11 +417,46 @@ describe("VendorMark", () => {
     expect([...colourMarks]).toEqual(["outlook"]);
   });
 
+  it("draws the compact xs mark with no tile", () => {
+    const { container } = render(<VendorMark vendor="Cursor" size="xs" />);
+    const mark = container.querySelector('[data-slot="vendor-mark"]')!;
+    expect(mark.getAttribute("data-mark")).toBe("cursor");
+    expect(mark.className).toContain("size-4");
+    expect(mark.className).toContain("bg-transparent");
+    expect(mark.className).not.toContain("bg-muted-strong");
+  });
+
   it("falls back to the monogram for a vendor with no mark", () => {
     const { container } = render(<VendorMark vendor="Telnyx" />);
     const mark = container.querySelector('[data-slot="vendor-mark"]')!;
     expect(mark.getAttribute("data-mark")).toBe("monogram");
     expect(mark.textContent).toBe("Te");
     expect(mark.querySelector("svg")).toBeNull();
+  });
+});
+
+describe("VendorName", () => {
+  it("prints the name after its compact, decorative mark", () => {
+    const { container } = render(<VendorName vendor="claude-code">Claude Code</VendorName>);
+    const name = container.querySelector('[data-slot="vendor-name"]')!;
+    expect(name.textContent).toBe("Claude Code");
+    const mark = name.querySelector('[data-slot="vendor-mark"]')!;
+    expect(mark.getAttribute("data-mark")).toBe("claude");
+    expect(mark.getAttribute("aria-hidden")).toBe("true");
+    expect(mark.className).toContain("size-4");
+    expect(name.firstElementChild).toBe(mark);
+  });
+
+  it("defaults the printed name to the vendor", () => {
+    render(<VendorName vendor="Deepgram" />);
+    expect(screen.getByText("Deepgram")).toBeTruthy();
+  });
+
+  it("prints an unknown name alone, with no monogram, unless asked", () => {
+    const { container, rerender } = render(<VendorName vendor="my-script" />);
+    expect(container.querySelector('[data-slot="vendor-mark"]')).toBeNull();
+    expect(container.textContent).toBe("my-script");
+    rerender(<VendorName vendor="Telnyx" monogram />);
+    expect(container.querySelector('[data-slot="vendor-mark"]')?.getAttribute("data-mark")).toBe("monogram");
   });
 });

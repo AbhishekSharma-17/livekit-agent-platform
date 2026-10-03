@@ -20,6 +20,7 @@ import {
 import { Alert } from "@/components/ui/alert";
 import { isPresentable } from "@/lib/friendly-error";
 import { Field } from "@/components/shared/field";
+import { VendorName } from "@/components/shared/vendor-mark";
 import { useCreateCredential, useEnableApps, useTestAppsKey, useUpdateCredential } from "@/components/console/lib/api-hooks";
 import { appsErrorMessage, appsErrorToast } from "@/components/console/tools/apps/use-composio";
 import { suggestedCredentialLabel } from "@/components/console/registry/provider-meta";
@@ -145,7 +146,9 @@ export function EnableComposioDialog({
     <DialogContent size="md" aria-describedby="enable-composio-description">
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle>
+            <VendorName vendor="Composio">{title}</VendorName>
+          </DialogTitle>
           <DialogDescription id="enable-composio-description">
             {mode === "enable"
               ? "Paste your Composio API key to browse and connect apps from this console."

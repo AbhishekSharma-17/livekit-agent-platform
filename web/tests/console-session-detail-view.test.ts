@@ -228,7 +228,10 @@ describe("SessionDetailView — header and stats", () => {
     await vi.waitFor(() => expect(value("Tool calls")).toBe("1"));
     expect(value("Turns")).toBe("2");
     expect(value("Errors")).toBe("1");
-    expect(within(summary).getByText("livekit · gemini")).toBeTruthy();
+    // The provider keeps its printed name and gains its compact mark (decorative).
+    const provider = within(summary).getByText("livekit");
+    expect(provider.closest('[data-slot="vendor-name"]')?.querySelector('[data-slot="vendor-mark"][aria-hidden="true"]')).not.toBeNull();
+    expect(within(summary).getByText("gemini")).toBeTruthy();
     expect(summary.textContent).not.toContain("{");
   });
 

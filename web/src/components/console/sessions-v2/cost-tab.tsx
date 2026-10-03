@@ -5,6 +5,7 @@ import { CoinsIcon } from "lucide-react";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatCard, StatGrid } from "@/components/shared/data-display";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ModelName, VendorName } from "@/components/shared/vendor-mark";
 import { driverSentence, formatUsd } from "@/components/console/lib/cost-hooks";
 import type { CostDriver, CostLine } from "@/contracts/lkap-contracts";
 import type { SessionTabProps } from "@/components/console/sessions/detail/types";
@@ -108,8 +109,12 @@ export function CostTab({ session }: SessionTabProps) {
           <TableBody>
             {lines.map((line, index) => (
               <TableRow key={`${line.provider_id}-${line.unit}-${index}`}>
-                <TableCell className="font-medium text-foreground">{line.provider_id}</TableCell>
-                <TableCell className="text-text-secondary">{line.model ?? EMPTY_VALUE}</TableCell>
+                <TableCell className="font-medium text-foreground">
+                  <VendorName vendor={line.provider_id}>{line.provider_id}</VendorName>
+                </TableCell>
+                <TableCell className="text-text-secondary">
+                  {line.model ? <ModelName model={line.model} /> : EMPTY_VALUE}
+                </TableCell>
                 <TableCell className="text-text-secondary">{line.unit}</TableCell>
                 <TableCell numeric>{String(line.quantity)}</TableCell>
                 <TableCell numeric className="text-text-secondary">

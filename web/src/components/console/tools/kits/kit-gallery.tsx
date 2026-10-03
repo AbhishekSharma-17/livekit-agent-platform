@@ -134,7 +134,7 @@ function KitCard({ kit, agent, query }: { kit: ToolKit; agent: AgentOut; query: 
         <TagList aria-label="Works with">
           {apps.map((app) => (
             <Tag key={app}>
-              <VendorMark vendor={app} size="sm" className="-ml-1 size-4 bg-transparent" />
+              <VendorMark vendor={app} size="xs" className="-ml-1" />
               {vendorMarkFor(app)?.title ?? app}
             </Tag>
           ))}

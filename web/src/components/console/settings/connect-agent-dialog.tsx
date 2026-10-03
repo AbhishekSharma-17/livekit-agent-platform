@@ -24,6 +24,7 @@ import { CheckboxRow, OptionCard } from "@/components/shared/choice";
 import { CopyButton } from "@/components/shared/copy-button";
 import { Field } from "@/components/shared/field";
 import { Tag } from "@/components/shared/tag";
+import { VendorMark, VendorName } from "@/components/shared/vendor-mark";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { api } from "@/lib/api";
 
@@ -271,7 +272,7 @@ function KeyStep({
               checked={client === c.id}
               onChange={() => setClient(c.id)}
               disabled={creating}
-              title={c.label}
+              title={<VendorName vendor={c.mark}>{c.label}</VendorName>}
             />
           ))}
         </ChoiceGroup>
@@ -449,7 +450,7 @@ function RevealStep({
           <TabsList>
             {SNIPPET_TABS.map((tab) => (
               <TabsTrigger key={tab.id} value={tab.id}>
-                {tab.label}
+                <VendorName vendor={tab.mark}>{tab.label}</VendorName>
               </TabsTrigger>
             ))}
           </TabsList>
@@ -490,10 +491,16 @@ function DoneStep({ onClose }: { onClose: () => void }) {
       </DialogHeader>
       <DialogBody className="gap-4">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="agent-key-skill-line">Install the Claude Code skill (optional)</Label>
+          <Label htmlFor="agent-key-skill-line" className="gap-1.5">
+            <VendorMark vendor="claude-code" size="xs" />
+            Install the Claude Code skill (optional)
+          </Label>
           <SnippetBlock id="agent-key-skill-line" value={installLine} copyLabel="Copy the skill install command" />
         </div>
-        <p className="text-label text-text-secondary">{CODEX_AGENTS_NOTE}</p>
+        <p className="flex items-start gap-1.5 text-label text-text-secondary">
+          <VendorMark vendor="codex" size="xs" className="mt-0.5" />
+          <span>{CODEX_AGENTS_NOTE}</span>
+        </p>
         <div className="flex flex-col gap-2">
           <Label htmlFor="agent-key-ask-line">Ask your agent</Label>
           <SnippetBlock id="agent-key-ask-line" value={ASK_AGENT_LINE} copyLabel="Copy the prompt" />

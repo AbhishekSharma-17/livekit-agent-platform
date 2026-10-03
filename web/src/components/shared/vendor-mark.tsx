@@ -6,8 +6,12 @@ import { vendorMarkFor } from "./vendor-marks";
 export interface VendorMarkProps {
   /** Vendor label, slug or provider id ("Deepgram", "OpenAI", "livekit-inference", "gmail"). */
   vendor: string;
-  /** `sm` 20 px, `md` 24 px (default), `lg` 32 px. */
-  size?: "sm" | "md" | "lg";
+  /**
+   * `xs` 16 px with no tile (the compact inline mark before a name in a table
+   * cell, a tab, a label or a card title), `sm` 20 px, `md` 24 px (default),
+   * `lg` 32 px.
+   */
+  size?: "xs" | "sm" | "md" | "lg";
   /**
    * Give the mark the vendor's name for assistive tech (and a hover title).
    * Leave it off when the name is printed beside the mark (the usual case),
@@ -45,6 +49,7 @@ export function vendorHue(vendor: string): number {
 }
 
 const SIZE_CLASSES = {
+  xs: "size-4 bg-transparent text-[0.5rem] [&>svg]:size-3.5",
   sm: "size-5 text-[0.625rem] [&>svg]:size-3",
   md: "size-6 text-[0.6875rem] [&>svg]:size-3.5",
   lg: "size-8 text-xs [&>svg]:size-[1.125rem]",
@@ -108,5 +113,58 @@ export function VendorMark({ vendor, size = "md", labelled = false, className }:
     >
       <span aria-hidden="true">{vendorMonogram(vendor)}</span>
     </span>
+  );
+}
+
+export interface VendorNameProps {
+  /** Vendor label, slug, provider id or client id the mark is looked up by. */
+  vendor: string;
+  /** The printed name. Defaults to `vendor`. */
+  children?: React.ReactNode;
+  /**
+   * Show the tinted monogram when the vendor has no mark. Off by default, since
+   * an inline mark is there to help recognise a name, and a two-letter tile
+   * beside an unknown name (a script's own client name, "Other") adds noise.
+   */
+  monogram?: boolean;
+  className?: string;
+}
+
+/**
+ * A printed name with its compact mark before it (`VendorMark` size `xs`),
+ * for the places the console names a company or product in a table cell, a
+ * tab, a label or a card title. The mark is decorative (`aria-hidden`) and the
+ * text stays. Use it beside a name, never in the middle of a sentence.
+ */
+export function VendorName({ vendor, children, monogram = false, className }: VendorNameProps) {
+  const showMark = monogram || vendorMarkFor(vendor) !== null;
+  return (
+    <span data-slot="vendor-name" className={cn("inline-flex min-w-0 items-center gap-1.5", className)}>
+      {showMark ? <VendorMark vendor={vendor} size="xs" /> : null}
+      <span className="min-w-0">{children ?? vendor}</span>
+    </span>
+  );
+}
+
+export interface ModelNameProps {
+  /** A model id as the provider reports it ("openai/gpt-5-mini", "nova-3"). */
+  model: string;
+  className?: string;
+}
+
+/**
+ * A model id led by its maker's compact mark when the id names one in its
+ * first segment ("openai/gpt-5-mini", "deepgram/nova-3" on a gateway such as
+ * LiveKit Inference). A bare id ("nova-3") or a maker with no mark prints the
+ * id alone. The maker's name is part of the printed id, so the mark always
+ * sits beside it.
+ */
+export function ModelName({ model, className }: ModelNameProps) {
+  const maker = model.includes("/") ? model.split("/")[0] : null;
+  if (!maker || vendorMarkFor(maker) === null) return <span className={className}>{model}</span>;
+  return (
+    <VendorName vendor={maker} className={className}>
+      {model}
+    </VendorName>
   );
 }

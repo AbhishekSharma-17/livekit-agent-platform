@@ -24,6 +24,7 @@ import { SecretInput } from "@/components/shared/password-input";
 import { Section, SectionRow } from "@/components/shared/section";
 import { StatusPill } from "@/components/shared/status-chip";
 import { lifecycleStatus } from "@/components/shared/status-map";
+import { VendorMark } from "@/components/shared/vendor-mark";
 import { useCreateConnection, useTestUnsavedConnection } from "@/hooks/useConnections";
 import type {
   ConnectionCreate,
@@ -34,8 +35,8 @@ type DeploymentType = NonNullable<ConnectionCreate["deployment_type"]>;
 type DeploymentMode = NonNullable<ConnectionCreate["deployment_mode"]>;
 type WorkerImage = NonNullable<ConnectionCreate["worker_image"]>;
 
-const DEPLOYMENT_TYPES: { value: DeploymentType; title: string; hint: string; icon: typeof CloudIcon }[] = [
-  { value: "cloud", title: "LiveKit Cloud", hint: "A project URL plus its key and secret from cloud.livekit.io.", icon: CloudIcon },
+const DEPLOYMENT_TYPES: { value: DeploymentType; title: string; hint: string; icon: typeof CloudIcon; mark?: string }[] = [
+  { value: "cloud", title: "LiveKit Cloud", hint: "A project URL plus its key and secret from cloud.livekit.io.", icon: CloudIcon, mark: "LiveKit" },
   { value: "self_hosted", title: "Self-hosted", hint: "Your own LiveKit server's URL plus its key and secret.", icon: ServerIcon },
 ];
 
@@ -189,7 +190,11 @@ export function ConnectionCreateForm() {
               onChange={() => update("deployment_type", option.value)}
               title={
                 <span className="flex items-center gap-2">
-                  <Icon as={option.icon} size="md" className="text-text-secondary" />
+                  {option.mark ? (
+                    <VendorMark vendor={option.mark} size="xs" />
+                  ) : (
+                    <Icon as={option.icon} size="md" className="text-text-secondary" />
+                  )}
                   {option.title}
                 </span>
               }

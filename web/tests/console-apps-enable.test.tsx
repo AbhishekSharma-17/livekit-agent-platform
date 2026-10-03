@@ -139,6 +139,9 @@ describe("AppsTab — Enable Composio", () => {
     renderTab();
     fireEvent.click(await screen.findByRole("button", { name: "Enable Composio" }));
     const dialog = await screen.findByRole("dialog", { name: "Enable Composio" });
+    // The title carries Composio's own mark, decorative beside its name.
+    const heading = within(dialog).getByRole("heading", { name: "Enable Composio" });
+    expect(heading.querySelector('[data-slot="vendor-mark"]')?.getAttribute("data-mark")).toBe("composio");
     fireEvent.change(within(dialog).getByLabelText("Composio API key"), { target: { value: "sk_live_abc123" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Test key" }));
 

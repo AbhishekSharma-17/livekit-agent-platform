@@ -21,8 +21,8 @@ export interface CredentialPickerProps {
   onChange: (credentialId: string | null) => void;
   /** Control id (defaults to a generated one). */
   id?: string;
-  /** Field label (default "Key"). */
-  label?: string;
+  /** Field label (default "Key"). A node when the label names a vendor and carries its mark. */
+  label?: React.ReactNode;
   /** Marks the field "Required" (default true). */
   required?: boolean;
   /** Field-level error, e.g. from validation. */
@@ -159,7 +159,7 @@ export interface MultiHomeCredentialPickerProps {
   value: string | null | undefined;
   onChange: (credentialId: string | null) => void;
   id?: string;
-  label?: string;
+  label?: React.ReactNode;
   required?: boolean;
   error?: string;
 }

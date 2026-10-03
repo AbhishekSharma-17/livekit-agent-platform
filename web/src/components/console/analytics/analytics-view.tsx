@@ -25,6 +25,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { Section, SectionRow } from "@/components/shared/section";
 import { StatusPill } from "@/components/shared/status-chip";
+import { ModelName, VendorName } from "@/components/shared/vendor-mark";
 import { lifecycleStatus, type LifecycleStatus } from "@/components/shared/status-map";
 import { useProviders } from "@/components/console/lib/api-hooks";
 import { SLOT_LABELS } from "@/components/console/lib/cost-hooks";
@@ -528,9 +529,14 @@ function TopDriversTable({ drivers, providers }: { drivers: AnalyticsDriver[]; p
       cell: (d) => (
         <span className="flex flex-col">
           <span className="font-medium text-foreground">{driverLabel(d, providers)}</span>
-          <span className="font-mono text-caption text-text-secondary">
-            {d.provider_id}
-            {d.model ? ` · ${d.model}` : ""}
+          <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 font-mono text-caption text-text-secondary">
+            <VendorName vendor={d.provider_id}>{d.provider_id}</VendorName>
+            {d.model ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <ModelName model={d.model} />
+              </>
+            ) : null}
           </span>
         </span>
       ),
@@ -557,9 +563,14 @@ function TopDriversTable({ drivers, providers }: { drivers: AnalyticsDriver[]; p
       label="Top cost drivers"
       getRowKey={(d, index) => `${d.provider_id}-${d.unit}-${index}`}
       renderCard={(d) => (
-        <div className="flex items-center justify-between gap-2">
-          <span className="font-medium text-foreground">{driverLabel(d, providers)}</span>
-          <span className="text-caption tabular-nums text-text-secondary">{formatUsd(d.cost_usd) ?? EMPTY_VALUE}</span>
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium text-foreground">{driverLabel(d, providers)}</span>
+            <span className="text-caption tabular-nums text-text-secondary">{formatUsd(d.cost_usd) ?? EMPTY_VALUE}</span>
+          </div>
+          <VendorName vendor={d.provider_id} className="font-mono text-caption text-text-secondary">
+            {d.provider_id}
+          </VendorName>
         </div>
       )}
     />

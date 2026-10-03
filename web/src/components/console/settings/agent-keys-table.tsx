@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { RelativeTime } from "@/components/shared/relative-time";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/shared/responsive-table";
 import { Tag, TagList } from "@/components/shared/tag";
+import { VendorName } from "@/components/shared/vendor-mark";
 import { ErrorBanner } from "@/components/console/shared/error-banner";
 import { IfCan } from "@/components/console/shared/permission";
 
@@ -15,7 +16,7 @@ import { KeyStatus, RevokeKeyButton } from "./api-keys-tab";
 import type { ApiKeyOut } from "./api-types";
 import { Highlight, ListNoMatches, ListSearchField, useListSearch } from "@/components/shared/list-search";
 import { RowsSkeleton } from "./settings-card";
-import { AGENT_KEY_CLIENTS, CALLS_WRITE_SCOPE } from "./snippets";
+import { AGENT_KEY_CLIENTS, CALLS_WRITE_SCOPE, clientMarkKey } from "./snippets";
 import { useAgentKeys, useActiveWorkspace, useInvalidateSettings } from "./use-settings-queries";
 import { EMPTY_VALUE } from "@/lib/format";
 
@@ -24,6 +25,20 @@ const CLIENT_LABEL: Record<string, string> = Object.fromEntries(AGENT_KEY_CLIENT
 function clientLabel(client: string | null): string {
   if (!client) return EMPTY_VALUE;
   return CLIENT_LABEL[client] ?? client;
+}
+
+/**
+ * A client's printed label with its compact mark before it: a console client
+ * id ("claude-code") or the `clientInfo` name a product sent ("cursor-vscode").
+ * An unknown client prints its name alone, and no client prints the empty value.
+ */
+export function ClientName({ client, className }: { client: string | null | undefined; className?: string }) {
+  if (!client) return <span className={className}>{EMPTY_VALUE}</span>;
+  return (
+    <VendorName vendor={clientMarkKey(client)} className={className}>
+      {clientLabel(client)}
+    </VendorName>
+  );
 }
 
 /** A scope as a tag; `calls:write` (outbound phone calls) stands out in the warning tone. */
@@ -76,7 +91,15 @@ export function AgentKeysTable() {
         </div>
       ),
     },
-    { id: "client", header: "Client", cell: (key) => <Tag>{clientLabel(key.client)}</Tag> },
+    {
+      id: "client",
+      header: "Client",
+      cell: (key) => (
+        <Tag>
+          <ClientName client={key.client} />
+        </Tag>
+      ),
+    },
     {
       id: "scopes",
       header: "Scopes",
@@ -99,7 +122,7 @@ export function AgentKeysTable() {
     {
       id: "last_client",
       header: "Last client",
-      cell: (key) => <span className="text-caption text-text-secondary">{clientLabel(key.last_client)}</span>,
+      cell: (key) => <ClientName client={key.last_client} className="text-caption text-text-secondary" />,
     },
     {
       id: "expires",
@@ -147,8 +170,8 @@ export function AgentKeysTable() {
                 <div className="truncate font-medium text-foreground">
                   <Highlight text={key.name} query={query} />
                 </div>
-                <div className="text-caption text-text-secondary">
-                  {clientLabel(key.client)} · <span className="font-mono">{key.prefix}…</span>
+                <div className="flex items-center gap-1 text-caption text-text-secondary">
+                  <ClientName client={key.client} /> · <span className="font-mono">{key.prefix}…</span>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">

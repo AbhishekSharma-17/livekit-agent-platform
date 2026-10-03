@@ -1,4 +1,5 @@
 import * as React from "react";
+import { ModelName, VendorName } from "@/components/shared/vendor-mark";
 import { EMPTY_VALUE } from "@/lib/format";
 
 /**
@@ -76,7 +77,7 @@ export interface UsagePair {
 export interface UsageGroup {
   key: string;
   label: string;
-  rows: { key: string; title: string; kind: string | null; pairs: UsagePair[] }[];
+  rows: { key: string; title: string; provider: string | null; model: string | null; kind: string | null; pairs: UsagePair[] }[];
 }
 
 const IDENTITY_KEYS = new Set(["type", "provider", "model"]);
@@ -124,6 +125,8 @@ export function describeUsage(usage: Record<string, unknown> | null | undefined)
         return {
           key: `${key}-${index}`,
           title: identity.join(" · ") || `Entry ${index + 1}`,
+          provider: typeof item.provider === "string" && item.provider.length > 0 ? item.provider : null,
+          model: typeof item.model === "string" && item.model.length > 0 ? item.model : null,
           kind: usageKindLabel(item.type),
           pairs: pairsOf(item),
         };
@@ -132,7 +135,11 @@ export function describeUsage(usage: Record<string, unknown> | null | undefined)
     } else if (isRecord(value)) {
       const nested = pairsOf(value, new Set());
       if (nested.length > 0) {
-        groups.push({ key, label: formatUsageLabel(key), rows: [{ key, title: formatUsageLabel(key), kind: null, pairs: nested }] });
+        groups.push({
+          key,
+          label: formatUsageLabel(key),
+          rows: [{ key, title: formatUsageLabel(key), provider: null, model: null, kind: null, pairs: nested }],
+        });
       }
     } else if (isScalar(value) && !isEmptyValue(value)) {
       pairs.push({ key, label: formatUsageLabel(key), value: formatUsageField(key, value) });
@@ -156,7 +163,17 @@ export function UsageGroups({ groups }: { groups: UsageGroup[] }) {
                   {row.kind ? (
                     <span className="text-caption font-medium tracking-[0.02em] text-text-secondary">{row.kind}</span>
                   ) : null}
-                  <span className="min-w-0 font-mono text-label break-all text-foreground">{row.title}</span>
+                  <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 font-mono text-label break-all text-foreground">
+                    {row.provider || row.model ? (
+                      <>
+                        {row.provider ? <VendorName vendor={row.provider}>{row.provider}</VendorName> : null}
+                        {row.provider && row.model ? <span aria-hidden="true">·</span> : null}
+                        {row.model ? <ModelName model={row.model} /> : null}
+                      </>
+                    ) : (
+                      row.title
+                    )}
+                  </span>
                 </div>
                 {row.pairs.length > 0 ? (
                   <dl className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1">

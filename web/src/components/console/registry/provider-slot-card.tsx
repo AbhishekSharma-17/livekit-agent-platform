@@ -35,8 +35,9 @@ import type { ProviderRef, ProviderSpec } from "@/contracts/lkap-contracts";
  * A slot's own share of the agent's per-minute estimate (docs/v4/COSTS.md §5
  * item 2), passed in by the caller rather than fetched here: the card is
  * rendered outside any `FormProvider` in its own tests, so it must stay
- * form/query-agnostic (the caller — `ProvidersTab` — is the one place that
- * has both the shared estimate and this slot's key).
+ * form/query-agnostic (the caller is the one place that has both the shared
+ * estimate and this slot's key). No caller passes it since V6-42 deleted the
+ * old providers tab. The live section shows the estimate in the summary rail only.
  */
 export interface SlotCostEstimate {
   /** This slot's `EstimateLine.usd_per_min`; `null` means unpriced ("no price"), not free. */

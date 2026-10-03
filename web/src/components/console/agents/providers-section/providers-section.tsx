@@ -147,8 +147,8 @@ export function endpointFieldLockedReason(field: FieldSpec): string | null {
 }
 
 /**
- * Providers section (V2-13, replacing WP-4's `tabs/providers-tab.tsx` via the
- * `providers` `EditorExtension` — UI_UX_SPEC-V2-AMENDMENTS §2.3): adds the
+ * Providers section (V2-13, UI_UX_SPEC-V2-AMENDMENTS §2.3, the built-in
+ * `providers` section since V6-42 deleted WP-4's `tabs/providers-tab.tsx`): adds the
  * half-cascade mode card (disabled with a reason when no realtime provider
  * on the bound connection has `text_modality`), makes every slot
  * connection-aware (`installed_on`/`enabled`/`cloud_only` via

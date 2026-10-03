@@ -221,6 +221,7 @@ describe("ProviderToolEditorDialog", () => {
               modified: ["duration_minutes"],
               required_before: ["calendar_id"],
               required_after: ["calendar_id"],
+              deprecated: false,
             },
           };
         }
@@ -238,6 +239,7 @@ describe("ProviderToolEditorDialog", () => {
       expect(screen.getByText(/Added: time_zone/)).toBeTruthy();
       expect(screen.getByText(/Changed: duration_minutes/)).toBeTruthy();
       expect(screen.getByText(/Version: 3 → 4/)).toBeTruthy();
+      expect(screen.queryByTestId("provider-tool-retired")).toBeNull();
       expect(refreshCalls).toBe(1);
       const firstCall = fetchMock.mock.calls.find(([url]) => String(url).includes("refresh-schema"));
       expect(String(firstCall?.[0])).not.toContain("apply=true");
@@ -266,6 +268,7 @@ describe("ProviderToolEditorDialog", () => {
               modified: [],
               required_before: [],
               required_after: [],
+              deprecated: false,
             },
           };
         }
@@ -279,6 +282,64 @@ describe("ProviderToolEditorDialog", () => {
       fireEvent.click(screen.getByText("Refresh schema"));
       expect(await screen.findByText("No changes since this action was added.")).toBeTruthy();
       expect(screen.queryByText("Apply")).toBeNull();
+      expect(screen.queryByTestId("provider-tool-retired")).toBeNull();
+    });
+
+    /** A refresh answer for the retired outcome, with the diff left as the test needs it. */
+    function refreshAnswer(overrides: Record<string, unknown>) {
+      return {
+        status: 200,
+        body: {
+          tool_id: "tool-1",
+          tool_slug: "GOOGLECALENDAR_FIND_FREE_SLOTS",
+          changed: false,
+          applied: false,
+          schema_version_before: "3",
+          schema_version_after: "3",
+          added: [],
+          removed: [],
+          modified: [],
+          required_before: [],
+          required_after: [],
+          deprecated: true,
+          ...overrides,
+        },
+      };
+    }
+
+    async function openAndRefresh(overrides: Record<string, unknown>) {
+      stubFetch((url) => (url.includes("/refresh-schema") ? refreshAnswer(overrides) : undefined));
+      renderWithClient(<ProviderToolEditorDialog tool={providerTool()} onSaved={vi.fn()} trigger={<button>Edit</button>} />);
+      fireEvent.click(screen.getByText("Edit"));
+      await screen.findByText("Edit App action");
+      fireEvent.click(screen.getByText("Refresh schema"));
+      return screen.findByTestId("provider-tool-retired");
+    }
+
+    it("says Composio has retired the action, in one line with a link to pick a replacement, when the schema is unchanged", async () => {
+      const retired = await openAndRefresh({});
+      expect(retired.textContent).toBe("Composio has retired this action. Pick a replacement");
+      expect(within(retired).getByRole("link", { name: "Pick a replacement" })).toHaveProperty(
+        "href",
+        expect.stringContaining("/console/tools?tab=apps"),
+      );
+      // The diff outcome is still reported under it.
+      expect(await screen.findByText("No changes since this action was added.")).toBeTruthy();
+    });
+
+    it("shows the retired line above the diff and still offers Apply when a retired action also changed", async () => {
+      const retired = await openAndRefresh({ changed: true, added: ["time_zone"], schema_version_after: "4" });
+      expect(retired.textContent).toBe("Composio has retired this action. Pick a replacement");
+      expect(await screen.findByText(/The app changed this action/)).toBeTruthy();
+      expect(screen.getByText("Apply")).toBeTruthy();
+    });
+
+    it("announces the retired line as a status with a named link and no em dash, colon or semicolon", async () => {
+      const retired = await openAndRefresh({});
+      // The structure axe checks (a named link in a live status region), as far as jsdom can.
+      expect(retired.getAttribute("role")).toBe("status");
+      expect(within(retired).getByRole("link").textContent?.trim()).not.toBe("");
+      expect(retired.textContent).not.toMatch(/[\u2014:;]/);
     });
   });
 

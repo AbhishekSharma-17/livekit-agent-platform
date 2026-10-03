@@ -17,6 +17,8 @@ import notebookFixture from "@/panels/blocks/__fixtures__/notebook.json";
 import { SafeMarkdown } from "@/lib/safe-markdown";
 import type { PanelProps } from "@/panels/registry";
 
+import { PRELOAD_TIMEOUT_MS, preloadLazyBlocks } from "./lazy-blocks";
+
 /**
  * V6-10 (D-V6-15, D-V6-18): the `notebook` and `layout` renderers, caller
  * edits on `notebook` / `checklist` / `details`, per-block margin notes, and
@@ -25,9 +27,12 @@ import type { PanelProps } from "@/panels/registry";
  * packages did not touch.
  */
 
-beforeAll(() => {
+beforeAll(async () => {
   Element.prototype.scrollIntoView = function scrollIntoView() {};
-});
+  // The notebook, layout and every other lazy block load once, here, so no test below waits on
+  // a first module transform (see `lazy-blocks.ts`). A hook timeout, not a global one.
+  await preloadLazyBlocks();
+}, PRELOAD_TIMEOUT_MS);
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();

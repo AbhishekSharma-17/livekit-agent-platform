@@ -4,7 +4,7 @@ import { zodResolver } from "@/components/console/lib/zod-resolver";
 import { agentEditorFormSchema } from "@/components/console/lib/schemas";
 
 /**
- * Regression test: `InstructionsTab`/`ProvidersTab` read nested paths like
+ * Regression test: `InstructionsTab`/`ProvidersSection` read nested paths like
  * `errors.config.instructions.message` and `errors.config.pipeline.stt`.
  * A resolver that only writes flat dotted keys (e.g. `errors["config.instructions"]`)
  * satisfies react-hook-form's submit gate but leaves every field-level error

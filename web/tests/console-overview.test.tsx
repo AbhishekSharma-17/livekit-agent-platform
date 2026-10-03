@@ -300,6 +300,21 @@ describe("Overview", () => {
   });
 });
 
+describe("Setup checklist — AI agent row", () => {
+  it("lists Claude Code, Codex, Cursor and MCP as decorative marks after the help text", async () => {
+    stubFetch({ role: "admin" });
+    renderOverview();
+
+    const title = await screen.findByText("Connect an AI agent");
+    const row = title.closest('[data-slot="section-row"]') as HTMLElement;
+    const marks = [...row.querySelectorAll('[data-slot="checklist-marks"] [data-slot="vendor-mark"]')];
+    expect(marks.map((m) => m.getAttribute("data-mark"))).toEqual(["claude", "codex", "cursor", "modelcontextprotocol"]);
+    for (const mark of marks) expect(mark.getAttribute("aria-hidden")).toBe("true");
+    // The help sentence keeps its words, with no mark in the middle of it.
+    expect(within(row).getByText(/Give Claude Code, Codex or Cursor a scoped key/)).toBeTruthy();
+  });
+});
+
 describe("Setup checklist — connection row", () => {
   function connection(id: string, status: "ok" | "unverified" | "error") {
     return { id, name: `Conn ${id}`, slug: id, url: "wss://example.test", status };

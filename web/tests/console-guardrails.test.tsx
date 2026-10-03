@@ -244,6 +244,9 @@ describe("GuardrailsSection", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Add a rule" });
     fireEvent.click(within(dialog).getByRole("radio", { name: /Moderation service/ }));
+    // The key field names OpenAI, so it carries OpenAI's mark beside the label.
+    const keyLabel = await within(dialog).findByText("OpenAI key");
+    expect(keyLabel.closest('[data-slot="vendor-name"]')?.querySelector('[data-mark="openai"]')?.getAttribute("aria-hidden")).toBe("true");
     fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "No hate speech" } });
     fireEvent.click(within(dialog).getByLabelText("Hateful content"));
     fireEvent.click(within(dialog).getByRole("button", { name: "Add rule" }));

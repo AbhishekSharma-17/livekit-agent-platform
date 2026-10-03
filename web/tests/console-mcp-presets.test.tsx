@@ -83,6 +83,17 @@ describe("MCP presets — dialog integration", () => {
     vi.unstubAllGlobals();
   });
 
+  it("leads the dialog title with the Model Context Protocol mark and keeps its words", async () => {
+    stubFetch();
+    renderWithClient(
+      <McpToolEditorDialog agentId={null} secretBagSpec={undefined} onSaved={vi.fn()} trigger={<button>New MCP server</button>} />,
+    );
+    fireEvent.click(screen.getByText("New MCP server"));
+    const title = await screen.findByRole("heading", { name: "New MCP server" });
+    expect(title.querySelector('[data-slot="vendor-mark"]')?.getAttribute("data-mark")).toBe("modelcontextprotocol");
+    expect(title.querySelector('[data-slot="vendor-mark"]')?.getAttribute("aria-hidden")).toBe("true");
+  });
+
   it(
     "choosing Stripe offers Header and Sign in with the vendor, not Your own OAuth app",
     async () => {

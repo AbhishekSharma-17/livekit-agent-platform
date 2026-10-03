@@ -13,6 +13,7 @@ import { ErrorBanner } from "@/components/console/shared/error-banner";
 
 import type { AuditOut } from "./api-types";
 import { useRememberedChoice } from "@/components/shared/list-search";
+import { ClientName } from "./agent-keys-table";
 import { RowsSkeleton } from "./settings-card";
 import { isAgentActivityRow, useActiveWorkspace, useAgentActivityPage, useAgentKeys } from "./use-settings-queries";
 import { EMPTY_VALUE } from "@/lib/format";
@@ -104,7 +105,7 @@ export function AgentActivityTable() {
     {
       id: "client",
       header: "Client",
-      cell: (row) => <span className="text-caption text-text-secondary">{clientPayload(row).name ?? EMPTY_VALUE}</span>,
+      cell: (row) => <ClientName client={clientPayload(row).name} className="text-caption text-text-secondary" />,
     },
     {
       id: "tool",
@@ -199,7 +200,14 @@ export function AgentActivityTable() {
                   <span className="truncate text-label font-medium text-foreground">{key?.name ?? row.actor_id ?? EMPTY_VALUE}</span>
                   <RelativeTime iso={row.ts} className="shrink-0 text-caption text-text-secondary" />
                 </div>
-                <div className="truncate font-mono text-caption text-text-secondary">{clientPayload(row).tool ?? row.action}</div>
+                <div className="flex min-w-0 items-center gap-1 text-caption text-text-secondary">
+                  {clientPayload(row).name ? (
+                    <>
+                      <ClientName client={clientPayload(row).name} className="shrink-0" /> ·
+                    </>
+                  ) : null}
+                  <span className="truncate font-mono">{clientPayload(row).tool ?? row.action}</span>
+                </div>
               </div>
             );
           }}

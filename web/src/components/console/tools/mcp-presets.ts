@@ -44,7 +44,7 @@ export const MCP_PRESETS: McpPreset[] = [
     scopes_hint: "Read-only mode is documented for the local server only. The remote server can write.",
     allowed_tools_default: [],
     notes: "A dev/ops integration, not something a caller-facing voice agent should use.",
-    docs_url: "https://raw.githubusercontent.com/github/github-mcp-server/main/README.md",
+    docs_url: "https://github.com/github/github-mcp-server/blob/main/README.md",
     status: "available",
   },
   {

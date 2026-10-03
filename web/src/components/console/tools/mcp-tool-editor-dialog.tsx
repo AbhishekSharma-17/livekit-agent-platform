@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { StatusPill } from "@/components/shared/status-chip";
+import { VendorMark, VendorName } from "@/components/shared/vendor-mark";
+import { vendorMarkFor } from "@/components/shared/vendor-marks";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -511,7 +513,7 @@ export function McpToolEditorDialog({
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
           <DialogHeader>
             <DialogTitle>
-              {tool ? "Edit MCP server" : "New MCP server"}
+              <VendorName vendor="mcp">{tool ? "Edit MCP server" : "New MCP server"}</VendorName>
             </DialogTitle>
             <DialogDescription id={`${uid}-description`}>
               A streamable-HTTP MCP endpoint whose tools become available to the model.
@@ -530,7 +532,11 @@ export function McpToolEditorDialog({
                   id={`${uid}-preset`}
                   value={presetId}
                   onValueChange={applyPreset}
-                  options={AVAILABLE_MCP_PRESETS.map((p) => ({ value: p.id, label: p.name }))}
+                  options={AVAILABLE_MCP_PRESETS.map((p) => ({
+                    value: p.id,
+                    label: p.name,
+                    icon: vendorMarkFor(p.id) ? <VendorMark vendor={p.id} size="xs" /> : undefined,
+                  }))}
                   placeholder="Choose a preset (optional)"
                   searchPlaceholder="Search presets"
                   aria-label="Start from a preset"

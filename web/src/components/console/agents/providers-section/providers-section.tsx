@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Field } from "@/components/shared/field";
 import { Icon } from "@/components/shared/icon";
+import { VendorMark } from "@/components/shared/vendor-mark";
 import { resolveBoundConnection } from "@/components/console/agents/providers-section/connection-gate";
 import {
   avatarConnectionNote,
@@ -418,18 +419,20 @@ function Group({ title, description, children }: { title: string; description?: 
   );
 }
 
-const MODES: { value: Exclude<PipelineMode, never>; title: string; description: string; icon: LucideIcon }[] = [
+const MODES: { value: Exclude<PipelineMode, never>; title: string; description: string; icon: LucideIcon; marks?: readonly string[] }[] = [
   {
     value: "cascaded",
     title: "Cascaded",
     description: "Separate speech-to-text, language model and text-to-speech. Most flexible, and works with LiveKit Inference without keys.",
     icon: WaypointsIcon,
+    marks: ["LiveKit"],
   },
   {
     value: "realtime",
     title: "Realtime",
     description: "One speech-to-speech model (Gemini Live, GPT Realtime). Lowest latency, and can watch the camera live.",
     icon: AudioWaveformIcon,
+    marks: ["Gemini", "OpenAI"],
   },
   {
     value: "half_cascade",
@@ -486,6 +489,13 @@ function ModeCards({
               <span className="flex min-w-0 flex-col gap-1">
                 <span className="text-sm font-semibold text-foreground">{mode.title}</span>
                 <span className="text-label leading-[1.125rem] text-pretty text-text-secondary">{mode.description}</span>
+                {mode.marks ? (
+                  <span data-slot="mode-marks" className="flex items-center gap-1.5">
+                    {mode.marks.map((vendor) => (
+                      <VendorMark key={vendor} vendor={vendor} size="xs" />
+                    ))}
+                  </span>
+                ) : null}
                 {disabled ? <span className="text-label text-pretty text-warning-text">{halfCascadeDisabledReason}</span> : null}
               </span>
             </label>

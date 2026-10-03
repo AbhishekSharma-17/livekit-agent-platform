@@ -186,6 +186,7 @@ export function SetupChecklist() {
       id: "ai-agent",
       title: "Connect an AI agent",
       help: "Give Claude Code, Codex or Cursor a scoped key to build and test on this workspace through MCP.",
+      marks: ["claude-code", "codex", "cursor", "mcp"],
       done: hasAgentKey,
       action: (
         <Button asChild size="sm" variant="secondary">

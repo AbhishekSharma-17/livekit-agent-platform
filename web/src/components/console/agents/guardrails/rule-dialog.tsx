@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Field } from "@/components/shared/field";
+import { VendorName } from "@/components/shared/vendor-mark";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
@@ -252,7 +253,7 @@ export function RuleDialog({ open, onOpenChange, initial, otherNames, stageLabel
                   onChange={(credentialId) =>
                     setDraft((prev) => (prev.kind === "provider" ? { ...prev, credential_id: credentialId } : prev))
                   }
-                  label="OpenAI key"
+                  label={<VendorName vendor="OpenAI">OpenAI key</VendorName>}
                   required={false}
                   error={serverError}
                 />

@@ -69,12 +69,26 @@ export function presetById(id: AgentKeyPresetId): AgentKeyPreset {
 
 export type AgentKeyClientId = "claude-code" | "codex" | "cursor" | "other";
 
-export const AGENT_KEY_CLIENTS: { id: AgentKeyClientId; label: string }[] = [
-  { id: "claude-code", label: "Claude Code" },
-  { id: "codex", label: "Codex CLI" },
-  { id: "cursor", label: "Cursor" },
-  { id: "other", label: "Other MCP client" },
+/**
+ * `mark` is the key `VendorName` looks the client's logo up by
+ * (`components/shared/vendor-marks.ts`), taken from the id rather than the
+ * label, so "Other MCP client" shows the Model Context Protocol mark.
+ */
+export const AGENT_KEY_CLIENTS: { id: AgentKeyClientId; label: string; mark: string }[] = [
+  { id: "claude-code", label: "Claude Code", mark: "claude-code" },
+  { id: "codex", label: "Codex CLI", mark: "codex" },
+  { id: "cursor", label: "Cursor", mark: "cursor" },
+  { id: "other", label: "Other MCP client", mark: "mcp" },
 ];
+
+/**
+ * The mark key for a stored client value: a console client id maps through
+ * {@link AGENT_KEY_CLIENTS}, anything else (an MCP `clientInfo` name such as
+ * "cursor-vscode" or "codex-mcp-client") is looked up as it is.
+ */
+export function clientMarkKey(client: string): string {
+  return AGENT_KEY_CLIENTS.find((c) => c.id === client)?.mark ?? client;
+}
 
 export const DEFAULT_AGENT_KEY_CLIENT: AgentKeyClientId = "claude-code";
 
@@ -85,10 +99,10 @@ export function snippetClientFor(client: AgentKeyClientId): SnippetClientId {
   return client === "other" ? "cursor" : client;
 }
 
-export const SNIPPET_TABS: { id: SnippetClientId; label: string }[] = [
-  { id: "claude-code", label: "Claude Code" },
-  { id: "codex", label: "Codex CLI" },
-  { id: "cursor", label: "Cursor / generic" },
+export const SNIPPET_TABS: { id: SnippetClientId; label: string; mark: string }[] = [
+  { id: "claude-code", label: "Claude Code", mark: "claude-code" },
+  { id: "codex", label: "Codex CLI", mark: "codex" },
+  { id: "cursor", label: "Cursor / generic", mark: "cursor" },
 ];
 
 // ---------------------------------------------------------------- expiry

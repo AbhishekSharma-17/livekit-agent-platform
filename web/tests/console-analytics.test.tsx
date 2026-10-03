@@ -111,6 +111,19 @@ describe("AnalyticsView", () => {
     expect(screen.getAllByText("$1.60").length).toBeGreaterThan(0); // the estimated column
   });
 
+  it("leads each cost driver's provider with its mark, and keeps the ids as text", async () => {
+    const { container } = renderView();
+    await screen.findAllByText("12");
+    const names = [...container.querySelectorAll('table [data-slot="vendor-name"]')];
+    const byText = (text: string) => names.find((el) => el.textContent === text);
+    expect(byText("cartesia-tts")?.querySelector('[data-slot="vendor-mark"]')?.getAttribute("data-mark")).toBe("cartesia");
+    expect(byText("livekit-agent")?.querySelector('[data-slot="vendor-mark"]')?.getAttribute("data-mark")).toBe("livekit");
+    expect(byText("cartesia-tts")?.querySelector('[data-slot="vendor-mark"]')?.getAttribute("aria-hidden")).toBe("true");
+    expect(container.textContent).toContain("sonic-3");
+    // A job word such as "Call minutes" is not a vendor name, so no mark leads it (table or phone card).
+    for (const label of screen.getAllByText("Call minutes")) expect(label.closest('[data-slot="vendor-name"]')).toBeNull();
+  });
+
   it("changes the range through the URL", async () => {
     renderView();
     await screen.findAllByText("12");

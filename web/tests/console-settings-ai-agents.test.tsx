@@ -175,6 +175,40 @@ describe("AiAgentsTab — role gating", () => {
   });
 });
 
+describe("AiAgentsTab — works with", () => {
+  it("lists the supported coding agents, each with its decorative mark before its name", async () => {
+    stubFetch({ role: "admin", apiKeys: [], auditRows: [] });
+    const { container } = renderWithClient(<AiAgentsTab />);
+    await screen.findByRole("button", { name: /connect an ai agent/i });
+
+    const list = container.querySelector('[data-slot="agent-clients"]')!;
+    const items = [...list.querySelectorAll("li")];
+    expect(items.map((li) => li.textContent)).toEqual(["Claude Code", "Codex CLI", "Cursor", "Any MCP client"]);
+    expect(items.map((li) => li.querySelector('[data-slot="vendor-mark"]')?.getAttribute("data-mark"))).toEqual([
+      "claude",
+      "codex",
+      "cursor",
+      "modelcontextprotocol",
+    ]);
+    for (const li of items) expect(li.querySelector('[data-slot="vendor-mark"]')?.getAttribute("aria-hidden")).toBe("true");
+  });
+});
+
+describe("ConnectAgentDialog — marks", () => {
+  it("puts each client's mark on its picker card, and Other MCP client shows the MCP mark", async () => {
+    stubFetch({ role: "admin", apiKeys: [], auditRows: [] });
+    renderWithClient(<AiAgentsTab />);
+    fireEvent.click(await screen.findByRole("button", { name: /connect an ai agent/i }));
+    const dialog = await screen.findByRole("dialog");
+    const marks = (label: string) =>
+      within(dialog).getByText(label).closest('[data-slot="vendor-name"]')?.querySelector('[data-slot="vendor-mark"]')?.getAttribute("data-mark");
+    expect(marks("Claude Code")).toBe("claude");
+    expect(marks("Codex CLI")).toBe("codex");
+    expect(marks("Cursor")).toBe("cursor");
+    expect(marks("Other MCP client")).toBe("modelcontextprotocol");
+  });
+});
+
 describe("ConnectAgentDialog — the full flow", () => {
   it("keeps Create key disabled until the transcript warning is acknowledged, then posts the Builder preset by default", async () => {
     const stub = stubFetch({ role: "admin", apiKeys: [], auditRows: [] });
@@ -223,6 +257,11 @@ describe("ConnectAgentDialog — the full flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
     expect(await screen.findByText(/you're set/i)).toBeTruthy();
     expect(screen.getByText(/install_claude_skill\.sh/)).toBeTruthy();
+    // The skill label and the Codex note each carry their mark, and the note keeps its sentence whole.
+    const finish = screen.getByRole("dialog");
+    const skillLabel = within(finish).getByText(/install the claude code skill/i);
+    expect(skillLabel.querySelector('[data-mark="claude"]')?.getAttribute("aria-hidden")).toBe("true");
+    expect(finish.querySelector('[data-mark="codex"]')?.getAttribute("aria-hidden")).toBe("true");
     expect(screen.getByText(/lkap_guide/)).toBeTruthy();
   });
 
@@ -343,7 +382,8 @@ describe("AgentActivityTable", () => {
     // tool/action text, which would otherwise make these ambiguous.
     const table = await screen.findByRole("table", { name: /agent activity/i });
     expect(within(table).getByText("agent_create")).toBeTruthy();
-    expect(within(table).getByText("claude-code")).toBeTruthy();
+    const client = within(table).getByText("Claude Code");
+    expect(client.closest('[data-slot="vendor-name"]')?.querySelector('[data-mark="claude"]')).not.toBeNull();
     const link = within(table).getByRole("link", { name: /agents agent-ab/i });
     expect(link.getAttribute("href")).toBe("/console/agents/agent-abc12345");
     // The non-agent (user) row never renders.

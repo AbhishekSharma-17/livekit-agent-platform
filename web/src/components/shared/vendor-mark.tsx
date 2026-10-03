@@ -145,3 +145,26 @@ export function VendorName({ vendor, children, monogram = false, className }: Ve
     </span>
   );
 }
+
+export interface ModelNameProps {
+  /** A model id as the provider reports it ("openai/gpt-5-mini", "nova-3"). */
+  model: string;
+  className?: string;
+}
+
+/**
+ * A model id led by its maker's compact mark when the id names one in its
+ * first segment ("openai/gpt-5-mini", "deepgram/nova-3" on a gateway such as
+ * LiveKit Inference). A bare id ("nova-3") or a maker with no mark prints the
+ * id alone. The maker's name is part of the printed id, so the mark always
+ * sits beside it.
+ */
+export function ModelName({ model, className }: ModelNameProps) {
+  const maker = model.includes("/") ? model.split("/")[0] : null;
+  if (!maker || vendorMarkFor(maker) === null) return <span className={className}>{model}</span>;
+  return (
+    <VendorName vendor={maker} className={className}>
+      {model}
+    </VendorName>
+  );
+}

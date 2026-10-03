@@ -37,7 +37,8 @@ docs/ui/DESIGN-SYSTEM.md section 5 ("Third-party logos") sets the visual rule.
   puts the compact `xs` mark (16 px, no tile) before the printed name. It shows a real mark only, never a monogram
   beside an unknown name (pass `monogram` to opt in). Sentences keep their words without marks in the middle. A
   card or row whose help text names several services lists their marks after the text instead (the setup
-  checklist, the "How it talks" mode cards).
+  checklist, the "How it talks" mode cards). `ModelName` does the same for a model id such as `deepgram/nova-3` on
+  a gateway, with the maker's mark before the whole id. A bare id prints alone.
 - **No runtime fetch.** The generator copies each mark's path data into `vendor-mark-data.ts`. Only console screens
   import it, and `tests/flow-bundle-split.test.ts` keeps it out of the `/s/[slug]` session bundle.
 
@@ -226,3 +227,23 @@ The official marks add 22.3 kB raw and 8.4 kB gzipped to `vendor-mark-data.ts` (
 (Cline, Cursor, GitHub Copilot, JetBrains, Model Context Protocol, Windsurf, Zed, Codex, Gemini CLI, Goose) add
 9.7 kB raw and 3.8 kB gzipped (125.8 kB to 135.5 kB, 50.2 kB to 54.0 kB). The file reaches console routes only.
 `/s/[slug]` is unchanged, which `tests/flow-bundle-split.test.ts` checks on the static import graph.
+
+## Where the console shows them (V6-38)
+
+- **Settings, AI agents.** A "Works with" row lists Claude Code, Codex CLI, Cursor and Any MCP client. The Connect
+  dialog puts a mark on its client cards and snippet tabs, on the skill label and on the Codex note of its last step.
+  The Client and Last client columns of the key and activity tables, and their phone cards, lead each name with its
+  mark. A client id such as `cursor-vscode` reaches the Cursor mark through the leading word walk. An unknown client
+  prints its name alone, and Visual Studio Code prints its name alone too, since `VendorName` never shows a monogram
+  unless asked.
+- **Overview setup checklist.** The "Connect an AI agent" row lists Claude Code, Codex, Cursor and MCP after its text.
+- **Agent editor, "How it talks".** The Cascaded card lists LiveKit and the Realtime card lists Gemini and OpenAI
+  after their text. Half-cascade names no service, so it has no marks.
+- **Cost views.** Analytics cost drivers, the session Cost tab and the session usage rows lead the provider id with the
+  provider's mark, and a `maker/model` id with the maker's mark. The phone card of a cost driver keeps its plain job
+  label.
+- **Other names.** The "LiveKit Cloud" type card on a new connection, the "OpenAI key" label in the guardrail
+  dialog, the MCP server dialog title and its preset list, and the Composio dialog title.
+- **Docs links.** `NEXT_PUBLIC_DOCS_URL` is not set anywhere, so the sidebar shows no Documentation link yet (ask 361).
+  The 19 vendor docs links in `tools/mcp-presets.ts` all answered 200 on 2026-10-03. Of the 73 links in the provider
+  registry, 66 answered 200, four key pages refused a scripted request, two Ragie links failed a TLS handshake from this machine, and one docs link is dead (ask 364).

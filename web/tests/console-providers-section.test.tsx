@@ -200,6 +200,25 @@ describe("ProvidersSection", () => {
     expect(within(card).getByText(/needs one/)).toBeTruthy();
   });
 
+  it("lists the services each mode card names as marks after its text (LiveKit, Gemini, OpenAI), and none on half-cascade", async () => {
+    stubApi([REALTIME_NO_TEXT, TTS_PROVIDER], [CONNECTION_A]);
+    render(<Harness connectionId="conn-a" pipeline={{ mode: "cascaded" }} />);
+
+    const marksOf = async (title: string) => {
+      const card = (await screen.findByText(title)).closest("label")!;
+      return [...card.querySelectorAll('[data-slot="mode-marks"] [data-slot="vendor-mark"]')].map((m) => [
+        m.getAttribute("data-mark"),
+        m.getAttribute("aria-hidden"),
+      ]);
+    };
+    expect(await marksOf("Cascaded")).toEqual([["livekit", "true"]]);
+    expect(await marksOf("Realtime")).toEqual([
+      ["googlegemini", "true"],
+      ["openai", "true"],
+    ]);
+    expect(await marksOf("Half-cascade")).toEqual([]);
+  });
+
   it("enables half-cascade once a text_modality realtime provider is installed on the connection", async () => {
     stubApi([REALTIME_TEXT_ONLY, TTS_PROVIDER], [CONNECTION_A]);
     render(<Harness connectionId="conn-a" pipeline={{ mode: "cascaded" }} />);

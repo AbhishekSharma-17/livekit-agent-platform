@@ -2,10 +2,12 @@
 
 import { Section, SectionRow } from "@/components/shared/section";
 import { RequireWrite } from "@/components/shared/require-write";
+import { VendorName } from "@/components/shared/vendor-mark";
 
 import { AgentActivityTable } from "./agent-activity-table";
 import { AgentKeysTable } from "./agent-keys-table";
 import { ConnectAgentDialog } from "./connect-agent-dialog";
+import { AGENT_KEY_CLIENTS } from "./snippets";
 import { useActiveWorkspace, useInvalidateSettings } from "./use-settings-queries";
 
 /**
@@ -40,6 +42,16 @@ function AiAgentsTabInner() {
             Every agent key is scoped, expires and can be revoked. The agent never sees your admin sign-in, and every
             change it makes is attributed and listed below.
           </p>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-label text-text-secondary">
+            <span>Works with</span>
+            <ul data-slot="agent-clients" className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-foreground">
+              {AGENT_KEY_CLIENTS.map((client) => (
+                <li key={client.id}>
+                  <VendorName vendor={client.mark}>{client.id === "other" ? "Any MCP client" : client.label}</VendorName>
+                </li>
+              ))}
+            </ul>
+          </div>
         </SectionRow>
       </Section>
 

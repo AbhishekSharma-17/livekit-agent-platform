@@ -426,6 +426,14 @@ describe("ProvidersTab", () => {
       "Speaks: turns the reply into voice",
     ]);
 
+    // The cards list the services they name as decorative marks after their text.
+    const cards = screen.getByRole("radiogroup", { name: "Pipeline mode" });
+    expect([...cards.querySelectorAll('[data-slot="mode-marks"] [data-slot="vendor-mark"]')].map((m) => m.getAttribute("data-mark"))).toEqual([
+      "livekit",
+      "googlegemini",
+      "openai",
+    ]);
+
     fireEvent.click(screen.getByRole("radio", { name: /Realtime/ }));
     expect(screen.getByTestId("mode").textContent).toBe("realtime");
     await waitFor(() =>

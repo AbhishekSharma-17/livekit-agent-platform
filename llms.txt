@@ -48,3 +48,4 @@ exist for Codex, generic agents, and anyone browsing the checkout.
 
 - [README.md](README.md): the repository overview (every package, running
   the platform locally).
+- [Deployment and handoff](docs/DEPLOYMENT-AND-HANDOFF.md): architecture, call flow, the DGX reference deployment, operations and open work — start here.

@@ -80,9 +80,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import object_session
 
 from lkap_api.connections.clients import ConnectionClientFactory
-from lkap_api.connections.service import resolve_agent_connection
 from lkap_api.db.guard import CROSS_WORKSPACE_OPTION
-from lkap_api.db.models import Call, Job, LiveKitConnection, SipTrunk, new_id, utcnow
+from lkap_api.db.models import Agent, Call, Job, LiveKitConnection, SipTrunk, new_id, utcnow
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
 from lkap_api.errors import ConflictError, NotFoundError, UnprocessableEntityError
@@ -95,7 +94,6 @@ from lkap_api.telephony.common import (
     SIP_CHANNELS,
     LiveKitUpstreamError,
     connection_of,
-    get_agent,
     get_trunk,
     is_not_found,
     raise_upstream,
@@ -419,7 +417,13 @@ async def open_outbound_calls(db: AsyncSession, workspace_id: str) -> int:
 
 
 async def prepare_outbound_call(
-    db: AsyncSession, workspace_id: str, payload: CallCreate, *, policy: TelephonyPolicy
+    db: AsyncSession,
+    workspace_id: str,
+    payload: CallCreate,
+    *,
+    policy: TelephonyPolicy,
+    agent: Agent,
+    connection: LiveKitConnection,
 ) -> tuple[Call, DialPlan]:
     """Validate an outbound call and store its session and call rows (not committed).
 
@@ -427,19 +431,22 @@ async def prepare_outbound_call(
     agent's ``lkap_api.limits.slot_lock`` held through the caller's commit
     (R-V2-34); ``POST /v1/calls`` does that.
 
+    ``agent`` and ``connection`` are resolved by the caller before the locks
+    (V6-41), which runs the worker check on that connection first, so the
+    agent is read once (``telephony.common.get_agent`` and
+    ``connections.service.resolve_agent_connection``).
+
     Raises:
-        NotFoundError: Unknown agent or trunk.
-        ConflictError: Archived agent, SIP disabled, or trunk not on LiveKit.
+        NotFoundError: Unknown trunk.
+        ConflictError: SIP disabled, or trunk not on LiveKit.
         UnprocessableEntityError: Bad number or no usable outbound trunk.
         DestinationNotAllowedError: The dialing policy refuses the number.
         CallsBusyError: The workspace's open-outbound cap or the agent's
             ``max_concurrent_sessions`` is reached.
     """
     to_e164 = check_outbound_number(policy, payload.to_e164)
-    agent = await get_agent(db, workspace_id, payload.agent_id)
-    conn = await resolve_agent_connection(db, agent)
-    require_sip(conn)
-    trunk = await _outbound_trunk(db, workspace_id, conn.id, payload.trunk_id)
+    require_sip(connection)
+    trunk = await _outbound_trunk(db, workspace_id, connection.id, payload.trunk_id)
     open_calls = await open_outbound_calls(db, workspace_id)
     if open_calls >= policy.max_concurrent_outbound:
         raise CallsBusyError(
@@ -463,7 +470,7 @@ async def prepare_outbound_call(
             id=session_id,
             workspace_id=workspace_id,
             agent_id=agent.id,
-            connection_id=conn.id,
+            connection_id=connection.id,
             config_version=agent.config_version,
             room_name=room_name,
             participant_identity=identity,
@@ -487,7 +494,7 @@ async def prepare_outbound_call(
         id=call_id,
         session_id=session_id,
         workspace_id=workspace_id,
-        connection_id=conn.id,
+        connection_id=connection.id,
         direction="outbound",
         from_e164=from_e164,
         to_e164=to_e164,
@@ -502,14 +509,14 @@ async def prepare_outbound_call(
         config_version=agent.config_version,
         participant_identity=identity,
         channel="sip_out",
-        connection_id=conn.id,
+        connection_id=connection.id,
     ).model_dump_json()
     plan = DialPlan(
         call_id=call_id,
         session_id=session_id,
         workspace_id=workspace_id,
-        connection_id=conn.id,
-        agent_name=conn.agent_name,
+        connection_id=connection.id,
+        agent_name=connection.agent_name,
         room_name=room_name,
         participant_identity=identity,
         lk_trunk_id=str(trunk.lk_trunk_id),

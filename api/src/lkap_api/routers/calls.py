@@ -50,16 +50,18 @@ from lkap_api.auth.audit import record
 from lkap_api.auth.deps import WorkspaceContext
 from lkap_api.auth.ratelimit import RateLimitedError, RateLimiterDep, enforce
 from lkap_api.connections.clients import ClientFactoryDep
+from lkap_api.connections.service import resolve_agent_connection
 from lkap_api.db.models import Call
 from lkap_api.db.models import Session as SessionRow
 from lkap_api.db.session import Database
-from lkap_api.deps import AdminCtxDep, DbDep, ServiceDep
+from lkap_api.deps import AdminCtxDep, DbDep, ServiceDep, SettingsDep
 from lkap_api.errors import ApiError, ConflictError, NotFoundError
+from lkap_api.fleet import readiness
 from lkap_api.limits import slot_lock
 from lkap_api.logging import get_logger
 from lkap_api.telephony import calls as call_service
 from lkap_api.telephony import webhooks as _webhooks  # noqa: F401 - registers the webhook handlers
-from lkap_api.telephony.common import SIP_CHANNELS
+from lkap_api.telephony.common import SIP_CHANNELS, get_agent
 from lkap_api.telephony.policy import (
     NOT_ALLOWED_TO_MODEL,
     CallsBusyError,
@@ -96,8 +98,14 @@ def _audit(db: AsyncSession, ctx: WorkspaceContext, action: str, call: Call, **p
     )
 
 
-#: Refusals that are dialing-policy decisions (R-V2-23) and so leave an audit row.
-_POLICY_REFUSALS = (DestinationNotAllowedError, RateLimitedError, CallsBusyError)
+#: Refusals that are dialing-policy decisions (R-V2-23) and so leave an audit row, plus
+#: V6-41's 409 ``no_worker_running`` (nothing would answer the call).
+_POLICY_REFUSALS = (
+    DestinationNotAllowedError,
+    RateLimitedError,
+    CallsBusyError,
+    readiness.NoWorkerRunningError,
+)
 
 
 async def _audit_refusal(
@@ -148,24 +156,33 @@ async def _audit_refusal(
         "The number must pass the workspace's dialing policy (`settings.telephony`): 422 "
         "`destination_not_allowed` (with `details.allowed_prefixes`) otherwise, and every call is refused "
         "until an admin sets `allowed_prefixes`. 429 `rate_limited` past `max_calls_per_min`, "
-        "429 `calls_busy` at `max_concurrent_outbound` open calls or the agent's session limit."
+        "429 `calls_busy` at `max_concurrent_outbound` open calls or the agent's session limit. "
+        "409 `no_worker_running` when no worker of the agent's connection is running (external and "
+        "supervised connections, `LKAP_CALL_START_WORKER_CHECK`)."
     ),
 )
 async def place_call(
     payload: CallCreate,
+    request: Request,
     ctx: AdminCtxDep,
     db: DbDep,
+    settings: SettingsDep,
     database: DatabaseDep,
     factory: ClientFactoryDep,
     limiter: RateLimiterDep,
     background: BackgroundTasks,
 ) -> CallOut:
-    """Check the policy and caps, store the call, commit, and dial in the background.
+    """Check the policy, the worker and the caps, store the call, commit, and dial in the background.
 
-    The two caps are counted and the rows committed under the workspace's and
-    the agent's slot locks (R-V2-34; workspace outer, agent inner), so a burst
-    of dials cannot all read the same count. A refusal is audited after the
-    locks are released (``_audit_refusal`` writes through a second session).
+    Since V6-41 the agent's connection is resolved first and the call fails fast with
+    409 ``no_worker_running`` when no worker would answer it
+    (:func:`lkap_api.fleet.readiness.ensure_worker_ready`, the rules of ``connect``),
+    before any slot is taken. The two caps are then counted and the rows committed
+    under the workspace's and the agent's slot locks (R-V2-34; workspace outer,
+    agent inner), so a burst of dials cannot all read the same count. The agent
+    lock is keyed by the resolved id, so a dial by slug shares it. A refusal is
+    audited after the locks are released (``_audit_refusal`` writes through a
+    second session).
     """
     policy = await workspace_policy(db, ctx.workspace_id)
     try:
@@ -176,12 +193,22 @@ async def place_call(
             capacity=policy.max_calls_per_min,
             what="outbound calls per minute for this workspace",
         )
+        agent = await get_agent(db, ctx.workspace_id, payload.agent_id)
+        connection = await resolve_agent_connection(db, agent)
+        # V6-41 fails fast, before the slots are taken, when no worker would answer the call.
+        await readiness.ensure_worker_ready(
+            db,
+            connection,
+            mode=settings.call_start_worker_check,
+            privileged=True,
+            api_started_at=readiness.api_started_at(request),
+        )
         async with (
             slot_lock(db, workspace_id=ctx.workspace_id),
-            slot_lock(db, workspace_id=ctx.workspace_id, agent_id=payload.agent_id),
+            slot_lock(db, workspace_id=ctx.workspace_id, agent_id=agent.id),
         ):
             call, plan = await call_service.prepare_outbound_call(
-                db, ctx.workspace_id, payload, policy=policy
+                db, ctx.workspace_id, payload, policy=policy, agent=agent, connection=connection
             )
             _audit(
                 db,

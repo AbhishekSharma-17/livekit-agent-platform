@@ -139,7 +139,10 @@ After a contract change, run `bash scripts/export_contracts.sh --generate`. Afte
 | LKAP web | `lkap-web:dgx` (built with `NEXT_PUBLIC_API_BASE_URL=https://<dgx-host>:8446`) | `127.0.0.1:3300` | Tailscale Serve `https://<dgx-host>:8447` (tailnet only) |
 | worker-cloud | `lkap-agent:dgx`, agent name `lkap-agent`, connection "Default" (LiveKit Cloud) | outbound only | none |
 | worker-dgx | `lkap-agent:dgx`, agent name `lkap-dgx`, connection "DGX-LivekitServer", `LIVEKIT_URL=ws://127.0.0.1:7880` | outbound only | none |
-| Data | SQLite, LanceDB and files in a bind-mounted dir (`/data` in the api container) | none | none |
+| Postgres 16 with pgvector | `pgvector/pgvector:pg16`, compose project `lkap`, own bridge network | `127.0.0.1:55432` | none |
+| Valkey 8 (Redis-compatible) | `valkey/valkey:8-alpine` | `127.0.0.1:56379` | none |
+| SeaweedFS (S3 gateway, bucket `lkap`) | `chrislusf/seaweedfs:3.97`, `server -s3` | `127.0.0.1:58333` | Tailscale Serve `https://<dgx-host>:8448` (tailnet only), used for presigned links |
+| Local data dir | the api's `/data` bind mount keeps the embedder models and the pre-cutover SQLite copy | none | none |
 
 All LKAP containers use host networking and bind to `127.0.0.1`. HTTPS comes from `tailscale serve`, which is required because browsers only allow the microphone on HTTPS. Never bind or serve on the host's Tailscale **Funnel** ports, which face the public internet.
 
@@ -200,6 +203,10 @@ The api container runs as the data dir's owner (`user: "1000:1000"`, `HOME=/tmp`
 ### 5.6 Private notes
 
 The deployment keeps a private notes file beside its compose file. It holds real hostnames, paths, connection ids and where the data came from. It is not in the repo.
+
+### 5.7 Data stores (since 2026-10-03)
+
+The DGX moved from SQLite, LanceDB and a local storage dir to Postgres with pgvector, Valkey and SeaweedFS on 2026-10-03, following RUNBOOK §9.10. The api env gained `LKAP_DATABASE_URL`, `LKAP_REDIS_URL` and the `LKAP_STORAGE_*` settings (including `LKAP_STORAGE_PUBLIC_ENDPOINT_URL`). The data-store passwords and the S3 identity live in two more private files beside the others. All 20 knowledge bases were re-indexed into pgvector. Rollback is the env file saved before the cutover, as RUNBOOK §9.10 describes.
 
 ## 6. Moving the reference deployment elsewhere (checklist)
 

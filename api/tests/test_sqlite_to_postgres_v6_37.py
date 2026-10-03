@@ -28,7 +28,7 @@ from typing import Any
 
 import pytest
 from conftest import REQUIRED_ENV
-from sqlalchemy import Column, func, select, text
+from sqlalchemy import JSON, Column, func, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -71,7 +71,8 @@ requires_postgres = pytest.mark.skipif(
 #: Ciphertext planted in the source, to prove it is copied byte for byte and never printed.
 CIPHERTEXT = b"gAAAAAB-test-ciphertext-never-printed"
 WEBHOOK_SECRET = b"gAAAAAB-webhook-secret-never-printed"
-HEAD = "v6_003_credential_last_used"
+#: The running code's migration head, read the way the tool reads it.
+HEAD = s2p.code_head()
 
 
 def _column(name: str, column: str) -> Column[Any]:
@@ -121,6 +122,12 @@ def test_coerce_value_boolean_column_accepts_sqlite_forms(value: object, expecte
 )
 def test_coerce_value_json_column_parses_text(value: object, expected: object) -> None:
     assert s2p.coerce_value("agents", _column("agents", "config"), value) == expected
+
+
+def test_coerce_value_json_null_text_stays_json_null_and_sql_null_stays_none() -> None:
+    column = _column("session_assets", "meta")
+    assert s2p.coerce_value("session_assets", column, "null") is JSON.NULL
+    assert s2p.coerce_value("session_assets", column, None) is None
 
 
 @pytest.mark.parametrize(
@@ -223,7 +230,13 @@ def test_main_refuses_missing_source_with_exit_code_2(capsys: pytest.CaptureFixt
 
 
 def test_code_head_matches_the_migration_chain() -> None:
-    assert s2p.code_head() == HEAD
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config(str(API_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(API_DIR / "alembic"))
+    assert HEAD is not None
+    assert HEAD == ScriptDirectory.from_config(config).get_current_head()
 
 
 # --------------------------------------------------------------------------- fixtures (Postgres)
@@ -397,6 +410,9 @@ async def _seed(path: Path) -> dict[str, str]:
         )
         raw.execute("UPDATE storage_configs SET is_default = 'true'")
         raw.execute("UPDATE audit_log SET ts = '2026-09-30T08:00:00Z' WHERE action = 'seed.0'")
+        # A SQL NULL and a stored JSON `null` in nullable JSON columns must stay distinct.
+        raw.execute("UPDATE session_assets SET meta = NULL")
+        raw.execute("UPDATE knowledge_bases SET chunking = 'null'")
     return ids
 
 
@@ -453,6 +469,13 @@ async def test_copy_database_copies_every_table_with_converted_values(
                 .join(LiveKitConnection, LiveKitConnection.id == Session.connection_id)
             )
             assert joined.scalar_one() == 1
+            # SQL NULL stays SQL NULL, JSON null stays JSON null.
+            assert (
+                await db.execute(text("SELECT count(*) FROM session_assets WHERE meta IS NULL"))
+            ).scalar_one() == 1
+            assert (
+                await db.execute(text("SELECT chunking::text FROM knowledge_bases"))
+            ).scalar_one() == "null"
             # The Postgres-only keyword column is filled for copied chunks.
             assert (
                 await db.execute(text("SELECT count(*) FROM kb_chunks WHERE tsv IS NOT NULL"))

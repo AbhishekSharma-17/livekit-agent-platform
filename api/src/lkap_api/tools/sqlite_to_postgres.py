@@ -58,11 +58,13 @@ from sqlalchemy import (
     Column,
     Date,
     DateTime,
+    Insert,
     Integer,
     LargeBinary,
     Numeric,
     String,
     Table,
+    bindparam,
     event,
     func,
     inspect,
@@ -251,7 +253,9 @@ def _to_json(value: object) -> object:
     if isinstance(value, bytes | bytearray | memoryview):
         value = bytes(value).decode("utf-8")
     if isinstance(value, str):
-        return json.loads(value)
+        parsed = json.loads(value)
+        # A stored JSON `null` stays a JSON null. Python `None` means SQL NULL (see `_insert_for`).
+        return JSON.NULL if parsed is None else parsed
     # SQLite gives a JSON column NUMERIC affinity, so a bare number comes back as a number.
     if isinstance(value, int | float | bool | dict | list):
         return value
@@ -444,6 +448,23 @@ async def _truncate(conn: AsyncConnection, tables: Sequence[Table]) -> None:
     await conn.execute(text(f"TRUNCATE TABLE {names} RESTART IDENTITY CASCADE"))
 
 
+def _insert_for(table: Table, columns: Sequence[Column[Any]]) -> Insert:
+    """An INSERT with one named parameter per column (``p0``, ``p1``, ...).
+
+    JSON columns bind with ``none_as_null=True``, so a SQL NULL in the source stays SQL NULL
+    and a stored JSON ``null`` (:data:`sqlalchemy.JSON.NULL`) stays JSON ``null``. The
+    columns' own JSON type would write both as JSON ``null``.
+    """
+    values = {
+        column.key: bindparam(
+            f"p{index}",
+            type_=JSON(none_as_null=True) if isinstance(_base_type(column.type), JSON) else column.type,
+        )
+        for index, column in enumerate(columns)
+    }
+    return table.insert().values(values)
+
+
 async def _copy_table(
     source: AsyncConnection,
     target: AsyncConnection,
@@ -455,14 +476,18 @@ async def _copy_table(
     quote = source.dialect.identifier_preparer.quote
     selected = ", ".join(quote(column.name) for column in columns)
     order = ", ".join(quote(column.name) for column in table.primary_key.columns) or "rowid"
+    statement = _insert_for(table, columns)
     result = await source.stream(text(f"SELECT {selected} FROM {quote(table.name)} ORDER BY {order}"))
     async for partition in result.partitions(batch_size):
         rows = [
-            {column.key: coerce_value(table.name, column, row[index]) for index, column in enumerate(columns)}
+            {
+                f"p{index}": coerce_value(table.name, column, row[index])
+                for index, column in enumerate(columns)
+            }
             for row in partition
         ]
         try:
-            await target.execute(table.insert(), rows)
+            await target.execute(statement, rows)
         except DBAPIError as exc:
             raise CopyFailedError(f"{table.name}: {safe_db_error(exc)}") from None
         report.copied += len(rows)

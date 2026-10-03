@@ -6,3 +6,4 @@ postgres.env
 agent.env
 *.env
 !*.env.example
+seaweedfs-s3.json

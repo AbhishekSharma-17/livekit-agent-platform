@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "lkap",
+      "credentials": [
+        {
+          "accessKey": "<same value as LKAP_STORAGE_ACCESS_KEY>",
+          "secretKey": "<same value as LKAP_STORAGE_SECRET_KEY>"
+        }
+      ],
+      "actions": ["Admin", "Read", "List", "Tagging", "Write"]
+    }
+  ]
+}

@@ -416,6 +416,7 @@ refuses stops running and shows as an error on that rule. The agent still loads.
 |---|---|---|---|---|---|
 | `LKAP_PACKS` | api and worker | `packs.generic` | The code packs loaded. Before V6-22 the default also listed `packs.insurance_claim`. Set `packs.insurance_claim,packs.generic` on both to keep the legacy pack. | V6-22 | §9.8 |
 | `LKAP_CALL_START_WORKER_CHECK` | api | `block` | Fail fast when no worker of the agent's external or supervised connection is running: `block` (409 `no_worker_running`), `warn` (log `call_start_no_worker` only), `off`. Never refuses in the first two minutes after the api starts, or while another connection's live workers answer to the same server and agent name. Use `warn` when workers run without `LKAP_CONNECTION_ID`. The default is Fable's recommendation and was confirmed by the user (V6 U-V6-4). | V6-27 | §3 |
+| `LKAP_STORAGE_PUBLIC_ENDPOINT_URL` | api | unset | The S3 endpoint as browsers reach it, for example an HTTPS proxy in front of SeaweedFS. When set, presigned links (session files) are signed for this address while uploads and reads keep `LKAP_STORAGE_ENDPOINT_URL`. Unset signs for the internal endpoint, as before. A custom endpoint is now addressed path-style. | V6-37 | §9.10 |
 
 **Dependencies.** The full worker image installs `livekit-plugins-minimax-ai` 1.8.3 (the `minimax-tts` entry, while the stale `livekit-plugins-minimax` is never installed) and no longer installs `livekit-plugins-fireworksai` (Fireworks stopped its speech service, so `fireworksai-stt` is `removed` in the registry and a stored agent naming it gets a validator error). The dev venv installs neither. The web adds `perfect-freehand` 1.2.3 (MIT), loaded only when a drawing board renders. Nothing else is new. `livekit-agents` stays at 1.8.3.
 
@@ -438,6 +439,63 @@ refuses stops running and shows as an error on that rule. The agent still loads.
 - If callers get cut off on Fast with Flux, raise **End-of-turn confidence** (0.7 → 0.8) before anything else.
 
 **Speech.** OpenRouter's speech-to-text and text-to-speech entries wait for the whole utterance or sentence, so the console marks them "not for live calls", no longer offers them for new agents or lists them on the OpenRouter key's tags (V6-32, and agents that use one keep running), and the api adds a tip on a voice pipeline that uses one. Use them for text tests and batch work. On a Cloud connection LiveKit Inference is the recommended streaming stack, and on a self-hosted one, direct Deepgram and Cartesia keys (`docs/v6/ARCHITECTURE-V6.md` §2).
+
+### 9.10 Single-node data stores (Postgres + pgvector, Valkey, SeaweedFS)
+
+A single host can run LKAP on SQLite, LanceDB and a local storage folder, or on its own Postgres 16 with pgvector, Valkey and SeaweedFS (V6-37). The second set lets more than one api process share the data, keeps the vectors in the database (§9.2), and serves stored files through S3 presigned links. Valkey is a Redis drop-in and SeaweedFS is S3-compatible object storage under Apache-2.0. `deploy/docker-compose.datastores.yml` runs all three as LKAP's own containers on their own network, with ports published on `127.0.0.1` only.
+
+**Settings.** They go in the api's env file, never on a command line.
+
+| Variable | Value for this layout |
+|---|---|
+| `LKAP_DATABASE_URL` | `postgresql+asyncpg://lkap:<password>@127.0.0.1:<LKAP_PG_PORT>/lkap` |
+| `LKAP_REDIS_URL` | `redis://127.0.0.1:<LKAP_VALKEY_PORT>/0` |
+| `LKAP_STORAGE_KIND` | `s3` |
+| `LKAP_STORAGE_BUCKET` | `lkap` |
+| `LKAP_STORAGE_ENDPOINT_URL` | `http://127.0.0.1:<LKAP_SEAWEEDFS_S3_PORT>`, how the api reaches SeaweedFS |
+| `LKAP_STORAGE_PUBLIC_ENDPOINT_URL` | the HTTPS address browsers reach the same S3 port on, for example `https://<host>:8448` from `tailscale serve` |
+| `LKAP_STORAGE_ACCESS_KEY`, `LKAP_STORAGE_SECRET_KEY` | the identity in `deploy/seaweedfs-s3.json` |
+| `LKAP_STORAGE_REGION` | `us-east-1` (SeaweedFS ignores the region, and the signer needs one) |
+| `LKAP_VECTOR_STORE` | unset, so the vectors follow the database into `kb_vectors` |
+| `LKAP_JOBS_BACKEND` | leave at `inline` unless a `jobs` process runs (with `arq` and no jobs process, a re-index only queues) |
+
+- **Valkey needs no code change.** The api and the supervisor talk to it with the same `redis` client. The rate limiter and the supervisor lease run Lua scripts (`EVAL`) and arq uses ordinary commands, all of which Valkey 8 supports. Keep using a `redis://` URL.
+- **Presigned links.** A presigned URL is signed for the host it names, so with the api on loopback the browser-facing address goes in `LKAP_STORAGE_PUBLIC_ENDPOINT_URL`. Only the link changes, and every upload and read still goes to `LKAP_STORAGE_ENDPOINT_URL`. The proxy in front of SeaweedFS must pass the browser's `Host` header through unchanged, or SeaweedFS rejects the signature. Check one link after the cutover with `curl -I`. A custom endpoint is addressed path-style (`<endpoint>/<bucket>/<key>`), which SeaweedFS needs.
+- **Recordings** are written by LiveKit Egress to the S3 store of a workspace `storage_configs` row, and their links are signed for that row's `endpoint_url`. No route writes those rows yet and they have no public endpoint setting (asks #350). Recordings are unchanged by this layout.
+- **SeaweedFS ports.** `weed server` runs a master (9333), a volume server (8080 by default), a filer (8888) and the S3 gateway (8333). The volume server's default 8080 is the api's port, so the compose file moves it to `LKAP_SEAWEEDFS_VOLUME_PORT` (default 18080). Only the S3 port is published.
+
+**Bring the stores up.**
+
+```bash
+cp deploy/datastores.env.example <private-dir>/datastores.env && chmod 600 <private-dir>/datastores.env   # fill in
+cp deploy/seaweedfs-s3.example.json deploy/seaweedfs-s3.json && chmod 600 deploy/seaweedfs-s3.json        # fill in
+docker compose -p lkap-datastores -f deploy/docker-compose.datastores.yml --env-file <private-dir>/datastores.env up -d
+docker compose -p lkap-datastores -f deploy/docker-compose.datastores.yml ps                               # all healthy
+```
+
+**The copy tools** run in the api image, so they use the api's own models and settings.
+
+- `python -m lkap_api.tools.sqlite_to_postgres --source /data/lkap.db [--target <url>] [--dry-run] [--truncate] [--batch-size 500]` copies every table in foreign-key order inside one transaction and commits only when every table's source, copied and target counts agree. `--target` defaults to `LKAP_DATABASE_URL`, which keeps the password out of `ps`. It refuses (exit 2) when the two `alembic_version` values differ or when the target already holds rows. A freshly migrated database counts as empty because the default workspace and connection the migrations seed are removed first, and `--truncate` empties anything else. It converts what SQLite stores loosely (JSON text, `0`/`1` booleans, text and offset datetimes to UTC) and resets the `audit_log` and `session_events` id sequences. It skips `alembic_version`, `kb_vectors` (rebuilt by the re-index below) and Mem0's `lkap_memory`. Encrypted columns are copied as they are, so the master key is not needed, and the report shows counts only. Exit 1 means a mismatch or a failed row, and nothing was committed.
+- `python -m lkap_api.tools.copy_storage [--source-dir <dir>] [--dry-run] [--create-bucket]` uploads every file under `<LKAP_DATA_DIR>/storage` to `LKAP_STORAGE_BUCKET` under its relative path. Those are the keys the database holds (`kb/<kb>/<document>_<file>`, `sessions/<session>/<asset><ext>` in `session_assets.storage_key`, `datasets/<workspace>/<dataset>/source<ext>` in `datasets.storage_key`), so nothing in the database is rewritten. An object already there with the same size is skipped, so it can run again. It reads the destination from the `LKAP_STORAGE_*` settings above.
+- Things the copy does not carry. Caller memories held by Mem0 live in a local Qdrant folder on SQLite (`LKAP_DATA_DIR/memory/qdrant`) and in Mem0's own table on Postgres, and nothing moves them (asks #351). Postgres enforces what SQLite let through (a value longer than its `VARCHAR`, a row whose parent is gone), and such a row fails the copy with the table and constraint named. Fix or delete it in the SQLite copy and run again.
+
+**Cutover.** Stop everything that writes, then copy, then switch.
+
+1. Start the stores (above) and wait until they are healthy.
+2. Stop the workers, the web and the api with `docker compose -f <deploy-dir>/compose.yml stop worker-cloud worker-dgx web api`.
+3. Back up the SQLite file and the storage folder, for example `sqlite3 <data-dir>/lkap.db ".backup <backup-dir>/lkap-$(date +%s).db"` and `tar -C <data-dir> -czf <backup-dir>/storage-$(date +%s).tgz storage`. Keep both until the new layout has run for a while.
+4. Add the settings above to the api's env file. Keep the old file as a copy for the rollback.
+5. Migrate Postgres to the head with `docker compose -f <deploy-dir>/compose.yml run --rm --no-deps api alembic upgrade head`.
+6. Copy the database with a dry run first, `docker compose -f <deploy-dir>/compose.yml run --rm --no-deps api python -m lkap_api.tools.sqlite_to_postgres --source /data/lkap.db --dry-run`, then the same command without `--dry-run`. Both must end with every table `ok`.
+7. Copy the files with `docker compose -f <deploy-dir>/compose.yml run --rm --no-deps api python -m lkap_api.tools.copy_storage --create-bucket`.
+8. Publish the S3 port to browsers on the tailnet with `tailscale serve --bg --https=8448 http://127.0.0.1:<LKAP_SEAWEEDFS_S3_PORT>`.
+9. Start the api with `docker compose -f <deploy-dir>/compose.yml up -d api`. Then `curl https://<host>:8446/v1/health` shows `db: ok`.
+10. Rebuild the knowledge-base vectors in Postgres with `docker compose -f <deploy-dir>/compose.yml exec -T api python -m lkap_api.kb.jobs reindex --all` (§9.2).
+11. Start the web and the workers with `docker compose -f <deploy-dir>/compose.yml up -d web worker-cloud worker-dgx`.
+12. Verify. The console lists the agents, sessions and keys it had before. A knowledge-base search returns hits. A session file opens from the console (and `curl -I` on its link answers 200). One voice call per connection works. `docker compose -p lkap-datastores exec valkey valkey-cli dbsize` grows once requests come in.
+13. Keep the SQLite backup, `<data-dir>/lkap.db`, `<data-dir>/storage` and `<data-dir>/lancedb` as they are. Delete them only once you are satisfied.
+
+**Rollback.** Stop the workers, the web and the api, put the old api env file back (no `LKAP_DATABASE_URL`, `LKAP_REDIS_URL` or `LKAP_STORAGE_*` lines), and start them again. The api is back on the SQLite file, LanceDB and the storage folder, which the cutover never changed. Anything written after the cutover exists only in Postgres and SeaweedFS. Leave the stores running until you know whether you need it.
 
 ## 10. Smoke test
 

@@ -129,14 +129,14 @@ The deployment keeps a private notes file beside its compose file (real hostname
 1. A LiveKit server (Cloud project, or self-hosted with TLS/UDP/TURN).
 2. A host or cluster for api + web (2–4 CPU), HTTPS in front (Tailscale Serve, Caddy, or a load balancer).
 3. Workers next to each LiveKit server (≈4 CPU / 8 GB per ~10–25 simultaneous calls with external STT/LLM/TTS), or LiveKit Cloud Agents for the Cloud connection (`lk agent deploy`, see `deploy/README.md` §2).
-4. Data: SQLite + local dir (single node) **or** Postgres with pgvector + Redis + S3-compatible storage (`deploy/docker-compose.prod.yml`), see §7.
+4. Data. Either SQLite + local dir (single node), or Postgres with pgvector + Redis or Valkey + S3-compatible storage (`deploy/docker-compose.prod.yml`, or `deploy/docker-compose.datastores.yml` for one host, RUNBOOK §9.10). See §7.
 5. Secrets: master key (carry it with the data), admin/service/session tokens (new per deployment), LiveKit keys per connection, provider keys (stored encrypted in LKAP, added in the console).
 6. Build the three images, run migrations, start api → web → workers, verify as in 5.4.
 7. AI provider accounts: Deepgram (speech), OpenRouter (LLM, images, embeddings); optional LiveKit Inference, avatar vendors, Composio.
 
 ## 7. Open work for the next session
 
-1. **Phase 2 data stores on the DGX**: run LKAP's own Postgres 16 + pgvector, Redis and MinIO as extra services in the `lkap` compose project (isolated network/ports; don't reuse other projects' databases), then copy the SQLite data into Postgres (all tables in foreign-key order via the api's SQLAlchemy models; JSON columns; re-embed or copy LanceDB vectors into `kb_vectors`), switch `LKAP_DATABASE_URL`/`LKAP_REDIS_URL`/storage settings, verify, keep the SQLite copy as a backup. RUNBOOK §9 covers pgvector and storage settings. No migration tool exists yet; write it as a package with tests.
+1. **Phase 2 data stores on the DGX.** The tooling is built (V6-37) and the cutover is not run yet. LKAP's own Postgres 16 + pgvector, Valkey and SeaweedFS come from `deploy/docker-compose.datastores.yml` (own network, ports on `127.0.0.1` only, never another project's databases). `python -m lkap_api.tools.sqlite_to_postgres` copies the SQLite data and `python -m lkap_api.tools.copy_storage` uploads the storage folder. Knowledge bases are then re-indexed into `kb_vectors`. RUNBOOK §9.10 has the settings, the cutover steps and the rollback. Keep the SQLite copy as a backup.
 2. **Tailscale direct connection**: Mac ↔ DGX currently relays via DERP; allow UDP 41641 on the DGX side.
 3. Open asks in `docs/v6/_asks.md` (Open at close + #296…#325), notably #178 (workers report server + agent name), #180 (outbound calls fail fast), #296 (reasoning text spoken by some models), #305 (catalog refresh on miss).
 4. Noise cancellation is not installed in the worker yet (LiveKit's is Cloud-only; ai-coustics works self-hosted).

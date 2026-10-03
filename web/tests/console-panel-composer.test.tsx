@@ -24,6 +24,8 @@ import { zodResolver } from "@/components/console/lib/zod-resolver";
 import type { AgentOut, ProvidersResponse } from "@/contracts/lkap-contracts";
 import { BLOCK_CATALOG } from "@/panels/blocks/catalog";
 
+import { PRELOAD_TIMEOUT_MS, preloadLazyBlocks } from "./lazy-blocks";
+
 /**
  * V2-11 — the panel composer (the agent editor's "Panel & capabilities"
  * section): pure layout edits, the form contract (`config.panel` +
@@ -34,13 +36,16 @@ import { BLOCK_CATALOG } from "@/panels/blocks/catalog";
  * `console-editor-shell.test.tsx`, plus `ResizeObserver` / `scrollIntoView`.
  */
 const nativeMatches = Element.prototype.matches;
-beforeAll(() => {
+beforeAll(async () => {
   Element.prototype.matches = function matches(this: Element, selector: string) {
     if (selector === ":popover-open" || selector === ":modal") return false;
     return nativeMatches.call(this, selector);
   };
   Element.prototype.scrollIntoView = function scrollIntoView() {};
-});
+  // The live preview lazy-loads itself and then every lazy block. Loading them once here keeps
+  // the first test that opens the preview from waiting on a module transform (see `lazy-blocks.ts`).
+  await Promise.all([preloadLazyBlocks(), import("@/components/console/agents/panel-section/composer-preview")]);
+}, PRELOAD_TIMEOUT_MS);
 afterAll(() => {
   Element.prototype.matches = nativeMatches;
 });

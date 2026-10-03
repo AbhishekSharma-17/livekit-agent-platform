@@ -474,7 +474,7 @@ Status values: `planned` · `running` · `contracts-committed` · `merged` · `l
 | V6-39 | Sonnet | 9 | merged | 72e6b5b3 | none | #370 |
 | V6-40 | Opus | 10 | planned | | | |
 | V6-41 | Opus | 10 | running | | | |
-| V6-42 | Sonnet | 10 | planned | | | |
+| V6-42 | Sonnet | 10 | running | | | |
 | V6-43 | Opus | 10 | planned | | | |
 | V6-44 | Opus | 11 | planned | | | |
 | V6-45 | Opus | 11 | planned | | | |

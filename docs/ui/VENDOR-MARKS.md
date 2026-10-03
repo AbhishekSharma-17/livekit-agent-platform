@@ -31,7 +31,13 @@ docs/ui/DESIGN-SYSTEM.md section 5 ("Third-party logos") sets the visual rule.
   keeps the monogram unless the workspace owner approves the mark. On 2026-10-01 the workspace owner approved the
   official marks of Slack, Twilio, Salesforce and Microsoft Outlook, for identifying the service beside its name
   only. `MONOGRAM_ONLY` in `vendor-marks.ts` pins any key that must keep the monogram, so no prefix match can reach
-  another mark. It is empty today.
+  another mark. Today it pins Visual Studio Code (`vscode`, `visualstudiocode`), whose guidelines forbid the way a
+  one-ink tile draws a mark.
+- **Inline beside a name.** Where a cell, a tab, a label or a card title prints a company or product, `VendorName`
+  puts the compact `xs` mark (16 px, no tile) before the printed name. It shows a real mark only, never a monogram
+  beside an unknown name (pass `monogram` to opt in). Sentences keep their words without marks in the middle. A
+  card or row whose help text names several services lists their marks after the text instead (the setup
+  checklist, the "How it talks" mode cards).
 - **No runtime fetch.** The generator copies each mark's path data into `vendor-mark-data.ts`. Only console screens
   import it, and `tests/flow-bundle-split.test.ts` keeps it out of the `/s/[slug]` session bundle.
 
@@ -89,6 +95,9 @@ so `bey-avatar` resolves through `bey` and `did-avatar` through `did`.
 | Anam | `anam` | anam.ai draws only a wordmark (as a CSS mask), unreadable at 12 to 18 px. Its "A" symbol exists only as a raster favicon |
 | Chroma | `chroma` | The mark is two overlapping discs told apart only by colour (blue, yellow, red). No one-colour version is offered, one ink would merge the discs into a blob, and the yellow fails 3:1 on the light tile |
 | Turbopuffer | `turbopuffer` | The mark is pixel art in several tones. Its approved monochrome version still needs two tones (white fill, black outline), which one ink cannot carry, and each tone fails contrast on one theme |
+| Visual Studio Code | `vscode`, `visualstudiocode` (pinned in `MONOGRAM_ONLY`) | https://code.visualstudio.com/brand (read 2026-10-03) asks for the blue icon everywhere, the white one only on blue, and forbids recolouring or adding a background. A one-ink mark on a muted tile does both, the icon's shading is a gradient the generator rejects, and Simple Icons removed the icon at Microsoft's request |
+| Continue | (none) | Not named or offered anywhere in the console, so not added. Its symbol (from https://www.continue.dev/continue-logo-black.svg, the same shape as its favicon) can be added as an official mark under the key `continuedev` if a client list ever names it. A bare `continue` key would also mark tools named `continue_*` |
+| Microsoft Copilot | (none) | No key. `copilot` alone would be ambiguous, so only `githubcopilot` maps to the GitHub Copilot mark |
 | LiveAvatar, LemonSlice, Gladia, Soniox | (none) | Not yet looked up |
 
 ### Simple Icons (CC0)
@@ -104,10 +113,12 @@ so `bey-avatar` resolves through `bey` and `did-avatar` through `did`.
 | Brave | `brave`, `bravesearch` |
 | Cal.com | `calcom` |
 | Calendly | `calendly` |
-| Claude | `claude` |
+| Claude (also Claude Code and Claude Desktop) | `claude`, `claudecode`, `claudedesktop`, `claudeai` |
 | ClickUp | `clickup` |
+| Cline | `cline` |
 | Cloudflare | `cloudflare` |
 | Confluence | `confluence` |
+| Cursor | `cursor` |
 | Deepgram | `deepgram` |
 | Discord | `discord` |
 | Dropbox | `dropbox` |
@@ -119,6 +130,7 @@ so `bey-avatar` resolves through `bey` and `did-avatar` through `did`.
 | Figma | `figma` |
 | Fish Audio | `fishaudio` |
 | GitHub | `github` |
+| GitHub Copilot | `githubcopilot` |
 | GitLab | `gitlab` |
 | Gmail | `gmail` |
 | Google | `google`, `googlecloud`, `googleworkspace` |
@@ -132,6 +144,7 @@ so `bey-avatar` resolves through `bey` and `did-avatar` through `did`.
 | Hugging Face | `huggingface` |
 | Instagram | `instagram` |
 | Intercom | `intercom` |
+| JetBrains | `jetbrains` |
 | Jira | `jira` |
 | Linear | `linear` |
 | LiveKit | `livekit`, `livekitinference`, `livekitcloud` |
@@ -143,6 +156,7 @@ so `bey-avatar` resolves through `bey` and `did-avatar` through `did`.
 | MiniMax | `minimax` |
 | Miro | `miro` |
 | Mistral AI | `mistral`, `mistralai` |
+| Model Context Protocol | `mcp`, `modelcontextprotocol` |
 | MongoDB | `mongodb` |
 | Naver | `naver`, `clova` |
 | Notion | `notion` |
@@ -165,9 +179,11 @@ so `bey-avatar` resolves through `bey` and `did-avatar` through `did`.
 | Trello | `trello` |
 | Typeform | `typeform` |
 | WhatsApp | `whatsapp` |
+| Windsurf | `windsurf` |
 | Xero | `xero` |
 | YouTube | `youtube` |
 | Zapier | `zapier` |
+| Zed | `zed`, `zedindustries` |
 | Zendesk | `zendesk` |
 | Zoom | `zoom` |
 
@@ -179,6 +195,7 @@ so `bey-avatar` resolves through `bey` and `did-avatar` through `did`.
 | AWS | `amazon`, `aws`, `amazonwebservices` |
 | Baseten | `baseten` |
 | Cerebras | `cerebras` |
+| Codex | `codex`, `codexcli`, `openaicodex` |
 | Cohere | `cohere`, `cohererank` |
 | DeepInfra | `deepinfra` |
 | DeepSeek | `deepseek` |
@@ -186,11 +203,13 @@ so `bey-avatar` resolves through `bey` and `did-avatar` through `did`.
 | fal | `fal`, `falai` |
 | Firecrawl | `firecrawl` |
 | Fireworks AI | `fireworks`, `fireworksai` |
+| Gemini CLI | `geminicli` |
+| Goose | `goose` |
 | Grok | `grok` |
 | Groq | `groq` |
 | Hedra | `hedra` |
 | Microsoft | `microsoft`, `azure` |
-| OpenAI | `openai` |
+| OpenAI (also ChatGPT, whose app icon is the same blossom) | `openai`, `chatgpt` |
 | Qwen | `qwen` |
 | Runway | `runway` |
 | SambaNova | `sambanova` |
@@ -203,5 +222,7 @@ so `bey-avatar` resolves through `bey` and `did-avatar` through `did`.
 
 The official marks add 22.3 kB raw and 8.4 kB gzipped to `vendor-mark-data.ts` (103.6 kB to 125.8 kB raw, 41.8 kB to
 50.2 kB gzipped, measured on the file itself with `gzip -9`). Of that, Slack, Twilio, Salesforce and Outlook add
-6.0 kB raw and 2.1 kB gzipped (119.8 kB to 125.8 kB, 48.1 kB to 50.2 kB). The file reaches console routes only.
+6.0 kB raw and 2.1 kB gzipped (119.8 kB to 125.8 kB, 48.1 kB to 50.2 kB). The AI coding agent and MCP client marks
+(Cline, Cursor, GitHub Copilot, JetBrains, Model Context Protocol, Windsurf, Zed, Codex, Gemini CLI, Goose) add
+9.7 kB raw and 3.8 kB gzipped (125.8 kB to 135.5 kB, 50.2 kB to 54.0 kB). The file reaches console routes only.
 `/s/[slug]` is unchanged, which `tests/flow-bundle-split.test.ts` checks on the static import graph.

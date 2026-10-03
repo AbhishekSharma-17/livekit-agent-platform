@@ -3,6 +3,7 @@ import {
   lhAws,
   lhBaseten,
   lhCerebras,
+  lhCodex,
   lhCohere,
   lhDeepinfra,
   lhDeepseek,
@@ -10,6 +11,8 @@ import {
   lhFal,
   lhFirecrawl,
   lhFireworks,
+  lhGeminicli,
+  lhGoose,
   lhGrok,
   lhGroq,
   lhHedra,
@@ -51,8 +54,10 @@ import {
   siCalendly,
   siClaude,
   siClickup,
+  siCline,
   siCloudflare,
   siConfluence,
+  siCursor,
   siDeepgram,
   siDiscord,
   siDropbox,
@@ -64,6 +69,7 @@ import {
   siFigma,
   siFishaudio,
   siGithub,
+  siGithubcopilot,
   siGitlab,
   siGmail,
   siGoogle,
@@ -77,6 +83,7 @@ import {
   siHuggingface,
   siInstagram,
   siIntercom,
+  siJetbrains,
   siJira,
   siLinear,
   siLivekit,
@@ -88,6 +95,7 @@ import {
   siMinimax,
   siMiro,
   siMistralai,
+  siModelcontextprotocol,
   siMongodb,
   siNaver,
   siNotion,
@@ -110,9 +118,11 @@ import {
   siTrello,
   siTypeform,
   siWhatsapp,
+  siWindsurf,
   siXero,
   siYoutube,
   siZapier,
+  siZedindustries,
   siZendesk,
   siZoom,
   type VendorMarkIcon,
@@ -239,6 +249,22 @@ const SIMPLE_ICONS: Readonly<Record<string, VendorMarkIcon>> = {
   facebook: siFacebook,
   instagram: siInstagram,
   duckduckgo: siDuckduckgo,
+  // AI coding agents and MCP clients (Settings, AI agents). Keys cover the
+  // console's client ids ("claude-code") and the products' MCP `clientInfo`
+  // names, which the leading-word walk reaches ("cursor-vscode" → "cursor").
+  // Claude Code and Claude Desktop show the Claude mark.
+  claudecode: siClaude,
+  claudedesktop: siClaude,
+  claudeai: siClaude,
+  cursor: siCursor,
+  githubcopilot: siGithubcopilot,
+  windsurf: siWindsurf,
+  zed: siZedindustries,
+  zedindustries: siZedindustries,
+  cline: siCline,
+  jetbrains: siJetbrains,
+  mcp: siModelcontextprotocol,
+  modelcontextprotocol: siModelcontextprotocol,
 };
 
 /** Vendors Simple Icons lacks, from Lobe Icons. */
@@ -274,6 +300,14 @@ const LOBE_ICONS: Readonly<Record<string, VendorMarkIcon>> = {
   amazonwebservices: lhAws,
   microsoft: lhMicrosoft,
   azure: lhMicrosoft,
+  // AI coding agents and MCP clients. ChatGPT's own app icon is the OpenAI
+  // blossom, so it is the product's mark, not a borrowed parent mark.
+  codex: lhCodex,
+  codexcli: lhCodex,
+  openaicodex: lhCodex,
+  geminicli: lhGeminicli,
+  goose: lhGoose,
+  chatgpt: lhOpenai,
 };
 
 /**
@@ -323,12 +357,14 @@ export const VENDOR_MARKS: Readonly<Record<string, VendorMarkIcon>> = { ...OFFIC
 
 /**
  * Keys that always get the monogram, even where a leading word would match
- * another mark (docs/ui/VENDOR-MARKS.md). Empty since the workspace owner
- * approved the last four licensed marks. Outlook now has its own mark, so
+ * another mark (docs/ui/VENDOR-MARKS.md). Visual Studio Code is pinned: its
+ * brand page asks for the blue icon (white only on blue), with no recolouring
+ * and no background, which a one-ink tile cannot honour, and Simple Icons
+ * dropped the icon for the same reason. Outlook has its own mark, so
  * "microsoft-outlook" resolves to it by its exact key and never walks to the
  * Microsoft corporate mark.
  */
-export const MONOGRAM_ONLY: ReadonlySet<string> = new Set<string>();
+export const MONOGRAM_ONLY: ReadonlySet<string> = new Set<string>(["vscode", "visualstudiocode"]);
 
 /** "Mistral AI" / "mistral-ai" / "Cal.com" → "mistralai" / "mistralai" / "calcom". */
 export function vendorKey(vendor: string): string {

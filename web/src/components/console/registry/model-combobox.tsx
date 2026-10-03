@@ -141,7 +141,7 @@ function ModelIdLine({ id }: { id: string }) {
   const maker = id.includes("/") ? id.split("/")[0] : null;
   return (
     <span className="flex min-w-0 items-center gap-1.5">
-      {maker && vendorMarkFor(maker) ? <VendorMark vendor={maker} size="sm" className="size-4 bg-transparent" /> : null}
+      {maker && vendorMarkFor(maker) ? <VendorMark vendor={maker} size="xs" /> : null}
       <span className="truncate font-mono text-caption text-text-secondary" title={id}>
         {id}
       </span>

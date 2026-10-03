@@ -113,7 +113,7 @@ export function ConnectionsTable() {
       cell: (connection) => (
         <div className="flex flex-col items-start gap-1">
           <Tag>
-            <VendorMark vendor="LiveKit" size="sm" className="-ml-1 size-4 bg-transparent" />
+            <VendorMark vendor="LiveKit" size="xs" className="-ml-1" />
             {typeLabel(connection)}
           </Tag>
           <span className="text-caption text-text-secondary">{modeLabel(connection)}</span>
@@ -196,7 +196,7 @@ function ConnectionCard({ connection, query }: { connection: ConnectionOut; quer
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-secondary">
         <span className="inline-flex items-center gap-1.5">
-          <VendorMark vendor="LiveKit" size="sm" className="size-4 bg-transparent" />
+          <VendorMark vendor="LiveKit" size="xs" />
           {typeLabel(connection)}
         </span>
         <span aria-hidden="true">·</span>

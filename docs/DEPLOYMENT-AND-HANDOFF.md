@@ -206,15 +206,15 @@ The deployment keeps a private notes file beside its compose file. It holds real
 1. A LiveKit server (a Cloud project, or self-hosted with TLS, UDP and TURN).
 2. A host or cluster for api and web (2 to 4 CPU), with HTTPS in front (Tailscale Serve, Caddy or a load balancer).
 3. Workers next to each LiveKit server (about 4 CPU and 8 GB per 10 to 25 simultaneous calls with external STT, LLM and TTS). For the Cloud connection you can use LiveKit Cloud Agents instead (`lk agent deploy`, see `deploy/README.md` §2).
-4. Data. Use SQLite and a local dir on a single node. Otherwise use Postgres with pgvector, a Redis-compatible cache and S3-compatible storage (`deploy/docker-compose.prod.yml`). See §7.
+4. Data. Use SQLite and a local dir on a single node. Otherwise use Postgres with pgvector, Valkey or Redis, and S3-compatible storage. `deploy/docker-compose.datastores.yml` is the single-node recipe (Postgres 16 with pgvector, Valkey, SeaweedFS) and RUNBOOK §9.10 has the cutover. `deploy/docker-compose.prod.yml` is the larger setup.
 5. Secrets. The master key travels with the data. The admin, service and session tokens are new for each deployment. LiveKit keys are per connection. Provider keys are stored encrypted in LKAP and added in the console.
 6. Build the three images, run migrations, start api, then web, then workers, and verify as in 5.4.
 7. AI provider accounts. Deepgram (speech) and OpenRouter (LLM, images, embeddings). Optional extras are LiveKit Inference, avatar vendors and Composio.
 
 ## 7. Open work for the next session
 
-1. **Own data stores on the DGX (V6-37, running).** LKAP gets its own Postgres 16 with pgvector, Valkey (in place of Redis) and SeaweedFS (in place of MinIO) as extra services in the `lkap` compose project, on an isolated network and ports. V6-37 also adds the SQLite to Postgres copy tool with tests, and an optional public endpoint for presigned storage links. Do not reuse other projects' databases. After the copy, switch `LKAP_DATABASE_URL`, `LKAP_REDIS_URL` and the storage settings, verify, and keep the SQLite copy as a backup. RUNBOOK §9 covers pgvector and storage settings.
-2. **Vendor logos (V6-38, running).** UI-R6 puts a logo wherever the console names a company or product (AI coding agents, MCP clients, providers).
+1. **Own data stores on the DGX.** The tooling is built (V6-37). `python -m lkap_api.tools.sqlite_to_postgres` copies the database, `python -m lkap_api.tools.copy_storage` copies the files, and `LKAP_STORAGE_PUBLIC_ENDPOINT_URL` makes presigned links reachable from browsers. RUNBOOK §9.10 lists the cutover steps and the rollback.
+2. **Vendor logos (V6-38, merged).** UI-R6 puts a logo wherever the console names a company or product.
 3. **Tailscale direct connection.** The Mac and the DGX currently relay through DERP. Allow UDP 41641 on the DGX side.
 4. **Open asks** in `docs/v6/_asks.md` (Open at close, plus #296 onward). Notable ones are #178 (workers report server and agent name), #180 (outbound calls fail fast), #296 (reasoning text spoken by some models) and #305 (catalog refresh on miss). Ask #370 covers the em dashes left in older docs.
 5. **Noise cancellation** is not installed in the worker yet. LiveKit's version is Cloud-only and ai-coustics works self-hosted.

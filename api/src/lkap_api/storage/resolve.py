@@ -28,6 +28,7 @@ def default_storage(settings: Settings, storage_settings: StorageSettings | None
             secret_key=resolved.storage_secret_key or "",
             region=resolved.storage_region,
             endpoint_url=resolved.storage_endpoint_url,
+            public_endpoint_url=resolved.storage_public_endpoint_url,
         )
     return LocalStorage(
         Path(settings.data_dir) / "storage",

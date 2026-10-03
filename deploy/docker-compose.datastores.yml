@@ -1,0 +1,100 @@
+# V6-37: LKAP's own data stores for a single-node deployment (docs/RUNBOOK.md §9.10).
+#
+#   postgres   pgvector/pgvector:pg16, the database and the knowledge-base vectors
+#   valkey     valkey/valkey:8-alpine, a Redis drop-in for rate limits, locks and arq
+#   seaweedfs  chrislusf/seaweedfs in `server -s3` mode, S3-compatible object storage
+#
+# They sit on their own bridge network and publish their ports on 127.0.0.1 only, so an
+# api running with host networking on the same machine reaches them on loopback and
+# nothing else on the network can. Nothing here is shared with any other compose project.
+#
+# Setup. These are human steps, and the copies hold secrets and are never committed.
+#   cp deploy/datastores.env.example <private dir>/datastores.env      # chmod 600, fill it in
+#   cp deploy/seaweedfs-s3.example.json deploy/seaweedfs-s3.json      # chmod 600, same keys as the api
+#   docker compose -p lkap-datastores -f deploy/docker-compose.datastores.yml \
+#     --env-file <private dir>/datastores.env up -d
+#
+# The api then uses these settings in its own env file.
+#   LKAP_DATABASE_URL=postgresql+asyncpg://lkap:<password>@127.0.0.1:<LKAP_PG_PORT>/lkap
+#   LKAP_REDIS_URL=redis://127.0.0.1:<LKAP_VALKEY_PORT>/0
+#   LKAP_STORAGE_KIND=s3, LKAP_STORAGE_BUCKET=lkap, LKAP_STORAGE_REGION=us-east-1,
+#   LKAP_STORAGE_ENDPOINT_URL=http://127.0.0.1:<LKAP_SEAWEEDFS_S3_PORT>,
+#   LKAP_STORAGE_PUBLIC_ENDPOINT_URL=<the HTTPS address browsers reach the S3 port on>,
+#   LKAP_STORAGE_ACCESS_KEY and LKAP_STORAGE_SECRET_KEY as in seaweedfs-s3.json.
+#
+# SeaweedFS ports. In `server` mode one process runs a master (9333), a volume server
+# (8080 by default), a filer (8888) and the S3 gateway (8333), each with a gRPC port at
+# +10000. The volume server's default 8080 is the api's port too, so it is moved to
+# LKAP_SEAWEEDFS_VOLUME_PORT here. Only the S3 port is published.
+
+networks:
+  datastores:
+    driver: bridge
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    networks: [datastores]
+    environment:
+      POSTGRES_USER: lkap
+      POSTGRES_DB: lkap
+      POSTGRES_PASSWORD: ${LKAP_PG_PASSWORD:?set LKAP_PG_PASSWORD in datastores.env}
+    ports:
+      - "127.0.0.1:${LKAP_PG_PORT:-5433}:5432"
+    volumes:
+      - lkap-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "lkap", "-d", "lkap"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    networks: [datastores]
+    # Append-only file on, so queued jobs and rate-limit state survive a restart.
+    command: ["valkey-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${LKAP_VALKEY_PORT:-6380}:6379"
+    volumes:
+      - lkap-valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  seaweedfs:
+    # Pin a release tag (for example chrislusf/seaweedfs:<version>) in datastores.env.
+    image: ${LKAP_SEAWEEDFS_IMAGE:-chrislusf/seaweedfs:latest}
+    networks: [datastores]
+    command:
+      - server
+      - -dir=/data
+      - -ip.bind=0.0.0.0
+      - -master.port=9333
+      - -volume.port=${LKAP_SEAWEEDFS_VOLUME_PORT:-18080}
+      - -filer
+      - -s3
+      - -s3.port=8333
+      - -s3.config=/etc/seaweedfs/s3.json
+    ports:
+      - "127.0.0.1:${LKAP_SEAWEEDFS_S3_PORT:-8333}:8333"
+    volumes:
+      - lkap-seaweedfs-data:/data
+      - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      # The S3 port answers 403 to an unsigned request, so check the master and the filer.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9333/cluster/status && wget -q -O /dev/null http://127.0.0.1:8888/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  lkap-postgres-data:
+  lkap-valkey-data:
+  lkap-seaweedfs-data:

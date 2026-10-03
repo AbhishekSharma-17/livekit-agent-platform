@@ -8,7 +8,7 @@ Entry point: `../agent-editor.tsx` (`<AgentEditor agentId sections? />`), render
 | File | What it does |
 |---|---|
 | `types.ts` | `EditorSectionDef`, `EditorSectionProps`, `EditorSlots`, `EditorExtension` — the contract below. |
-| `builtin-sections.tsx` | The eight built-in sections (ids, labels, icons, order, issue paths, keyword heuristics). |
+| `builtin-sections.tsx` | The eight built-in sections (ids, labels, icons, order, issue paths, keyword heuristics). `providers` is the connection-aware `providers-section/providers-section.tsx`. |
 | `extensions.ts` | `EDITOR_EXTENSIONS` — the **shared, append-only** plug-in list. |
 | `sections.ts` | `EDITOR_SECTIONS`, `EDITOR_SLOTS` (built-ins + extensions, resolved once), `DEFAULT_SECTION_ID`. |
 | `registry.ts` | Pure `resolveEditorSections`, `visibleSections`, `resolveEditorSlots`. |
@@ -86,10 +86,10 @@ Who plugs in where:
 
 | Package | How |
 |---|---|
-| **WP-4** (providers) | Keeps editing `tabs/providers-tab.tsx` (`ProvidersTab`, no props); the built-in `providers` entry already points at it. No registry change needed. |
+| **WP-4** (providers) | Superseded. The built-in `providers` entry points at `providers-section/providers-section.tsx` (`ProvidersSection`), and the older `tabs/providers-tab.tsx` is gone. There is one Providers section. |
 | **WP-5** (sections) | Same for `tabs/{instructions,panel,tools,knowledge}-tab.tsx` (`ToolsTab` receives `{ agent }`; the others may ignore it). Replace the "Save & validate" copy in `tools-tab.tsx` (the button is now "Save"). |
 | **V2-11** (panel composer) | Replace `panel` via an extension from `components/console/agents/panel-section/**`. Once it edits `config.panel`, ask for `config.panel` in the form schema; until then `buildAgentUpdate` keeps `config.panel.panel_id` in step with `ui_panel_id`. |
-| **V2-13** (connections, modes, slots) | Replace `providers` from `components/console/agents/providers-section/**`; fill the `connectionChip` slot (change popover). `connection_id` is already a form field. |
+| **V2-13** (connections, modes, slots) | The Providers section lives in `components/console/agents/providers-section/**` and is the built-in `providers` entry. The extension there only fills the `connectionChip` slot (change popover). `connection_id` is already a form field. |
 | **V2-16** (flow builder) | Replace `flow` (`layout: "full"`, visible in both modes — prompt mode shows an explainer whose "Switch to flow" opens the mode chip's dialog); fill `modeChip` (switch dialog; set the `mode` form field) and `versionHistory` (the rail's "History" link). |
 | **V2-17 / V2-18** | `testCallItems` ("Call a number", "Test chat"), `headerActions` ("Add to website"). V2-18's `allowed_origins` editor already exists in the `limits` section — patch or replace that section rather than adding a second editor. |
 

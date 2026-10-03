@@ -12,7 +12,7 @@ import {
 import { InstructionsTab } from "@/components/console/agents/tabs/instructions-tab";
 import { KnowledgeTab } from "@/components/console/agents/tabs/knowledge-tab";
 import { PanelTab } from "@/components/console/agents/tabs/panel-tab";
-import { ProvidersTab } from "@/components/console/agents/tabs/providers-tab";
+import { ProvidersSection } from "@/components/console/agents/providers-section/providers-section";
 import { ToolsSection } from "@/components/console/telephony/tools-section";
 
 import { FlowSection } from "./sections/flow-section";
@@ -32,9 +32,10 @@ export const BUILTIN_SECTIONS: EditorSectionDef[] = [
     label: "Providers",
     icon: AudioLinesIcon,
     order: 10,
-    Component: ProvidersTab,
+    // The connection-aware section (V2-13). V6-42 folded it in here and deleted the older tab it used to replace.
+    Component: ProvidersSection,
     issuePaths: ["pipeline", "connection_id"],
-    issueKeywords: /\b(stt|llm|tts|realtime|provider|credential|model|avatar|image)/i,
+    issueKeywords: /\b(stt|llm|tts|realtime|provider|credential|model|avatar|image|vad|turn|noise)/i,
     issueKeywordPriority: 10,
   },
   {

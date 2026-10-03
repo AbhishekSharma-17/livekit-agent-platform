@@ -1274,6 +1274,8 @@ export interface ProviderToolSchemaRefreshOut {
   modified: string[];
   required_before: string[];
   required_after: string[];
+  /** Composio has retired the action (V6-36, V6-42). The user is told to pick a replacement. */
+  deprecated: boolean;
 }
 
 export function useRefreshProviderToolSchema() {

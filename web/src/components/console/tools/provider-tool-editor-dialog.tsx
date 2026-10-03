@@ -402,6 +402,18 @@ export function ProviderToolEditorDialog({
                   ))}
                 </ul>
               )}
+              {refreshResult?.deprecated ? (
+                <p
+                  role="status"
+                  data-testid="provider-tool-retired"
+                  className="rounded border border-border bg-warning-subtle p-2.5 text-label font-medium text-warning-text"
+                >
+                  Composio has retired this action.{" "}
+                  <Link href="/console/tools?tab=apps" className="underline underline-offset-2">
+                    Pick a replacement
+                  </Link>
+                </p>
+              ) : null}
               {refreshResult ? (
                 refreshResult.changed ? (
                   <div className="flex flex-col gap-2 rounded border border-border bg-warning-subtle p-2.5 text-label">
